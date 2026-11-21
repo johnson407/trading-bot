@@ -2,7 +2,11 @@
 
 namespace App\Providers;
 
+use App\Domain\Backtest\Contracts\CandleProvider;
 use App\Domain\Strategy\StrategyRegistry;
+use App\Models\BacktestRun;
+use App\Policies\BacktestRunPolicy;
+use App\Services\Backtest\CcxtCandleProvider;
 use App\Services\Exchange\ExchangeClientFactory;
 use App\Strategies\SimpleGridStrategy;
 use App\Strategies\TrailingGridStrategy;
@@ -29,6 +33,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(StrategyRegistry::class);
         $this->app->singleton(ExchangeClientFactory::class, fn () => new ExchangeClientFactory);
+        $this->app->bind(CandleProvider::class, CcxtCandleProvider::class);
     }
 
     /**
@@ -41,6 +46,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('bot-control', fn (Request $request) => Limit::perMinute(30)->by($request->user()?->id ?: $request->ip()));
         RateLimiter::for('kill-switch', fn (Request $request) => Limit::perMinute(5)->by($request->user()?->id ?: $request->ip()));
         RateLimiter::for('exchange-credentials', fn (Request $request) => Limit::perMinute(10)->by($request->user()?->id ?: $request->ip()));
+        RateLimiter::for('backtests', fn (Request $request) => Limit::perMinute(30)->by($request->user()?->id ?: $request->ip()));
 
         $logger = Log::getLogger();
 
@@ -50,6 +56,7 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::policy(Bot::class, BotPolicy::class);
         Gate::policy(ExchangeCredential::class, ExchangeCredentialPolicy::class);
+        Gate::policy(BacktestRun::class, BacktestRunPolicy::class);
 
         $this->app->make(StrategyRegistry::class)->register(new SimpleGridStrategy);
         $this->app->make(StrategyRegistry::class)->register(new TrailingGridStrategy);

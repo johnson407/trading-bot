@@ -21,6 +21,8 @@ The MVP is implemented:
   pauses, kill switch, and live-mode safeguards.
 - Breeze authentication, authorization policies, bot creation/list/detail/edit,
   live controls, credentials, activity log, and a kill-switch confirmation page.
+- Historical backtesting with cached public candles, saved runs, metrics, equity
+  curves, and side-by-side comparison of compatible runs.
 
 ## Stack
 
@@ -155,6 +157,17 @@ Fees are configurable per bot and default to zero.
 See [docs/strategies.md](docs/strategies.md) for the contract, state model, and a
 minimal custom strategy example, and [docs/bot-parameters.md](docs/bot-parameters.md)
 for every bot field, its validation, and its runtime effect.
+
+## Backtesting
+
+Open **Backtests** to replay an existing bot's configuration against cached public
+candles over a past range. Runs are queued, snapshot the bot and its effective risk
+limits, and store metrics, simulated fills, and a bounded equity curve. Compatible
+runs can be compared on normalized equity.
+
+See [docs/backtesting.md](docs/backtesting.md) for the fill model, data and cache
+rules, capital and risk behavior, run states, metrics, comparison rules, and the
+stated limitations.
 
 ## Live mode prerequisites
 

@@ -49,6 +49,13 @@ const showingNavigationDropdown = ref(false);
                                 </NavLink>
 
                                 <NavLink
+                                    :href="route('backtests.index')"
+                                    :active="route().current('backtests.*')"
+                                >
+                                    Backtests
+                                </NavLink>
+
+                                <NavLink
                                     :href="route('exchange-credentials.index')"
                                     :active="
                                         route().current(
@@ -189,6 +196,13 @@ const showingNavigationDropdown = ref(false);
                             :active="route().current('bots.*')"
                         >
                             Bots
+                        </ResponsiveNavLink>
+
+                        <ResponsiveNavLink
+                            :href="route('backtests.index')"
+                            :active="route().current('backtests.*')"
+                        >
+                            Backtests
                         </ResponsiveNavLink>
 
                         <ResponsiveNavLink

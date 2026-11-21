@@ -1,10 +1,11 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\BacktestController;
 use App\Http\Controllers\BotController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExchangeCredentialController;
 use App\Http\Controllers\KillSwitchController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RiskLimitController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -30,6 +31,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('bots/{bot}/activity', [BotController::class, 'activity'])->name('bots.activity');
     Route::get('bots/{bot}/edit', [BotController::class, 'edit'])->name('bots.edit')->middleware('throttle:bot-control');
     Route::patch('bots/{bot}', [BotController::class, 'update'])->name('bots.update')->middleware('throttle:bot-control');
+
+    Route::get('backtests/compare', [BacktestController::class, 'compare'])->name('backtests.compare');
+    Route::get('backtests', [BacktestController::class, 'index'])->name('backtests.index');
+    Route::get('backtests/create', [BacktestController::class, 'create'])->name('backtests.create');
+    Route::post('backtests', [BacktestController::class, 'store'])->name('backtests.store')->middleware('throttle:backtests');
+    Route::get('backtests/{run}', [BacktestController::class, 'show'])->name('backtests.show');
+    Route::delete('backtests/{run}', [BacktestController::class, 'destroy'])->name('backtests.destroy');
 
     Route::get('risk-limits', [RiskLimitController::class, 'edit'])->name('risk-limits.edit');
     Route::patch('risk-limits', [RiskLimitController::class, 'update'])->name('risk-limits.update')->middleware('throttle:bot-control');

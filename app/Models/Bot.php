@@ -198,6 +198,12 @@ class Bot extends Model
         return $this->hasMany(InventoryLedgerEntry::class);
     }
 
+    /** @return HasMany<BacktestRun, $this> */
+    public function backtestRuns(): HasMany
+    {
+        return $this->hasMany(BacktestRun::class);
+    }
+
     public function scopeRunning($query)
     {
         return $query->where('status', BotStatus::Running->value);

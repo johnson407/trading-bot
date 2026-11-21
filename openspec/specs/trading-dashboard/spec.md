@@ -120,7 +120,7 @@ The dashboard SHALL show a per-bot activity log containing order, fill, cancella
 
 ### Requirement: Primary navigation
 
-The authenticated layout SHALL link to the dashboard, the bot list, exchange credentials, and the kill switch from every authenticated page, on both desktop and responsive menus.
+The authenticated layout SHALL link to the dashboard, the bot list, backtests, exchange credentials, and the kill switch from every authenticated page, on both desktop and responsive menus.
 
 #### Scenario: Reach the bot list
 
@@ -131,6 +131,11 @@ The authenticated layout SHALL link to the dashboard, the bot list, exchange cre
 
 - **WHEN** a signed-in user opens the navigation menu
 - **THEN** links to exchange credentials and the kill switch are present
+
+#### Scenario: Reach backtests
+
+- **WHEN** a signed-in user opens the navigation menu
+- **THEN** a link to the backtests section is present
 
 ### Requirement: Action feedback
 

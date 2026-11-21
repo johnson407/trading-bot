@@ -15,7 +15,6 @@ function botTickIntervalMigrationPath(): string
 it('migrates the old default interval to 60 without changing explicit intervals', function () {
     $this->artisan('migrate:rollback', [
         '--path' => botTickIntervalMigrationPath(),
-        '--step' => 1,
     ])->assertSuccessful();
 
     $user = User::factory()->create();
@@ -37,7 +36,6 @@ it('migrates the old default interval to 60 without changing explicit intervals'
 
     $this->artisan('migrate:rollback', [
         '--path' => botTickIntervalMigrationPath(),
-        '--step' => 1,
     ])->assertSuccessful();
 
     expect($oldDefault->fresh()->tick_interval_seconds)->toBe(60)

@@ -112,4 +112,10 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasMany(RiskEvent::class);
     }
+
+    /** @return HasMany<BacktestRun, $this> */
+    public function backtestRuns(): HasMany
+    {
+        return $this->hasMany(BacktestRun::class);
+    }
 }

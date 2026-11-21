@@ -12,3 +12,4 @@ Schedule::command('bots:dispatch')->everySecond()->withoutOverlapping(2);
 Schedule::command('bots:health')->everyThirtySeconds()->withoutOverlapping();
 Schedule::command('bots:sync-orders')->everyTenSeconds()->withoutOverlapping(2);
 Schedule::command('bots:sync-balances')->everyMinute()->withoutOverlapping();
+Schedule::command('backtests:fail-stale')->everyFiveMinutes()->withoutOverlapping();
