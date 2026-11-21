@@ -218,9 +218,9 @@ docker compose exec -u www-data app npm run build
 
 Current results (Docker, PHP 8.4):
 
-- Test suite: **360 passed, 1 skipped, 1716 assertions** (the skipped test is the opt-in Binance testnet suite).
+- Test suite: **365 passed, 1 skipped, 1728 assertions** (the skipped test is the opt-in Binance testnet suite).
 - Static analysis: PHPStan level 5 with Larastan — **No errors**.
-- Domain coverage: **91.8%** with PCOV. The Docker image includes PCOV; run the domain-scoped coverage config with the testing database:
+- Domain coverage: **92.2%** with PCOV. The Docker image includes PCOV; run the domain-scoped coverage config with the testing database:
 
 ```bash
 docker compose exec -u www-data \

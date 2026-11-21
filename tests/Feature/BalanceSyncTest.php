@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Bot\BalanceSynchronizer;
+use App\Models\ActivityLog;
 use App\Models\Bot;
 use App\Models\ExchangeCredential;
 use App\Models\User;
@@ -77,4 +78,13 @@ it('does not pause a shared-account bot on the reconciliation balance check', fu
     expect($result->ok())->toBeTrue()
         ->and($first->fresh()->status->value)->toBe('running')
         ->and($first->riskEvents()->where('type', 'risk.reconciliation_conflict')->count())->toBe(0);
+});
+
+it('records the shared-account skip at most once per bot per day', function () {
+    [$first, $second] = sharedAccountBots();
+
+    app(BalanceSynchronizer::class)->sync($first);
+    app(BalanceSynchronizer::class)->sync($first);
+
+    expect(ActivityLog::where('bot_id', $first->id)->where('type', 'bot.balance_sync_skipped')->count())->toBe(1);
 });

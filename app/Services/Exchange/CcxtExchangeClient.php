@@ -181,11 +181,15 @@ class CcxtExchangeClient implements ExchangeClient
     }
 
     /** @param array<string, mixed> $order */
-    private function mapFeeCost(array $order): string
+    private function mapFeeCost(array $order): ?string
     {
         $fee = $order['fee'] ?? ($order['fees'][0] ?? null);
 
-        return is_array($fee) ? Number::decimalString($fee['cost'] ?? '0') : '0';
+        if (! is_array($fee) || ! array_key_exists('cost', $fee) || $fee['cost'] === null) {
+            return null;
+        }
+
+        return Number::decimalString($fee['cost']);
     }
 
     /** @param array<string, mixed> $order */

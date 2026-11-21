@@ -32,6 +32,9 @@ class FakeExchangeClient implements ExchangeClient
 
     public bool $timeoutAfterAccept = false;
 
+    /** @var (\Closure(string, string, string): void)|null */
+    public ?\Closure $onPlace = null;
+
     public function __construct(
         public string $price = '100',
         public string $quoteBalance = '1000',
@@ -67,6 +70,10 @@ class FakeExchangeClient implements ExchangeClient
         Decimal $quantity,
         string $clientOrderId,
     ): ExchangeOrder {
+        if ($this->onPlace !== null) {
+            ($this->onPlace)($clientOrderId, $side->value, $price->toString());
+        }
+
         $this->placeCalls[] = [
             'side' => $side,
             'price' => $price->toString(),
@@ -138,7 +145,7 @@ class FakeExchangeClient implements ExchangeClient
         string $exchangeOrderId,
         string $price,
         string $quantity,
-        string $fee = '0',
+        ?string $fee = null,
         string $feeCurrency = 'USDT',
     ): void {
         $order = $this->orderOrFail($exchangeOrderId);

@@ -18,7 +18,7 @@ readonly class ExchangeOrder
         public Decimal $quantity,
         public Decimal $filledQuantity,
         public Decimal $averagePrice,
-        public Decimal $fee,
+        public ?Decimal $fee,
         public ?DateTimeImmutable $updatedAt = null,
         public string $feeCurrency = 'USDT',
     ) {}
@@ -33,7 +33,7 @@ readonly class ExchangeOrder
         Decimal|string $filledQuantity = '0',
         Decimal|string|null $averagePrice = null,
         ?DateTimeImmutable $updatedAt = null,
-        Decimal|string $fee = '0',
+        Decimal|string|null $fee = null,
         string $feeCurrency = 'USDT',
     ): self {
         $price = Decimal::of($price);
@@ -49,7 +49,7 @@ readonly class ExchangeOrder
             $quantity,
             $filled,
             $averagePrice === null ? Decimal::zero() : Decimal::of($averagePrice),
-            Decimal::of($fee),
+            $fee === null ? null : Decimal::of($fee),
             $updatedAt,
             $feeCurrency,
         );

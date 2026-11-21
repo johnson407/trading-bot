@@ -19,7 +19,7 @@ Limits are resolved in this order:
 
 Position notional is projected as `abs(base_inventory) * price` plus the remaining notional of every pending, open, or partially-filled buy, then plus the new buy notional or minus the new sell notional, floored at zero. An order is blocked when the projection exceeds the notional limit, or when open orders plus the new order exceed the open-order limit.
 
-A sell is blocked with `risk.insufficient_inventory` when its quantity exceeds the base inventory that is not already reserved by open sell orders. A quote-only bot therefore places only buys until a buy fills and funds the paired sell; paper mode never reaches the negative-inventory pause by design. Insufficient inventory is an expected deferral, not an incident, so the check records no risk event; it is re-evaluated on the next tick.
+A sell is blocked with `risk.insufficient_inventory` when its quantity exceeds the base inventory that is not already reserved by open sell orders. A quote-only bot therefore places only buys until a buy fills and funds the paired sell; paper mode never reaches the negative-inventory pause by design. Insufficient inventory is an expected deferral, not an incident, so the check records no risk event; it is re-evaluated on the next tick. The risk decision, existing-order lookup, and order creation run inside a transaction that holds the bot row lock, so two concurrent ticks cannot both reserve the same base inventory.
 
 New bots do not receive a bot-scope row, so the account-wide limits apply immediately. `Risk limits` in the navigation (`risk-limits.edit`) edits the user-scope row; a bot-scope row, when one exists, still overrides it.
 
@@ -54,7 +54,7 @@ Risk events are queryable per bot and per user, newest first. Important types in
 
 ## Fees
 
-Every fill records a fee. For live fills, `FeeResolver` uses the cumulative fee reported by the exchange and subtracts fees already recorded on the order, so partial syncs never double-charge. When the exchange reports no fee, the bot's configured `fee_rate` is applied to the filled notional.
+Every fill records a fee. For live fills, `FeeResolver` uses the cumulative fee reported by the exchange and subtracts fees already recorded on the order, so partial syncs never double-charge. When the exchange reports no fee, the bot's configured `fee_rate` is applied to the filled notional. An explicitly reported zero stays zero, and a negative fee is credited as a rebate.
 
 Fees may be charged in the quote asset, the base asset, or a third asset (for example BNB). `InventoryLedger` handles each: a base-asset fee reduces the received base quantity (buys) or increases the base disposed of (sells); a third-asset fee is valued at the fill price for P&L and `fees_paid`. Every fee reduces realized P&L and increments `fees_paid` in quote terms, so live results are not overstated.
 
@@ -62,4 +62,4 @@ Fees may be charged in the quote asset, the base asset, or a third asset (for ex
 
 Migration `2026_11_21_000100_remove_bot_scope_risk_limit_shadows` removes legacy auto-created bot-scope risk rows so the user-level limits apply again. Explicit per-bot overrides are still available through `RiskLimitService::updateForBot`.
 
-`bots:sync-balances` refreshes a live bot's base and quote inventory from the exchange only when a single live bot uses that credential. When several live bots share one exchange account, the sync is skipped, per-bot inventory is left untouched, and `bot.balance_sync_skipped` is recorded with `reason: shared_account`. Wallet totals cannot be attributed to individual bots, so each bot's ledger stays authoritative.
+`bots:sync-balances` refreshes a live bot's base and quote inventory from the exchange only when a single live bot uses that credential. When several live bots share one exchange account, the sync is skipped, per-bot inventory is left untouched, and `bot.balance_sync_skipped` is recorded with `reason: shared_account`, at most once per bot per day. Wallet totals cannot be attributed to individual bots, so each bot's ledger stays authoritative.

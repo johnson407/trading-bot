@@ -157,3 +157,36 @@ it('values a third-asset fee at the fill price without touching quote inventory'
         ->and($bot->quote_inventory)->toBe('910.0000000000000000')
         ->and($bot->fees_paid)->toBe('0.0900000000000000');
 });
+
+it('keeps an explicit zero exchange fee instead of falling back to the bot rate', function () {
+    $fake = new FakeExchangeClient(price: '95');
+    $bot = feeBot($fake, '0.001');
+
+    app(BotTickPipeline::class)->tick($bot);
+
+    $buy = Order::query()->where('side', 'buy')->firstOrFail();
+    $fake->fill($buy->exchange_order_id, '90', '1', '0');
+    runFeeSync($bot);
+
+    $fill = Fill::query()->firstOrFail();
+
+    expect($fill->fee)->toBe('0.0000000000000000')
+        ->and($bot->fresh()->fees_paid)->toBe('0.0000000000000000');
+});
+
+it('credits a negative exchange fee rebate to realized profit', function () {
+    $fake = new FakeExchangeClient(price: '95');
+    $bot = feeBot($fake, '0');
+
+    app(BotTickPipeline::class)->tick($bot);
+
+    $buy = Order::query()->where('side', 'buy')->firstOrFail();
+    $fake->fill($buy->exchange_order_id, '90', '1', '-0.01');
+    runFeeSync($bot);
+
+    $fill = Fill::query()->firstOrFail();
+
+    expect($fill->fee)->toBe('-0.0100000000000000')
+        ->and($bot->fresh()->realized_pnl)->toBe('0.0100000000000000')
+        ->and($bot->fresh()->fees_paid)->toBe('-0.0100000000000000');
+});

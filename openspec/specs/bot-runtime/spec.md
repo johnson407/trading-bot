@@ -19,7 +19,6 @@ A running bot SHALL be evaluated at its configured tick interval, with a minimum
 
 - **WHEN** a tick is still running when the next interval elapses
 - **THEN** the next tick waits and the bot never processes two ticks concurrently
-
 ### Requirement: Queued and idempotent work
 
 Tick evaluation, order placement, and order synchronization SHALL run as queued work. Re-delivery of the same job SHALL NOT create duplicate orders, duplicate fills, or duplicate inventory changes.
@@ -33,7 +32,6 @@ Tick evaluation, order placement, and order synchronization SHALL run as queued 
 
 - **WHEN** queued work for a bot is delayed
 - **THEN** the bot continues from its last persisted state without skipping inventory or order updates
-
 ### Requirement: Restart recovery
 
 On worker or application restart the system SHALL resume bots that were running, reload their persisted state, and reconcile local open orders with the exchange before processing new ticks. The scheduler SHALL reconcile running bots before it begins dispatching ticks.
@@ -52,7 +50,6 @@ On worker or application restart the system SHALL resume bots that were running,
 
 - **WHEN** the scheduler container starts
 - **THEN** it runs reconciliation for running bots before `schedule:work` dispatches new ticks
-
 ### Requirement: Reconciliation conflicts
 
 If reconciliation cannot match local state to the exchange, the system SHALL pause the affected bot, avoid placing new orders, and record a conflict describing the unmatched orders or inventory. When more than one live bot shares an exchange account, the whole-wallet balance comparison SHALL be skipped because the wallet is not attributable to one bot.
@@ -71,10 +68,9 @@ If reconciliation cannot match local state to the exchange, the system SHALL pau
 
 - **WHEN** the reconciled bot shares its exchange account with another live bot
 - **THEN** the balance comparison is skipped and no inventory conflict is recorded
-
 ### Requirement: Scheduled maintenance
 
-The system SHALL run scheduled health checks and balance synchronization for running bots. Health checks SHALL detect bots whose last successful tick is older than the configured threshold. Balance synchronization SHALL refresh a live bot's recorded balances from the exchange unless the account is shared by multiple live bots.
+The system SHALL run scheduled health checks and balance synchronization for running bots. Health checks SHALL detect bots whose last successful tick is older than the configured threshold. Balance synchronization SHALL refresh a live bot's recorded balances from the exchange unless the account is shared by multiple live bots. A shared-account skip SHALL be recorded at most once per bot per UTC day.
 
 #### Scenario: Stale bot detected
 
@@ -91,11 +87,15 @@ The system SHALL run scheduled health checks and balance synchronization for run
 - **WHEN** scheduled balance sync runs for a live bot whose account is shared with another live bot
 - **THEN** its inventory is unchanged and a `bot.balance_sync_skipped` activity records `reason: shared_account`
 
+#### Scenario: Skip notice is not repeated
+
+- **WHEN** the same shared-account bot is skipped again on the same UTC day
+- **THEN** no additional skip activity is recorded
+
 #### Scenario: Slow live tick is not stale
 
 - **WHEN** a live tick takes longer than 15 seconds but less than the configured stale threshold
 - **THEN** the bot is not paused by the health check
-
 ### Requirement: Execution capacity
 
 The runtime SHALL support at least ten concurrently running bots with one-second tick intervals on the documented local hardware profile without missing their schedule. Exchange clients SHALL be reused within a worker, and dispatch SHALL not enqueue a second tick for a bot while its interval guard is open.
@@ -109,7 +109,6 @@ The runtime SHALL support at least ten concurrently running bots with one-second
 
 - **WHEN** a bot already has a tick queued for its current interval
 - **THEN** the dispatcher does not enqueue another tick for that bot
-
 ### Requirement: Observability
 
 The system SHALL emit structured execution records for each bot tick, order operation, fill, cancellation, reconciliation, and error. Records SHALL include the bot identifier, the operation, the outcome, and a correlation identifier, and SHALL exclude secrets.

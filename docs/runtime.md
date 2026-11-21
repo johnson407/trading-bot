@@ -85,7 +85,7 @@ new fills are applied through `FillProcessor`, then the strategy receives
 `risk.stale_bot`. `bots:sync-balances` refreshes live-bot base/quote inventory from
 the exchange. The scheduler runs health checks every
 `trading.health.check_interval_seconds` (30s) and balance sync every
-`trading.balances.sync_interval_seconds` (60s).
+`trading.balances.sync_interval_seconds` (60s). When more than one live bot shares an exchange account, balance sync is skipped for those bots: per-bot inventory stays authoritative and a single `bot.balance_sync_skipped` activity is written per bot per day.
 
 ## Queue operations
 

@@ -626,27 +626,37 @@ class BotTickPipeline
             return null;
         }
 
-        $decision = $this->riskGuard->checkOrder($bot, $intent->side, $price, $quantity);
+        /** @var Order|false $order */
+        $order = DB::transaction(function () use ($bot, $grid, $level, $intent, $price, $quantity) {
+            $lockedBot = Bot::query()->whereKey($bot->id)->lockForUpdate()->firstOrFail();
 
-        if (! $decision->allowed) {
+            $decision = $this->riskGuard->checkOrder($lockedBot, $intent->side, $price, $quantity);
+
+            if (! $decision->allowed) {
+                return false;
+            }
+
+            $existing = $lockedBot->orders()
+                ->where('grid_level_id', $level->id)
+                ->whereIn('status', [
+                    OrderStatus::Pending->value,
+                    OrderStatus::Open->value,
+                    OrderStatus::PartiallyFilled->value,
+                ])
+                ->first();
+
+            if ($existing instanceof Order) {
+                return $existing;
+            }
+
+            $cycle = $lockedBot->orders()->where('grid_level_id', $level->id)->count() + 1;
+
+            return $this->placement->request($lockedBot, $grid, $level, $intent->side, $price, $quantity, $cycle);
+        });
+
+        if ($order === false) {
             return null;
         }
-
-        $existing = $bot->orders()
-            ->where('grid_level_id', $level->id)
-            ->whereIn('status', [
-                OrderStatus::Pending->value,
-                OrderStatus::Open->value,
-                OrderStatus::PartiallyFilled->value,
-            ])
-            ->first();
-
-        if ($existing instanceof Order) {
-            return $existing;
-        }
-
-        $cycle = $bot->orders()->where('grid_level_id', $level->id)->count() + 1;
-        $order = $this->placement->request($bot, $grid, $level, $intent->side, $price, $quantity, $cycle);
 
         if (! $order->status->canTransitionTo(OrderStatus::Open)) {
             return $order;

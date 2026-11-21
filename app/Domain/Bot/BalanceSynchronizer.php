@@ -6,6 +6,7 @@ use App\Domain\Activity\ActivityRecorder;
 use App\Domain\Risk\Exceptions\LiveTradingDisabledException;
 use App\Domain\Risk\LiveModeGuard;
 use App\Domain\Support\Decimal;
+use Illuminate\Support\Facades\Cache;
 use App\Models\Bot;
 use App\Services\Exchange\ExchangeClientFactory;
 
@@ -54,13 +55,21 @@ class BalanceSynchronizer
         $liveBotsOnAccount = self::liveBotsOnAccount($bot);
 
         if ($liveBotsOnAccount > 1) {
-            $this->activity->record(
-                'bot.balance_sync_skipped',
-                'Balance sync skipped because several live bots share this exchange account.',
-                $bot,
-                context: ['reason' => 'shared_account', 'live_bots' => $liveBotsOnAccount],
-                severity: 'warning',
+            $firstSkipToday = Cache::add(
+                'balance-sync-skipped:'.$bot->id.':'.now('UTC')->toDateString(),
+                true,
+                now()->endOfDay(),
             );
+
+            if ($firstSkipToday) {
+                $this->activity->record(
+                    'bot.balance_sync_skipped',
+                    'Balance sync skipped because several live bots share this exchange account.',
+                    $bot,
+                    context: ['reason' => 'shared_account', 'live_bots' => $liveBotsOnAccount],
+                    severity: 'warning',
+                );
+            }
 
             return null;
         }
