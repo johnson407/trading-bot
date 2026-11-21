@@ -16,18 +16,18 @@ watch(
 <template>
     <div
         v-if="visible && $page.props.flash?.status"
-        class="border-b border-green-200 bg-green-50"
+        class="border-b border-green-700 bg-green-950"
     >
         <div
             class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8"
         >
-            <p class="text-sm font-medium text-green-800">
+            <p class="text-sm font-medium text-green-200">
                 {{ $page.props.flash.status }}
             </p>
 
             <button
                 type="button"
-                class="text-sm font-medium text-green-700 hover:text-green-900"
+                class="text-sm font-medium text-green-300 hover:text-green-100"
                 @click="visible = false"
             >
                 Dismiss

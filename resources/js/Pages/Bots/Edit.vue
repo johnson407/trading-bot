@@ -46,31 +46,31 @@ const submit = () => form.patch(route('bots.update', props.bot.id));
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <h2 class="text-xl font-semibold leading-tight text-gray-800">Edit {{ bot.name }}</h2>
-                <Link :href="route('bots.show', bot.id)" class="text-sm text-gray-600 underline">Back to bot</Link>
+                <h2 class="text-xl font-semibold leading-tight text-slate-100">Edit {{ bot.name }}</h2>
+                <Link :href="route('bots.show', bot.id)" class="text-sm text-slate-300 underline">Back to bot</Link>
             </div>
         </template>
 
         <div class="py-12">
             <div class="mx-auto max-w-3xl space-y-6 sm:px-6 lg:px-8">
-                <div class="rounded-lg bg-white p-6 shadow">
-                    <h3 class="font-semibold text-gray-800">Identity</h3>
-                    <p class="mt-1 text-sm text-gray-500">
+                <div class="rounded-lg bg-slate-800 p-6 shadow">
+                    <h3 class="font-semibold text-slate-100">Identity</h3>
+                    <p class="mt-1 text-sm text-slate-300">
                         Symbol, exchange, mode and strategy are fixed for the lifetime of a bot. Create a new bot to change them.
                     </p>
                     <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
-                        <div><dt class="text-gray-500">Symbol</dt><dd class="font-mono">{{ bot.symbol }}</dd></div>
-                        <div><dt class="text-gray-500">Exchange</dt><dd>{{ bot.exchange }}</dd></div>
-                        <div><dt class="text-gray-500">Mode</dt><dd class="capitalize">{{ bot.mode }}</dd></div>
-                        <div><dt class="text-gray-500">Strategy</dt><dd>{{ bot.strategy_key }}</dd></div>
+                        <div><dt class="text-slate-300">Symbol</dt><dd class="font-mono">{{ bot.symbol }}</dd></div>
+                        <div><dt class="text-slate-300">Exchange</dt><dd>{{ bot.exchange }}</dd></div>
+                        <div><dt class="text-slate-300">Mode</dt><dd class="capitalize">{{ bot.mode }}</dd></div>
+                        <div><dt class="text-slate-300">Strategy</dt><dd>{{ bot.strategy_key }}</dd></div>
                     </dl>
                 </div>
 
-                <div v-if="!isEditable" class="rounded-lg bg-amber-50 p-6 text-sm text-amber-800">
+                <div v-if="!isEditable" class="rounded-lg bg-amber-950 p-6 text-sm text-amber-200">
                     This bot is {{ bot.status }}. Only idle or stopped bots can be edited. Stop the bot before changing its settings.
                 </div>
 
-                <form v-else class="space-y-6 bg-white p-6 shadow sm:rounded-lg" @submit.prevent="submit">
+                <form v-else class="space-y-6 bg-slate-800 p-6 shadow sm:rounded-lg" @submit.prevent="submit">
                     <div class="grid gap-6 md:grid-cols-2">
                         <div>
                             <InputLabel for="name" value="Name" />
@@ -104,7 +104,7 @@ const submit = () => form.patch(route('bots.update', props.bot.id));
 
                         <div>
                             <InputLabel for="spacing_type" value="Spacing type" />
-                            <select id="spacing_type" v-model="form.spacing_type" class="mt-1 block w-full rounded-md border-gray-300">
+                            <select id="spacing_type" v-model="form.spacing_type" class="mt-1 block w-full rounded-md border-slate-500">
                                 <option value="arithmetic">Arithmetic</option>
                                 <option value="geometric">Geometric</option>
                             </select>
@@ -173,7 +173,7 @@ const submit = () => form.patch(route('bots.update', props.bot.id));
 
                     <div class="flex items-center gap-4">
                         <PrimaryButton :disabled="form.processing">Save changes</PrimaryButton>
-                        <span v-if="form.recentlySuccessful" class="text-sm text-emerald-600">Saved.</span>
+                        <span v-if="form.recentlySuccessful" class="text-sm text-emerald-300">Saved.</span>
                     </div>
                 </form>
             </div>

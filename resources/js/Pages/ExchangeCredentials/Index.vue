@@ -20,9 +20,9 @@ const timestamp = (value) => (value ? new Date(value).toLocaleString() : '—');
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <h2 class="text-xl font-semibold leading-tight text-gray-800">Exchange credentials</h2>
+                <h2 class="text-xl font-semibold leading-tight text-slate-100">Exchange credentials</h2>
                 <Link :href="route('exchange-credentials.create')"
-                    class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+                    class="rounded-md bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
                     Add credential
                 </Link>
             </div>
@@ -30,9 +30,9 @@ const timestamp = (value) => (value ? new Date(value).toLocaleString() : '—');
 
         <div class="py-8">
             <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-                <div class="overflow-hidden bg-white shadow sm:rounded-lg">
-                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
+                <div class="overflow-x-auto bg-slate-800 shadow sm:rounded-lg">
+                    <table class="min-w-full divide-y divide-slate-700 text-sm">
+                        <thead class="bg-slate-900 text-left text-xs uppercase text-slate-300">
                             <tr>
                                 <th class="px-6 py-3">Exchange</th>
                                 <th class="px-6 py-3">API key</th>
@@ -41,27 +41,27 @@ const timestamp = (value) => (value ? new Date(value).toLocaleString() : '—');
                                 <th class="px-6 py-3"></th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100">
+                        <tbody class="divide-y divide-slate-700">
                             <tr v-for="credential in credentials" :key="credential.id">
                                 <td class="px-6 py-4 font-medium capitalize">{{ credential.exchange }}</td>
-                                <td class="px-6 py-4 font-mono text-gray-600">{{ credential.masked_key }}</td>
+                                <td class="px-6 py-4 font-mono text-slate-300">{{ credential.masked_key }}</td>
                                 <td class="px-6 py-4">{{ credential.testnet ? 'Yes' : 'No' }}</td>
-                                <td class="px-6 py-4 text-gray-600">{{ timestamp(credential.updated_at) }}</td>
+                                <td class="px-6 py-4 text-slate-300">{{ timestamp(credential.updated_at) }}</td>
                                 <td class="px-6 py-4 text-right">
                                     <Link :href="route('exchange-credentials.edit', credential.id)"
-                                        class="text-indigo-600 hover:text-indigo-800">Replace</Link>
-                                    <button type="button" class="ml-4 text-rose-600 hover:text-rose-800" @click="destroy(credential)">
+                                        class="text-blue-300 hover:text-blue-200">Replace</Link>
+                                    <button type="button" class="ml-4 text-rose-300 hover:text-rose-200" @click="destroy(credential)">
                                         Delete
                                     </button>
                                 </td>
                             </tr>
                             <tr v-if="credentials.length === 0">
-                                <td colspan="5" class="px-6 py-8 text-center text-gray-500">No credentials stored.</td>
+                                <td colspan="5" class="px-6 py-8 text-center text-slate-300">No credentials stored.</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                <p class="mt-3 text-xs text-gray-500">Secrets are encrypted at rest and never displayed after saving.</p>
+                <p class="mt-3 text-xs text-slate-300">Secrets are encrypted at rest and never displayed after saving.</p>
             </div>
         </div>
     </AuthenticatedLayout>

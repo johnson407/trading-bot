@@ -50,14 +50,14 @@ const submit = () => form.post(route('bots.store'));
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <h2 class="text-xl font-semibold leading-tight text-gray-800">Create bot</h2>
-                <Link :href="route('bots.index')" class="text-sm text-gray-600 underline">Back to bots</Link>
+                <h2 class="text-xl font-semibold leading-tight text-slate-100">Create bot</h2>
+                <Link :href="route('bots.index')" class="text-sm text-slate-300 underline">Back to bots</Link>
             </div>
         </template>
 
         <div class="py-12">
             <div class="mx-auto max-w-3xl sm:px-6 lg:px-8">
-                <form class="space-y-6 bg-white p-6 shadow sm:rounded-lg" @submit.prevent="submit">
+                <form class="space-y-6 bg-slate-800 p-6 shadow sm:rounded-lg" @submit.prevent="submit">
                     <div class="grid gap-6 md:grid-cols-2">
                         <div>
                             <InputLabel for="name" value="Name" />
@@ -73,7 +73,7 @@ const submit = () => form.post(route('bots.store'));
 
                         <div>
                             <InputLabel for="exchange" value="Exchange" />
-                            <select id="exchange" v-model="form.exchange" class="mt-1 block w-full rounded-md border-gray-300">
+                            <select id="exchange" v-model="form.exchange" class="mt-1 block w-full rounded-md border-slate-500">
                                 <option v-for="exchange in exchanges" :key="exchange" :value="exchange">{{ exchange }}</option>
                             </select>
                             <InputError class="mt-2" :message="form.errors.exchange" />
@@ -81,7 +81,7 @@ const submit = () => form.post(route('bots.store'));
 
                         <div>
                             <InputLabel for="strategy_key" value="Strategy" />
-                            <select id="strategy_key" v-model="form.strategy_key" class="mt-1 block w-full rounded-md border-gray-300">
+                            <select id="strategy_key" v-model="form.strategy_key" class="mt-1 block w-full rounded-md border-slate-500">
                                 <option v-for="strategy in strategies" :key="strategy.key" :value="strategy.key">{{ strategy.key }}</option>
                             </select>
                             <InputError class="mt-2" :message="form.errors.strategy_key" />
@@ -89,7 +89,7 @@ const submit = () => form.post(route('bots.store'));
 
                         <div>
                             <InputLabel for="mode" value="Mode" />
-                            <select id="mode" v-model="form.mode" class="mt-1 block w-full rounded-md border-gray-300">
+                            <select id="mode" v-model="form.mode" class="mt-1 block w-full rounded-md border-slate-500">
                                 <option value="paper">Paper (default)</option>
                                 <option value="live">Live</option>
                             </select>
@@ -128,7 +128,7 @@ const submit = () => form.post(route('bots.store'));
 
                         <div>
                             <InputLabel for="spacing_type" value="Spacing type" />
-                            <select id="spacing_type" v-model="form.spacing_type" class="mt-1 block w-full rounded-md border-gray-300">
+                            <select id="spacing_type" v-model="form.spacing_type" class="mt-1 block w-full rounded-md border-slate-500">
                                 <option value="arithmetic">Arithmetic</option>
                                 <option value="geometric">Geometric</option>
                             </select>
@@ -196,7 +196,7 @@ const submit = () => form.post(route('bots.store'));
                     </div>
 
                     <div class="flex items-center justify-end gap-4">
-                        <Link :href="route('bots.index')" class="text-sm text-gray-600 underline">Cancel</Link>
+                        <Link :href="route('bots.index')" class="text-sm text-slate-300 underline">Cancel</Link>
                         <PrimaryButton :disabled="form.processing">Create bot</PrimaryButton>
                     </div>
                 </form>
