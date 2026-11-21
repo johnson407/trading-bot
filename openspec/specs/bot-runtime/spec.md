@@ -8,17 +8,28 @@ Defines how bots are scheduled and executed continuously, how work survives rest
 
 ### Requirement: Periodic tick execution
 
-A running bot SHALL be evaluated at its configured tick interval, with a minimum interval of one second. A bot SHALL NOT have more than one tick in progress at a time.
+A running bot SHALL be evaluated at its stored tick interval, with a minimum interval of one second. New bots SHALL default to `trading.tick.interval_seconds` (`TRADING_TICK_INTERVAL`), which defaults to 60 seconds. The dispatcher MAY run every second as a due-check; a bot SHALL only be evaluated when its own interval has elapsed. A bot SHALL NOT have more than one tick in progress at a time.
 
 #### Scenario: Tick at the configured interval
 
-- **WHEN** a bot is running with a one-second interval
+- **WHEN** a bot is running with an explicit one-second interval
 - **THEN** the engine starts a new evaluation approximately every second
+
+#### Scenario: Default 60-second interval
+
+- **WHEN** a bot is created without an explicit tick interval
+- **THEN** it stores the configured default of 60 seconds and is evaluated approximately every 60 seconds
 
 #### Scenario: Overlapping ticks are prevented
 
 - **WHEN** a tick is still running when the next interval elapses
 - **THEN** the next tick waits and the bot never processes two ticks concurrently
+
+#### Scenario: Tick-gated evaluation
+
+- **WHEN** a 60-second bot's market price crosses an order limit between ticks
+- **THEN** paper-fill detection and daily-loss evaluation wait for the next tick
+
 ### Requirement: Queued and idempotent work
 
 Tick evaluation, order placement, and order synchronization SHALL run as queued work. Re-delivery of the same job SHALL NOT create duplicate orders, duplicate fills, or duplicate inventory changes.
@@ -32,6 +43,7 @@ Tick evaluation, order placement, and order synchronization SHALL run as queued 
 
 - **WHEN** queued work for a bot is delayed
 - **THEN** the bot continues from its last persisted state without skipping inventory or order updates
+
 ### Requirement: Restart recovery
 
 On worker or application restart the system SHALL resume bots that were running, reload their persisted state, and reconcile local open orders with the exchange before processing new ticks. The scheduler SHALL reconcile running bots before it begins dispatching ticks.
@@ -50,6 +62,7 @@ On worker or application restart the system SHALL resume bots that were running,
 
 - **WHEN** the scheduler container starts
 - **THEN** it runs reconciliation for running bots before `schedule:work` dispatches new ticks
+
 ### Requirement: Reconciliation conflicts
 
 If reconciliation cannot match local state to the exchange, the system SHALL pause the affected bot, avoid placing new orders, and record a conflict describing the unmatched orders or inventory. When more than one live bot shares an exchange account, the whole-wallet balance comparison SHALL be skipped because the wallet is not attributable to one bot.
@@ -68,14 +81,20 @@ If reconciliation cannot match local state to the exchange, the system SHALL pau
 
 - **WHEN** the reconciled bot shares its exchange account with another live bot
 - **THEN** the balance comparison is skipped and no inventory conflict is recorded
+
 ### Requirement: Scheduled maintenance
 
-The system SHALL run scheduled health checks and balance synchronization for running bots. Health checks SHALL detect bots whose last successful tick is older than the configured threshold. Balance synchronization SHALL refresh a live bot's recorded balances from the exchange unless the account is shared by multiple live bots. A shared-account skip SHALL be recorded at most once per bot per UTC day.
+The system SHALL run scheduled health checks and balance synchronization. A health check SHALL detect bots whose last successful tick is older than an effective stale threshold: the greater of the configured threshold and the bot's interval plus the health-check interval. The default threshold SHALL be 180 seconds. Balance sync SHALL refresh a live bot's balances unless its account is shared, skipping the whole-wallet comparison. Shared-account skips SHALL be recorded once per bot per UTC day.
 
 #### Scenario: Stale bot detected
 
-- **WHEN** a running bot has not completed a tick within the configured threshold
+- **WHEN** a running bot has not completed a tick within the effective stale threshold
 - **THEN** a health-check event is recorded and the stale state is visible
+
+#### Scenario: Not stale within one interval
+
+- **WHEN** a running bot with a 60-second interval last succeeded within its interval plus the health-check interval
+- **THEN** the health check does not pause it
 
 #### Scenario: Balance synchronization
 
@@ -94,8 +113,9 @@ The system SHALL run scheduled health checks and balance synchronization for run
 
 #### Scenario: Slow live tick is not stale
 
-- **WHEN** a live tick takes longer than 15 seconds but less than the configured stale threshold
+- **WHEN** a live tick takes longer than 15 seconds but less than the effective stale threshold
 - **THEN** the bot is not paused by the health check
+
 ### Requirement: Execution capacity
 
 The runtime SHALL support at least ten concurrently running bots with one-second tick intervals on the documented local hardware profile without missing their schedule. Exchange clients SHALL be reused within a worker, and dispatch SHALL not enqueue a second tick for a bot while its interval guard is open.
@@ -109,6 +129,7 @@ The runtime SHALL support at least ten concurrently running bots with one-second
 
 - **WHEN** a bot already has a tick queued for its current interval
 - **THEN** the dispatcher does not enqueue another tick for that bot
+
 ### Requirement: Observability
 
 The system SHALL emit structured execution records for each bot tick, order operation, fill, cancellation, reconciliation, and error. Records SHALL include the bot identifier, the operation, the outcome, and a correlation identifier, and SHALL exclude secrets.
