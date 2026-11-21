@@ -18,6 +18,7 @@ application, and the per-bot locks are the second line of defence.
 
 ```bash
 cp .env.example .env
+chmod 600 .env   # .env should not be world-readable
 php artisan key:generate
 php artisan migrate --force
 php artisan db:seed --force   # optional demo user/bot
@@ -25,9 +26,18 @@ php artisan horizon
 php artisan schedule:work
 ```
 
-In Docker Compose these commands are already wired into the `app`, `horizon`, and
-`scheduler` services. The entrypoint waits for PostgreSQL and Redis, runs
-`migrate --force`, and then starts the service's command.
+`.env` holds database and exchange settings, so keep it owner-readable only
+(mode `600`). In Docker Compose these commands are already wired into the `app`,
+`horizon`, and `scheduler` services. The entrypoint waits for PostgreSQL and
+Redis, runs `migrate --force`, and then starts the service's command.
+
+Because the repository is bind-mounted and PHP-FPM, Horizon, and the scheduler
+run as Alpine `www-data` rather than your host user, a `600` file owned by your
+host user may be unreadable inside the container. Before tightening the mode on a
+running deployment, verify it as `www-data` (for example,
+`docker compose exec -u www-data app php artisan config:show trading`). If
+configuration disappears, use host-side Compose environment injection (for
+example, `env_file: .env`) instead of making `.env` world-readable.
 
 ## Tick loop
 

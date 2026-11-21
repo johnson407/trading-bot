@@ -54,9 +54,19 @@ The MVP is implemented:
 git clone <repository-url> trading-bot
 cd trading-bot
 cp .env.example .env
+chmod 600 .env   # .env should not be world-readable
 docker compose up -d --build
 docker compose exec app php artisan db:seed --force
 ```
+
+`.env` holds database and exchange settings, so keep it owner-readable only
+(mode `600`). This repository is bind-mounted into the containers and PHP-FPM,
+Horizon, and the scheduler run as Alpine `www-data`, not your host user, so a
+`600` file owned by your host user may be unreadable inside the container.
+Before tightening the mode on a running deployment, verify it as `www-data`
+(for example, `docker compose exec -u www-data app php artisan config:show trading`).
+If configuration disappears, use host-side Compose environment injection (for
+example, `env_file: .env`) instead of making `.env` world-readable.
 
 Open <http://localhost:8000>. The demo account is:
 
@@ -85,8 +95,12 @@ scheduler services each have health checks.
 ```bash
 composer install
 cp .env.example .env
+chmod 600 .env   # .env should not be world-readable
 php artisan key:generate
 ```
+
+`.env` holds database and exchange settings; keep it owner-readable only
+(mode `600`).
 
 Set the database and Redis values in `.env`, then:
 
@@ -274,12 +288,14 @@ openspec/          Change proposals and capability specs
 
 ## OpenSpec workflow
 
-This repository uses OpenSpec for capability planning. The current change is
-`openspec/changes/build-grid-trading-bot-mvp/`.
+This repository uses OpenSpec for capability planning. There are currently no
+active changes; the MVP change is archived at
+`openspec/changes/archive/2026-11-21-build-grid-trading-bot-mvp/`.
 
 ```bash
-openspec status --change build-grid-trading-bot-mvp
-openspec validate build-grid-trading-bot-mvp --strict
+openspec list
+openspec new change <name>
+openspec validate <name> --strict
 ```
 
 ## Operational notes

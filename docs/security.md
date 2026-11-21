@@ -95,6 +95,12 @@ Evidence: `tests/Feature/RateLimitTest.php`.
   health endpoint.
 - [x] Secrets are supplied through environment variables, not committed files;
   `.env` is ignored and `.env.example` contains placeholders.
+- [x] `.env` must not be world-readable: keep mode `600` on the host so other
+  local users cannot read database and exchange settings. Tightening a file that
+  is already bind-mounted into Docker requires verification first, because
+  PHP-FPM, Horizon, and the scheduler run as Alpine `www-data`; if configuration
+  disappears, use host-side Compose environment injection (for example,
+  `env_file: .env`) rather than reverting to world-readable permissions.
 
 ## Residual risks
 
