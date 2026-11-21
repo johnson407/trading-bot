@@ -157,3 +157,17 @@ php artisan horizon:terminate
 
 Restart Horizon and the scheduler after every deploy. Confirm
 `TRADING_LIVE_ENABLED=false` unless live trading has been explicitly approved.
+
+
+## Startup and dispatch guards
+
+The scheduler container runs `php artisan bots:reconcile` before `schedule:work`,
+so a restart reconciles running bots before any new tick is dispatched. If
+reconciliation reports conflicts the scheduler still starts; each affected bot
+remains paused.
+
+`bots:dispatch` writes a short-lived `bot-dispatch:{id}` cache key for the bot's
+interval before queueing, so queue latency cannot produce duplicate ticks for
+the same second. Exchange clients are reused per exchange and credential within
+a worker. The stale-tick threshold defaults to 60 seconds
+(`TRADING_STALE_TICK_SECONDS`) so a slow initial live grid is not paused mid-work.

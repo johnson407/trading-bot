@@ -141,3 +141,15 @@ class DocumentedCustomStrategy implements StrategyInterface
 
 Register it and select `documented-custom` when creating a bot. The test suite resolves the same
 class through `StrategyRegistry`, so the documented example is verified against the live contract.
+
+
+## Market history
+
+The runtime keeps the last 30 tick prices in `bots.settings.recent_prices` and
+passes them to the strategy as `MarketSnapshot::recentPrices`. The dynamic
+strategy uses this window to measure volatility; without it, spacing falls back
+to the configured initial spacing.
+
+When a grid is recreated (for example after a trailing recenter), the pipeline
+cancels the old orders and then re-evaluates the strategy so every level in the
+new grid receives an order instead of leaving kept levels empty.

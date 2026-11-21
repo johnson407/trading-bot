@@ -63,9 +63,12 @@ class TrailingGridStrategy implements StrategyInterface
         $distance = $this->trailingDistance($input);
 
         if ($input->market->price->sub($center)->abs()->lessThan($distance)) {
+            $levels = $this->getGridLevels($input);
+
             return new StrategyDecision(
                 state: $input->state,
-                levels: $this->getGridLevels($input),
+                levels: $levels,
+                orders: $this->orderIntents($input, $levels),
             );
         }
 

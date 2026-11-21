@@ -30,6 +30,7 @@ use App\Domain\Strategy\StrategyRegistry;
 use App\Domain\Strategy\StrategyStateLoader;
 use App\Domain\Strategy\StrategyStateSerializer;
 use App\Domain\Strategy\ValueObjects\BotSnapshot;
+use App\Domain\Strategy\ValueObjects\CancelEvent;
 use App\Domain\Strategy\ValueObjects\FillEvent;
 use App\Domain\Strategy\ValueObjects\GridLevelPlan;
 use App\Domain\Strategy\ValueObjects\MarketSnapshot;
@@ -92,9 +93,14 @@ class BotTickPipeline
             $client = $this->exchangeFactory->forBot($bot);
             $marketData = $client->market($bot->symbol);
 
-            $bot->forceFill([
-                'settings' => array_merge($bot->settings ?? [], ['mark_price' => $marketData->last->toString()]),
-            ])->save();
+            $settings = $bot->settings ?? [];
+            $recentPrices = $settings['recent_prices'] ?? [];
+            $recentPrices = is_array($recentPrices) ? array_values(array_filter($recentPrices, 'is_string')) : [];
+            $recentPrices[] = $marketData->last->toString();
+            $settings['recent_prices'] = array_slice($recentPrices, -30);
+            $settings['mark_price'] = $marketData->last->toString();
+
+            $bot->forceFill(['settings' => $settings])->save();
 
             $this->dailyLoss->evaluate($bot, $marketData->last);
             $bot->refresh();
@@ -108,6 +114,7 @@ class BotTickPipeline
                 price: $marketData->last,
                 bid: $marketData->bid,
                 ask: $marketData->ask,
+                recentPrices: $settings['recent_prices'],
             );
 
             /** @var StrategyConfig $config */
@@ -127,15 +134,67 @@ class BotTickPipeline
                 $decision = $strategy->onTick($this->inputFor($bot, $market, $config, $decision->state));
             }
 
+            $beforeSync = $bot->orders()
+                ->whereIn('status', [
+                    OrderStatus::Pending->value,
+                    OrderStatus::Open->value,
+                    OrderStatus::PartiallyFilled->value,
+                ])
+                ->get()
+                ->keyBy('id');
+
+            $gridBefore = $bot->activeGrid?->id;
             $grid = $this->syncGrid($bot, $decision->levels);
             $bot->refresh();
+
+            if ($grid instanceof Grid && $gridBefore !== null && $grid->id !== $gridBefore) {
+                // The grid was recreated, which cancels every previous order.
+                // Re-evaluate the strategy now that those orders are gone so
+                // levels kept from the old grid are not left without orders.
+                $decision = $strategy->onTick($this->inputFor($bot, $market, $config, $decision->state));
+                $grid = $this->syncGrid($bot, $decision->levels);
+                $bot->refresh();
+            }
+
+            $cancelEvents = [];
+
+            foreach ($beforeSync as $id => $previous) {
+                $current = $bot->orders()->whereKey($id)->first();
+
+                if ($current instanceof Order && $current->status === OrderStatus::Canceled) {
+                    $cancelEvents[] = new CancelEvent(
+                        $previous->client_order_id,
+                        $previous->gridLevel?->sequence,
+                        'grid_replaced',
+                    );
+                }
+            }
 
             foreach ($decision->cancelClientOrderIds as $clientOrderId) {
                 $order = $bot->orders()->where('client_order_id', $clientOrderId)->first();
 
                 if ($order instanceof Order) {
                     $this->cancelOrder->handle($order);
+
+                    $cancelEvents[] = new CancelEvent(
+                        $order->client_order_id,
+                        $order->gridLevel?->sequence,
+                        'strategy',
+                    );
                 }
+            }
+
+            if ($cancelEvents !== []) {
+                $canceledState = $decision->state;
+
+                foreach ($cancelEvents as $event) {
+                    $canceledState = $strategy->onCancel(
+                        $this->inputFor($bot, $market, $config, $canceledState),
+                        $event,
+                    )->state;
+                }
+
+                $decision = $decision->withState($canceledState);
             }
 
             $ordersPlaced = 0;
@@ -148,7 +207,7 @@ class BotTickPipeline
 
             if ($grid instanceof Grid) {
                 foreach ($decision->orders as $intent) {
-                    $order = $this->placeIntent($bot, $grid, $client, $intent);
+                    $order = $this->placeIntent($bot, $grid, $client, $intent, $marketData);
 
                     if ($order instanceof Order) {
                         $ordersPlaced++;
@@ -181,19 +240,17 @@ class BotTickPipeline
                 );
             }
 
-            if ($strategy->shouldStop($this->inputFor($bot->refresh(), $market, $config, $state))) {
-                $bot->forceFill([
-                    'status' => BotStatus::Paused,
-                    'last_error' => 'The strategy requested that the bot stop.',
-                ])->save();
+            $stopped = $decision->stop
+                || $strategy->shouldStop($this->inputFor($bot->refresh(), $market, $config, $state));
 
-                $this->activity->record('bot.strategy_stop', 'Strategy requested a pause.', $bot, severity: 'warning');
+            if ($stopped) {
+                $this->stopByStrategy($bot);
             }
 
             $bot->refresh();
             $bot->forceFill([
                 'last_successful_tick_at' => now(),
-                'last_error' => null,
+                'last_error' => $stopped ? 'The strategy requested that the bot stop.' : null,
             ])->save();
 
             $this->failures->recordSuccess($bot);
@@ -260,11 +317,13 @@ class BotTickPipeline
         }
 
         $bot->refresh();
+        $recentPrices = $bot->settings['recent_prices'] ?? [];
         $market = MarketSnapshot::make(
             symbol: $marketData->symbol,
             price: $marketData->last,
             bid: $marketData->bid,
             ask: $marketData->ask,
+            recentPrices: is_array($recentPrices) ? array_values(array_filter($recentPrices, 'is_string')) : [],
         );
 
         /** @var StrategyConfig $config */
@@ -311,7 +370,7 @@ class BotTickPipeline
         }
 
         foreach ($intents as $intent) {
-            $this->placeIntent($bot, $grid, $client, $intent);
+            $this->placeIntent($bot, $grid, $client, $intent, $marketData);
         }
     }
 
@@ -481,7 +540,43 @@ class BotTickPipeline
         }
     }
 
-    private function placeIntent(Bot $bot, Grid $grid, ExchangeClient $client, OrderIntent $intent): ?Order
+    private function stopByStrategy(Bot $bot): void
+    {
+        $bot->forceFill([
+            'status' => BotStatus::Paused,
+            'last_error' => 'The strategy requested that the bot stop.',
+        ])->save();
+
+        $this->activity->record('bot.strategy_stop', 'Strategy requested a pause.', $bot, severity: 'warning');
+
+        $orders = $bot->orders()
+            ->whereIn('status', [
+                OrderStatus::Pending->value,
+                OrderStatus::Open->value,
+                OrderStatus::PartiallyFilled->value,
+            ])
+            ->get();
+
+        foreach ($orders as $order) {
+            try {
+                $this->cancelOrder->handle($order);
+            } catch (Throwable $exception) {
+                $this->riskEvents->record(
+                    'risk.strategy_stop_cancel_failed',
+                    'An order could not be canceled after the strategy requested a stop.',
+                    $bot,
+                    context: [
+                        'order_id' => $order->id,
+                        'client_order_id' => $order->client_order_id,
+                        'error' => $exception->getMessage(),
+                    ],
+                    severity: RiskSeverity::Critical,
+                );
+            }
+        }
+    }
+
+    private function placeIntent(Bot $bot, Grid $grid, ExchangeClient $client, OrderIntent $intent, MarketData $marketData): ?Order
     {
         $level = $grid->levels->firstWhere('sequence', $intent->gridLevelSequence);
 
@@ -496,7 +591,42 @@ class BotTickPipeline
             return null;
         }
 
-        $decision = $this->riskGuard->checkOrder($bot, $intent->side, $intent->price, $intent->quantity);
+        $price = Decimal::of($intent->price)->round($marketData->pricePrecision);
+        $quantity = Decimal::of($intent->quantity)->round($marketData->amountPrecision);
+
+        if (! $quantity->isPositive() || $quantity->lessThan($marketData->minAmount)) {
+            $this->riskEvents->record(
+                'order.min_amount',
+                'Order quantity is below the exchange minimum amount.',
+                $bot,
+                context: [
+                    'sequence' => $intent->gridLevelSequence,
+                    'quantity' => $quantity->toString(),
+                    'min_amount' => $marketData->minAmount->toString(),
+                ],
+                severity: RiskSeverity::Warning,
+            );
+
+            return null;
+        }
+
+        if ($price->mul($quantity)->lessThan($marketData->minNotional)) {
+            $this->riskEvents->record(
+                'order.min_notional',
+                'Order notional is below the exchange minimum.',
+                $bot,
+                context: [
+                    'sequence' => $intent->gridLevelSequence,
+                    'notional' => $price->mul($quantity)->toString(),
+                    'min_notional' => $marketData->minNotional->toString(),
+                ],
+                severity: RiskSeverity::Warning,
+            );
+
+            return null;
+        }
+
+        $decision = $this->riskGuard->checkOrder($bot, $intent->side, $price, $quantity);
 
         if (! $decision->allowed) {
             return null;
@@ -516,7 +646,7 @@ class BotTickPipeline
         }
 
         $cycle = $bot->orders()->where('grid_level_id', $level->id)->count() + 1;
-        $order = $this->placement->request($bot, $grid, $level, $intent->side, $intent->price, $intent->quantity, $cycle);
+        $order = $this->placement->request($bot, $grid, $level, $intent->side, $price, $quantity, $cycle);
 
         if (! $order->status->canTransitionTo(OrderStatus::Open)) {
             return $order;
@@ -668,7 +798,7 @@ class BotTickPipeline
                 }
 
                 foreach ($intents as $intent) {
-                    $this->placeIntent($bot, $grid, $client, $intent);
+                    $this->placeIntent($bot, $grid, $client, $intent, $marketData);
                 }
             }
 

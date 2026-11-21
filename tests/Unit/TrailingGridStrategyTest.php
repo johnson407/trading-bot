@@ -35,7 +35,7 @@ it('keeps the grid center while price stays inside the trailing distance', funct
 
     expect($decision->state->get('center_price'))->toBe('100')
         ->and($decision->state->get('recenter_count'))->toBe(0)
-        ->and($decision->orders)->toBe([])
+        ->and($decision->orders)->toHaveCount(4)
         ->and($decision->cancelClientOrderIds)->toBe([]);
 });
 

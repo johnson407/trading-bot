@@ -22,7 +22,7 @@ A bot SHALL run any strategy registered under a stable identifier. Creating or u
 
 ### Requirement: Strategy lifecycle contract
 
-Every strategy SHALL support initialization from its configuration, evaluation on each price tick, notification of fills and cancellations, a stop decision, and generation of grid levels. The engine SHALL invoke these behaviors in a consistent order for every strategy.
+Every strategy SHALL support initialization from its configuration, evaluation on each price tick, notification of fills and cancellations, a stop decision, and generation of grid levels. The engine SHALL invoke these behaviors consistently. Cancellations SHALL be reported through `onCancel`, a stop decision SHALL use the standard stop procedure, and missing persisted state after a completed tick SHALL pause the bot.
 
 #### Scenario: Evaluate a price tick
 
@@ -33,6 +33,16 @@ Every strategy SHALL support initialization from its configuration, evaluation o
 
 - **WHEN** a strategy reports that its stop condition is met
 - **THEN** the bot stops placing new orders and follows the standard stop procedure for open orders
+
+#### Scenario: Cancellation callback
+
+- **WHEN** the engine cancels an order for a strategy or replaces the grid
+- **THEN** the strategy receives `onCancel` for that client order id
+
+#### Scenario: Missing state after a completed tick
+
+- **WHEN** a bot has a completed tick but its persisted strategy state is missing
+- **THEN** the bot pauses and the missing state is reported instead of reinitializing
 
 ### Requirement: Simple grid strategy
 
@@ -62,6 +72,11 @@ The Trailing strategy SHALL keep the grid centered near the current market price
 - **WHEN** market price moves by less than the configured trailing distance
 - **THEN** the grid center and its open orders remain unchanged
 
+#### Scenario: Replenish the recreated grid
+
+- **WHEN** the grid is recreated after a trailing recenter
+- **THEN** every level in the new grid receives an order for its current side
+
 ### Requirement: Martingale grid strategy
 
 The Martingale strategy SHALL increase order size after successive fills by a configured multiplier, subject to a hard maximum order size and a maximum number of increases. Once a hard cap is reached the strategy SHALL stop increasing size and SHALL report the cap event.
@@ -78,7 +93,7 @@ The Martingale strategy SHALL increase order size after successive fills by a co
 
 ### Requirement: Dynamic grid strategy
 
-The Dynamic strategy SHALL adjust grid spacing from recent market volatility and SHALL clamp the result to configured minimum and maximum spacing. Spacing SHALL be recalculated no more often than the configured recalculation interval.
+The Dynamic strategy SHALL adjust grid spacing from recent market volatility and SHALL clamp the result to configured minimum and maximum spacing. Spacing SHALL be recalculated no more often than the configured recalculation interval. The engine SHALL supply the strategy with a rolling window of recent prices.
 
 #### Scenario: Volatility widens spacing
 
@@ -94,6 +109,11 @@ The Dynamic strategy SHALL adjust grid spacing from recent market volatility and
 
 - **WHEN** the recalculation interval has not elapsed since the previous adjustment
 - **THEN** the current spacing is retained
+
+#### Scenario: Recent prices available
+
+- **WHEN** a running bot has completed at least two ticks
+- **THEN** the strategy receives those prices in `MarketSnapshot::recentPrices`
 
 ### Requirement: Strategy state persistence
 

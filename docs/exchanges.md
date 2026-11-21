@@ -116,3 +116,13 @@ composer test:testnet
 immediately. Use a testnet key with spot-trading permission and no withdrawal
 permission. The suite skips itself unless `CCXT_TESTNET=1` and both credentials
 are present.
+
+
+## Numeric normalization and trading rules
+
+CCXT values are normalized to plain decimal strings before they enter the
+domain, including very small floats that PHP would otherwise render in
+scientific notation. Before an order is placed, price and quantity are rounded
+to the market's price and amount precision; orders below the exchange minimum
+amount or minimum notional are not sent and record an `order.min_amount` or
+`order.min_notional` risk event.
