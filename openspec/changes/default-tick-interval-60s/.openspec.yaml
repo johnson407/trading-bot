@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-21
+goal: Make the bot tick interval configurable with a 60-second default, keep the
+  existing per-bot column as the runtime interval, and raise the stale-tick
+  threshold so a 60-second cadence is not treated as unhealthy.
