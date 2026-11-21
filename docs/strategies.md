@@ -4,6 +4,9 @@ The bot engine is strategy-agnostic. A strategy decides what grid to build and w
 request; the engine owns persistence, exchange calls, risk checks, and order/fill bookkeeping.
 Strategies never read the database and never call an exchange.
 
+For the full list of bot fields, their validation rules, and their runtime effects, see
+[Bot parameters](bot-parameters.md).
+
 ## The contract
 
 Every strategy implements `App\Domain\Strategy\Contracts\StrategyInterface`:

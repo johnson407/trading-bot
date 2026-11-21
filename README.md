@@ -153,7 +153,8 @@ Fees are configurable per bot and default to zero.
 | `dynamic-grid` | Recalculates spacing from recent volatility at a fixed interval |
 
 See [docs/strategies.md](docs/strategies.md) for the contract, state model, and a
-minimal custom strategy example.
+minimal custom strategy example, and [docs/bot-parameters.md](docs/bot-parameters.md)
+for every bot field, its validation, and its runtime effect.
 
 ## Live mode prerequisites
 
@@ -278,12 +279,13 @@ app/
   Actions/         Bot controls, credentials, kill switch
   Http/            Controllers, requests, resources
   Models/          Eloquent persistence
-docs/              Strategies, exchanges, risk, runtime, dashboard, security
+docs/              Bot parameters, strategies, exchanges, risk, runtime, dashboard, security
 openspec/          Change proposals and capability specs
 ```
 
 ## Documentation
 
+- [Bot parameters](docs/bot-parameters.md)
 - [Strategies](docs/strategies.md)
 - [Exchanges and live trading](docs/exchanges.md)
 - [Risk controls](docs/risk.md)
