@@ -54,19 +54,21 @@ The MVP is implemented:
 git clone <repository-url> trading-bot
 cd trading-bot
 cp .env.example .env
-chmod 600 .env   # .env should not be world-readable
 docker compose up -d --build
 docker compose exec app php artisan db:seed --force
 ```
 
-`.env` holds database and exchange settings, so keep it owner-readable only
-(mode `600`). This repository is bind-mounted into the containers and PHP-FPM,
-Horizon, and the scheduler run as Alpine `www-data`, not your host user, so a
-`600` file owned by your host user may be unreadable inside the container.
-Before tightening the mode on a running deployment, verify it as `www-data`
-(for example, `docker compose exec -u www-data app php artisan config:show trading`).
-If configuration disappears, use host-side Compose environment injection (for
-example, `env_file: .env`) instead of making `.env` world-readable.
+`.env` holds database and exchange settings. Under the Docker Compose
+bind-mount, leave `.env` at mode `644`: PHP-FPM, Horizon, and the scheduler run
+as Alpine `www-data`, not your host user, so they must be able to read the file.
+A `600` file owned by your host user is unreadable inside the container, and
+Laravel then falls back to defaults (for example, Application Name and debug
+settings, plus any keys Compose does not inject).
+
+Do not `chmod 600 .env` on a running Docker Compose deployment. Host-side
+environment injection for Docker was considered and dropped for this change, so
+the bind-mounted `.env` stays at `644`. Use `chmod 600` only for non-Docker
+(local PHP) setups, where the process runs as the file owner.
 
 Open <http://localhost:8000>. The demo account is:
 
@@ -95,12 +97,13 @@ scheduler services each have health checks.
 ```bash
 composer install
 cp .env.example .env
-chmod 600 .env   # .env should not be world-readable
+chmod 600 .env   # non-Docker only: the local PHP process runs as the file owner
 php artisan key:generate
 ```
 
-`.env` holds database and exchange settings; keep it owner-readable only
-(mode `600`).
+`.env` holds database and exchange settings; for non-Docker local setup, keep it
+owner-readable only (mode `600`). Under Docker Compose, leave `.env` at `644` as
+described in the Docker quickstart.
 
 Set the database and Redis values in `.env`, then:
 
@@ -288,9 +291,12 @@ openspec/          Change proposals and capability specs
 
 ## OpenSpec workflow
 
-This repository uses OpenSpec for capability planning. There are currently no
-active changes; the MVP change is archived at
-`openspec/changes/archive/2026-11-21-build-grid-trading-bot-mvp/`.
+This repository uses OpenSpec for capability planning. Completed changes are
+archived under `openspec/changes/archive/`, including the MVP at
+`openspec/changes/archive/2026-11-21-build-grid-trading-bot-mvp/`. Use
+`openspec list` to see current changes, start new work with
+`openspec new change <name>`, and validate it with
+`openspec validate <name> --strict`.
 
 ```bash
 openspec list

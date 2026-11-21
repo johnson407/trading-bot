@@ -2,7 +2,7 @@
 
 ## 1. README OpenSpec workflow
 
-- [x] 1.1 Replace the current-change claim in README "OpenSpec workflow" with the archived location `openspec/changes/archive/2026-11-21-build-grid-trading-bot-mvp/` and state that there are currently no active changes. Verify `grep -n "changes/build-grid-trading-bot-mvp" README.md` returns no matches and the section names the archive path.
+- [x] 1.1 Replace the current-change claim in README "OpenSpec workflow" with the archived location `openspec/changes/archive/2026-11-21-build-grid-trading-bot-mvp/` and describe archived changes rather than claiming there are no active changes. Verify `grep -n "changes/build-grid-trading-bot-mvp" README.md` returns no matches and the section names the archive path.
 - [x] 1.2 Replace the failing `openspec status --change build-grid-trading-bot-mvp` / `openspec validate build-grid-trading-bot-mvp --strict` example with commands that work now or for a future change (`openspec list`, `openspec new change <name>`, `openspec validate <name> --strict`). Verify `openspec list` succeeds, the README examples use valid command names, and the removed change name no longer appears in the section.
 
 ## 2. Complete `.env.example` with documented defaults
@@ -13,19 +13,19 @@
 
 ## 3. Document `.env` permissions
 
-- [x] 3.1 Add `chmod 600 .env` immediately after `cp .env.example .env` in both README setup paths (Docker quickstart and local setup) with a short note that `.env` should not be world-readable. Verify `grep -n "chmod 600 .env" README.md` shows both locations.
-- [x] 3.2 Add `chmod 600 .env` after `cp .env.example .env` in the `docs/runtime.md` "First start" block. Verify the command is present in that code block and the surrounding instructions remain accurate.
-- [x] 3.3 Add a short note to the `docs/security.md` "Transport and deployment" section that `.env` must not be world-readable (mode `600` on the host). Verify the note is present and does not claim `.env` contents are encrypted at rest.
-- [x] 3.4 Explain the Docker implication wherever the permission step is introduced: the repository is bind-mounted and PHP/Horizon run as Alpine `www-data`, so `600` owned by the host user may be unreadable inside the container. State that verification is required and that Compose host-side env injection is the fallback. Verify no documentation tells users to chmod the running `.env` without the verification step from group 4.
+- [x] 3.1 Document `.env` permissions in both README setup paths: `chmod 600 .env` in the non-Docker local setup, and a note in the Docker quickstart that `.env` stays `644` because containers run as `www-data`. Verify `grep -n "chmod 600 .env" README.md` shows only the non-Docker path.
+- [x] 3.2 Document the split permission policy in the `docs/runtime.md` "First start" block: `chmod 600 .env` for the non-Docker path and mode `644` for the Docker Compose bind-mount because containers read the file as `www-data`. Verify both cases are stated in or around that block.
+- [x] 3.3 Document the split `.env` permission policy in the `docs/security.md` "Transport and deployment" section: mode `600` for non-Docker and mode `644` for the Docker Compose bind-mount. Verify the note does not claim `.env` contents are encrypted at rest.
+- [x] 3.4 Explain the Docker implication wherever the permission step is introduced: the repository is bind-mounted and PHP/Horizon run as Alpine `www-data`, so a `600` file owned by the host user is unreadable inside the container. Verify no documentation tells users to chmod a running Docker `.env` without a host-side injection approach, and record that host-side injection was dropped for this change.
 
 ## 4. Apply-stage verification of permission tightening
 
 - [x] 4.1 Record metadata only before changing anything: `stat -c '%a %u:%g %n' .env .env.example`. Verify the output records mode/owner for both files and that no `.env` contents were printed or copied.
 - [x] 4.2 Establish a baseline while `.env` is still `644`: run `docker compose exec app php artisan about`, `docker compose exec -u www-data app php artisan about`, and a non-secret read such as `docker compose exec -u www-data app php artisan config:show trading`. Verify the commands succeed and show the expected trading configuration. Do not call any exchange or testnet endpoint.
 - [x] 4.3 Tighten the host file mode with `chmod 600 .env`; if `key:generate` previously changed ownership to root, fix ownership for the host user first. Verify with `stat -c '%a %u:%g' .env` that the mode is `600` and the host owner can read it, without printing contents.
-- [x] 4.4 Recreate only the application services (`docker compose up -d --force-recreate app horizon scheduler`), then verify `docker compose ps`, `docker compose logs --tail=50 app horizon scheduler`, `docker compose exec -u www-data app php artisan about`, `config:show trading`, and `horizon:status`. Verify boot is healthy and trading/risk values are still present for `www-data`; if not, continue to 4.5.
-- [ ] 4.5 If `www-data` cannot read the `600` file or config values disappear, add `env_file: .env` to the `app`, `horizon`, and `scheduler` services in `docker-compose.yml` (keep existing `environment:` precedence), recreate those services, and repeat the 4.4 checks. Verify Laravel boots with the hardened file and the config values are present; do not revert to world-readable permissions or change Docker process users.
-- [ ] 4.6 If the `env_file` fallback is used, document it in `README.md` and `docs/security.md` as the Docker-specific mechanism. Verify the docs mention host-side injection and remain free of secrets.
+- [x] 4.4 Verify `www-data` read access without recreating services: after a temporary `chmod 600 .env`, run in-process checks as `www-data` (`php artisan about`, `config:show trading`, `horizon:status`). Verify the outcome is recorded and `.env` was restored to `644`; no `docker compose up --force-recreate`, restart, or recreate occurred.
+- [x] 4.5 Dropped per Johnson: do not add Compose `env_file`; keep the Docker bind-mount `.env` at `644`.
+- [x] 4.6 Dropped per Johnson: no Compose edits; documentation records mode `600` for non-Docker and `644` for the Docker Compose bind-mount.
 
 ## 5. Sanity checks
 
@@ -43,8 +43,14 @@
 - 4.1: `.env` was mode `644`, owner `johnson:johnson` (uid 1000). Metadata only; contents were not read or printed.
 - 4.2: Baseline as `www-data` on `app`, `horizon`, and `scheduler`: `.env` was readable; `php artisan about` succeeded (Application Name `Grid Trading Bot`, Debug ENABLED, Config NOT CACHED); trading/risk snapshots hashed identically; `horizon:status` reported running.
 - 4.3: `chmod 600 .env` succeeded (still owner `johnson:johnson`).
-- 4.4: Containers were **not** recreated or restarted (later apply instruction). Fresh `www-data` processes could not read `.env`. `php artisan about` still ran, but Application Name fell back to `Laravel` and Debug went OFF on all three services. Trading/risk hashes were unchanged (those keys already matched config defaults). `horizon:status` then reported inactive (likely APP_NAME / Redis prefix); the Horizon container itself stayed healthy. Mode was immediately restored to `644`. No `docker-compose.yml` edit.
-- 4.5 / 4.6: Deferred. Johnson to decide whether to add Compose `env_file: .env` and retry tightening.
-- 5.1: Working tree is `README.md`, `.env.example`, `docs/runtime.md`, `docs/security.md`, and this change's `tasks.md` only.
+- 4.4: No containers were recreated or restarted. After a temporary `chmod 600 .env`, fresh `www-data` processes could not read `.env`; `php artisan about` fell back to Application Name `Laravel` and Debug OFF on all three services, while trading/risk hashes stayed unchanged (those keys already matched config defaults) and `horizon:status` reported inactive. Mode was immediately restored to `644`.
+- 4.5 / 4.6: Dropped per Johnson. Docker Compose keeps the bind-mounted `.env` at `644` so `www-data` can read it; no `env_file` was added and `docker-compose.yml` was not edited. Documentation now describes mode `600` for non-Docker local setups and `644` for the Docker Compose bind-mount.
+- 5.1: Working tree is `README.md`, `.env.example`, `docs/runtime.md`, `docs/security.md`, and this change's `tasks.md` and `design.md` only.
 - 5.2: Testnet/exchange commands were not run; archive directory was not edited. The Integration test remained skipped.
 - 5.3: See validation output in the apply log. Default suite: 365 passed, 1 skipped, 1728 assertions. PHPStan: no errors.
+
+## Post-review documentation fix (2026-11-21)
+
+- Docker `.env` stays at `644`; non-Docker local setup keeps `chmod 600`. No `chmod`, Compose edit, service recreate, or restart was performed during this review fix.
+- README, `docs/runtime.md`, and `docs/security.md` now state the split policy. `design.md` records Johnson's final decision, and 4.5/4.6 are marked dropped.
+- `openspec validate docs-and-env-hygiene --strict` passed.

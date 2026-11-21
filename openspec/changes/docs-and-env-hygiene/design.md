@@ -13,10 +13,10 @@ See `proposal.md` for motivation. The current state that shapes the approach:
 
 **Goals:**
 
-- Make the README OpenSpec workflow accurate now that the MVP is archived and no change is active.
+- Make the README OpenSpec workflow accurate now that the MVP is archived.
 - Make `.env.example` complete for the trading/risk keys the application documents and reads, with safe defaults and no secrets.
-- Give operators a clear `.env` permission step without breaking Docker paper trading.
-- Define an apply-stage verification and fallback for the Docker uid mismatch.
+- Give operators a clear `.env` permission policy without breaking Docker paper trading: `600` for non-Docker, `644` for the Docker Compose bind-mount.
+- Record the apply-stage verification outcome instead of adding a Compose permission fallback.
 
 **Non-Goals:**
 
@@ -53,7 +53,7 @@ Keep all defaults paper/sandbox-safe. Do not add Binance or testnet API-key plac
 
 ### 2. Fix the README OpenSpec section
 
-Remove the claim that `openspec/changes/build-grid-trading-bot-mvp/` is the current change. State that there are no active changes and point historical MVP material at `openspec/changes/archive/2026-11-21-build-grid-trading-bot-mvp/`. Show commands that work in the current state or for a future change:
+Remove the claim that `openspec/changes/build-grid-trading-bot-mvp/` is the current change. Describe archived changes and point historical MVP material at `openspec/changes/archive/2026-11-21-build-grid-trading-bot-mvp/`. Show commands that work in the current state or for a future change:
 
 ```bash
 openspec list
@@ -63,24 +63,25 @@ openspec validate <name> --strict
 
 This avoids a path that fails and avoids implying an in-flight change.
 
-### 3. Recommend `chmod 600 .env` with a verification-first Docker fallback
+### 3. `600` for non-Docker, `644` under the Docker Compose bind-mount
 
-Document `chmod 600 .env` immediately after `cp .env.example .env` in both README setup paths and in `docs/runtime.md` first start. Add a short `docs/security.md` deployment note that `.env` must not be world-readable.
+Document `chmod 600 .env` immediately after `cp .env.example .env` only in the non-Docker README setup path and the non-Docker `docs/runtime.md` first start. Under the Docker Compose bind-mount, leave `.env` at `644` so Alpine `www-data` (PHP-FPM, Horizon, and the scheduler) can read it.
 
-Do not chmod the running `.env` in this stage. During apply, verify the container can still boot and read non-injected config as `www-data`. If mode `600` (owned by uid `1000`) blocks PHP-FPM or drops `TRADING_*`/`RISK_*` values, add host-side env injection to Compose for `app`, `horizon`, and `scheduler`:
+Johnson's final decision:
 
-```yaml
-env_file: .env
-```
+- **Non-Docker (local PHP):** `.env` stays mode `600`, because the process runs as the file owner.
+- **Docker Compose bind-mount:** `.env` stays mode `644`. Containers do not run as the host user, so a `600` file owned by the host user is unreadable inside the container, and Laravel falls back for keys Compose does not inject.
+- **Host-side Compose `env_file` injection:** considered and **dropped** for this change. Do not add `env_file`, do not chmod the running `.env`, and do not edit `docker-compose.yml`.
 
-Compose reads that file as the host user, and Laravel's immutable env loading keeps already-injected process variables, so this preserves values even when `www-data` cannot read the file. Keep `600` and re-verify boot.
+Apply-stage evidence: with `.env` temporarily at `600`, fresh `www-data` processes read Application Name as `Laravel` and Debug as OFF; restoring `644` fixed it without recreating services.
 
 Alternatives considered and rejected:
 
-- **Leave `644`**: simplest, but keeps database and exchange settings readable by every local user.
-- **`640` plus a shared group**: fragile because Alpine `www-data` is typically gid `82` while the host group is not, and group IDs differ across hosts.
-- **Run containers as uid `1000`**: avoids the read mismatch but risks storage/bootstrap-cache ownership problems and is a broader process-model change.
-- **Document-only hardening for local Docker**: acceptable only if Johnson prefers it; it leaves the Docker bind-mount case world-readable and is less sound than the verified `env_file` fallback.
+- **`600` everywhere, including Docker:** blocks `www-data` on the bind mount and silently drops Application Name, debug, and other non-injected configuration.
+- **`600` plus Compose `env_file: .env`:** would work in principle but was dropped by Johnson for this change; no Compose edit is part of the work.
+- **`640` plus a shared group:** fragile because Alpine `www-data` is typically gid `82` while the host group is not, and group IDs differ across hosts.
+- **Run containers as uid `1000`:** avoids the read mismatch but risks storage/bootstrap-cache ownership problems and is a broader process-model change.
+- **Leave `644` everywhere:** rejected for non-Docker because it keeps database and exchange settings readable by every local user; accepted for the Docker bind-mount because of the uid mismatch.
 
 ### 4. Leave archive task 9.2 untouched
 
@@ -88,11 +89,11 @@ The unchecked opt-in testnet task in the archived MVP is historical context. REA
 
 ## Risks / Trade-offs
 
-- **Tightening `.env` without verification can break container boot or silently hide config** → verify `php artisan about` and `config:show trading` as `www-data`, recreate the services, and use Compose `env_file` if needed before considering the change complete.
+- **Tightening `.env` in Docker silently hides configuration** → the apply-stage check confirmed `www-data` cannot read a `600` file; Docker therefore keeps `644`, while non-Docker keeps `600`.
 - **`key:generate` may run as root in the entrypoint and change `.env` ownership** → record ownership/mode before and after (`stat`, no contents) and do not attempt an ownership redesign in this change unless it blocks the permission plan.
-- **Adding `env_file` changes how env is supplied and can overlap existing `environment:` keys** → Compose `environment:` values still take precedence; add `env_file` only if verification requires it and document the behavior.
+- **Adding `env_file` would change how env is supplied and overlap existing `environment:` keys** → considered and dropped for this change; `docker-compose.yml` is not edited.
 - **Example defaults could be mistaken for production settings** → keep paper/live-off/sandbox-off defaults and state that risk and trading values are operator-tunable.
 
 ## Open Questions
 
-- Confirm the final approach with Johnson: recommend `chmod 600` plus Compose `env_file` only if verification requires it, or document-only hardening for local Docker. This does not change the example keys or README path fix.
+None. Johnson's decision is final: mode `600` for non-Docker, mode `644` for the Docker Compose bind-mount, and no `env_file` or Compose changes in this change.

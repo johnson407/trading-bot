@@ -16,9 +16,11 @@ application, and the per-bot locks are the second line of defence.
 
 ## First start
 
+### Local setup without Docker
+
 ```bash
 cp .env.example .env
-chmod 600 .env   # .env should not be world-readable
+chmod 600 .env   # non-Docker only: the local PHP process runs as the file owner
 php artisan key:generate
 php artisan migrate --force
 php artisan db:seed --force   # optional demo user/bot
@@ -27,17 +29,21 @@ php artisan schedule:work
 ```
 
 `.env` holds database and exchange settings, so keep it owner-readable only
-(mode `600`). In Docker Compose these commands are already wired into the `app`,
-`horizon`, and `scheduler` services. The entrypoint waits for PostgreSQL and
-Redis, runs `migrate --force`, and then starts the service's command.
+(mode `600`) when non-Docker processes run as your host user.
 
-Because the repository is bind-mounted and PHP-FPM, Horizon, and the scheduler
-run as Alpine `www-data` rather than your host user, a `600` file owned by your
-host user may be unreadable inside the container. Before tightening the mode on a
-running deployment, verify it as `www-data` (for example,
-`docker compose exec -u www-data app php artisan config:show trading`). If
-configuration disappears, use host-side Compose environment injection (for
-example, `env_file: .env`) instead of making `.env` world-readable.
+### Docker Compose
+
+In Docker Compose these commands are already wired into the `app`, `horizon`, and
+`scheduler` services. The entrypoint waits for PostgreSQL and Redis, runs
+`migrate --force`, and then starts the service's command.
+
+Under the bind-mounted Docker Compose setup, leave `.env` at mode `644`. PHP-FPM,
+Horizon, and the scheduler run as Alpine `www-data` rather than your host user,
+so a `600` file owned by your host user is unreadable inside the container.
+Laravel then falls back to defaults (for example, Application Name and debug
+settings, plus any keys Compose does not inject). Do not run `chmod 600 .env` on
+a running Docker deployment; host-side environment injection was considered for
+this setup and dropped for this change.
 
 ## Tick loop
 
