@@ -24,16 +24,16 @@ const submit = () => form.patch(route('risk-limits.update'));
 
     <AuthenticatedLayout>
         <template #header>
-            <h2 class="text-xl font-semibold leading-tight text-gray-800">
+            <h2 class="text-xl font-semibold leading-tight text-slate-100">
                 Risk limits
             </h2>
         </template>
 
         <div class="py-12">
             <div class="mx-auto max-w-3xl sm:px-6 lg:px-8">
-                <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
+                <div class="overflow-hidden bg-slate-800 shadow-sm sm:rounded-lg">
                     <form class="space-y-6 p-6" @submit.prevent="submit">
-                        <p class="text-sm text-gray-600">
+                        <p class="text-sm text-slate-300">
                             These account-wide limits apply to every bot without its own override.
                             Risk checks run before every order, and a breached daily loss limit
                             pauses the affected bots and cancels their open orders.
