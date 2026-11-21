@@ -68,3 +68,60 @@ it('allows the open-order boundary and ignores terminal orders', function () {
 
     expect($decision->allowed)->toBeTrue();
 });
+
+it('blocks a sell that exceeds the base inventory', function () {
+    $bot = guardBot(base: '0');
+
+    $decision = app(RiskGuard::class)->checkOrder($bot, OrderSide::Sell, '110', '1');
+
+    expect($decision->allowed)->toBeFalse()
+        ->and($decision->type)->toBe('risk.insufficient_inventory')
+        ->and($decision->context['base_inventory'])->toBe('0')
+        ->and($decision->context['available'])->toBe('0')
+        ->and($bot->riskEvents()->where('type', 'risk.insufficient_inventory')->count())->toBe(0);
+});
+
+it('allows a sell covered by the base inventory', function () {
+    $bot = guardBot(base: '1');
+
+    $decision = app(RiskGuard::class)->checkOrder($bot, OrderSide::Sell, '110', '1');
+
+    expect($decision->allowed)->toBeTrue();
+});
+
+it('counts open buy orders toward the position limit', function () {
+    $bot = guardBot(maxNotional: '200');
+    Order::factory()->for($bot)->create([
+        'status' => OrderStatus::Open,
+        'side' => OrderSide::Buy,
+        'price' => '100',
+        'quantity' => '1',
+        'filled_quantity' => '0',
+    ]);
+
+    $blocked = app(RiskGuard::class)->checkOrder($bot, OrderSide::Buy, '100', '1.5');
+    $allowed = app(RiskGuard::class)->checkOrder($bot, OrderSide::Buy, '100', '1');
+
+    expect($blocked->allowed)->toBeFalse()
+        ->and($blocked->type)->toBe('risk.position_limit')
+        ->and($blocked->context['projected_notional'])->toBe('250')
+        ->and($allowed->allowed)->toBeTrue();
+});
+
+it('blocks a sell when the base inventory is already committed to open sells', function () {
+    $bot = guardBot(base: '1');
+    Order::factory()->for($bot)->create([
+        'status' => OrderStatus::Open,
+        'side' => OrderSide::Sell,
+        'price' => '110',
+        'quantity' => '1',
+        'filled_quantity' => '0',
+    ]);
+
+    $decision = app(RiskGuard::class)->checkOrder($bot, OrderSide::Sell, '120', '1');
+
+    expect($decision->allowed)->toBeFalse()
+        ->and($decision->type)->toBe('risk.insufficient_inventory')
+        ->and($decision->context['reserved_sell_quantity'])->toBe('1')
+        ->and($decision->context['available'])->toBe('0');
+});

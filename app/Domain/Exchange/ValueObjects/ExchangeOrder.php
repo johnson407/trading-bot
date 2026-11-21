@@ -18,7 +18,9 @@ readonly class ExchangeOrder
         public Decimal $quantity,
         public Decimal $filledQuantity,
         public Decimal $averagePrice,
+        public Decimal $fee,
         public ?DateTimeImmutable $updatedAt = null,
+        public string $feeCurrency = 'USDT',
     ) {}
 
     public static function make(
@@ -31,6 +33,8 @@ readonly class ExchangeOrder
         Decimal|string $filledQuantity = '0',
         Decimal|string|null $averagePrice = null,
         ?DateTimeImmutable $updatedAt = null,
+        Decimal|string $fee = '0',
+        string $feeCurrency = 'USDT',
     ): self {
         $price = Decimal::of($price);
         $quantity = Decimal::of($quantity);
@@ -45,7 +49,9 @@ readonly class ExchangeOrder
             $quantity,
             $filled,
             $averagePrice === null ? Decimal::zero() : Decimal::of($averagePrice),
+            Decimal::of($fee),
             $updatedAt,
+            $feeCurrency,
         );
     }
 }

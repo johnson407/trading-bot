@@ -56,7 +56,6 @@ class CreateBot
             ]);
 
             $this->riskLimits->forUser($user);
-            $this->riskLimits->forBot($bot);
             $this->activity->record('bot.created', "Bot {$bot->name} created", $bot, $user, [
                 'mode' => $mode,
                 'strategy' => $bot->strategy_key,

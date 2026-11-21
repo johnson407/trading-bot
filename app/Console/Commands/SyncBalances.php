@@ -15,13 +15,17 @@ class SyncBalances extends Command
     public function handle(BalanceSynchronizer $synchronizer): int
     {
         $count = 0;
+        $skipped = 0;
 
-        Bot::query()->where('mode', 'live')->whereIn('status', ['running', 'idle'])->each(function (Bot $bot) use ($synchronizer, &$count) {
-            $synchronizer->sync($bot);
-            $count++;
+        Bot::query()->where('mode', 'live')->whereIn('status', ['running', 'idle'])->each(function (Bot $bot) use ($synchronizer, &$count, &$skipped) {
+            if ($synchronizer->sync($bot) === null) {
+                $skipped++;
+            } else {
+                $count++;
+            }
         });
 
-        $this->info("{$count} live bot balance(s) refreshed.");
+        $this->info("{$count} live bot balance(s) refreshed, {$skipped} skipped.");
 
         return self::SUCCESS;
     }

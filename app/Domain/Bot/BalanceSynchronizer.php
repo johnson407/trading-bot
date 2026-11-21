@@ -17,6 +17,23 @@ class BalanceSynchronizer
         private readonly LiveModeGuard $liveMode,
     ) {}
 
+    public static function isSharedAccount(Bot $bot): bool
+    {
+        return self::liveBotsOnAccount($bot) > 1;
+    }
+
+    private static function liveBotsOnAccount(Bot $bot): int
+    {
+        return Bot::query()
+            ->where('mode', 'live')
+            ->when(
+                $bot->exchange_credential_id === null,
+                fn ($query) => $query->where('user_id', $bot->user_id)->whereNull('exchange_credential_id'),
+                fn ($query) => $query->where('exchange_credential_id', $bot->exchange_credential_id),
+            )
+            ->count();
+    }
+
     /**
      * Refresh local base/quote inventory from the exchange for a live bot.
      *
@@ -31,6 +48,20 @@ class BalanceSynchronizer
         try {
             $this->liveMode->assertTradingAllowed($bot);
         } catch (LiveTradingDisabledException) {
+            return null;
+        }
+
+        $liveBotsOnAccount = self::liveBotsOnAccount($bot);
+
+        if ($liveBotsOnAccount > 1) {
+            $this->activity->record(
+                'bot.balance_sync_skipped',
+                'Balance sync skipped because several live bots share this exchange account.',
+                $bot,
+                context: ['reason' => 'shared_account', 'live_bots' => $liveBotsOnAccount],
+                severity: 'warning',
+            );
+
             return null;
         }
 

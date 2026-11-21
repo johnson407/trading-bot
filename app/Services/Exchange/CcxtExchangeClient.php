@@ -173,7 +173,31 @@ class CcxtExchangeClient implements ExchangeClient
             isset($order['timestamp'])
                 ? (new DateTimeImmutable('@'.intdiv((int) $order['timestamp'], 1000)))->setTimezone(new DateTimeZone('UTC'))
                 : null,
+            fee: $this->mapFeeCost($order),
+            feeCurrency: $this->mapFeeCurrency($order),
         );
+    }
+
+    /** @param array<string, mixed> $order */
+    private function mapFeeCost(array $order): string
+    {
+        $fee = $order['fee'] ?? ($order['fees'][0] ?? null);
+
+        return is_array($fee) ? (string) ($fee['cost'] ?? '0') : '0';
+    }
+
+    /** @param array<string, mixed> $order */
+    private function mapFeeCurrency(array $order): string
+    {
+        $fee = $order['fee'] ?? ($order['fees'][0] ?? null);
+
+        if (is_array($fee) && isset($fee['currency'])) {
+            return (string) $fee['currency'];
+        }
+
+        $symbol = (string) ($order['symbol'] ?? '');
+
+        return explode('/', $symbol)[1] ?? 'USDT';
     }
 
     private function mapStatus(string $status): OrderStatus

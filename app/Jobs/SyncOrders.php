@@ -6,6 +6,7 @@ use App\Domain\Activity\ActivityRecorder;
 use App\Domain\Bot\BotTickPipeline;
 use App\Domain\Exchange\Enums\ExchangeErrorType;
 use App\Domain\Exchange\Exceptions\ExchangeException;
+use App\Domain\Exchange\FeeResolver;
 use App\Domain\Order\Enums\OrderStatus;
 use App\Domain\Order\FillProcessor;
 use App\Domain\Order\OrderStateMachine;
@@ -123,7 +124,16 @@ class SyncOrders implements ShouldQueue, ShouldBeUnique
 
             if ($filled->greaterThan($order->filled_quantity) && $order->status->isOpen()) {
                 $delta = $filled->sub($order->filled_quantity);
-                $price = $remote->averagePrice->isPositive() ? $remote->averagePrice : $order->price;
+                $price = Decimal::of($remote->averagePrice->isPositive() ? $remote->averagePrice : $order->price);
+                $recorded = Decimal::zero();
+
+                foreach ($order->fills()->get() as $recordedFill) {
+                    if (($recordedFill->fee_currency ?: FeeResolver::quoteCurrency($bot)) === $remote->feeCurrency) {
+                        $recorded = $recorded->add($recordedFill->fee);
+                    }
+                }
+
+                [$fee, $feeCurrency] = FeeResolver::forFill($bot, $remote, $price, $delta, $recorded);
 
                 try {
                     $result = $fills->process($bot, $order, FillData::make(
@@ -131,8 +141,8 @@ class SyncOrders implements ShouldQueue, ShouldBeUnique
                         'sync-'.$remote->exchangeOrderId.'-'.$filled->toString(),
                         $price,
                         $delta,
-                        '0',
-                        $this->quoteCurrency($bot),
+                        $fee->toString(),
+                        $feeCurrency,
                     ));
 
                     $marketData ??= $client->market($bot->symbol);
@@ -161,8 +171,4 @@ class SyncOrders implements ShouldQueue, ShouldBeUnique
         );
     }
 
-    private function quoteCurrency(Bot $bot): string
-    {
-        return explode('/', $bot->symbol)[1] ?? 'USDT';
-    }
 }

@@ -5,6 +5,7 @@ use App\Http\Controllers\BotController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExchangeCredentialController;
 use App\Http\Controllers\KillSwitchController;
+use App\Http\Controllers\RiskLimitController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -29,6 +30,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('bots/{bot}/activity', [BotController::class, 'activity'])->name('bots.activity');
     Route::get('bots/{bot}/edit', [BotController::class, 'edit'])->name('bots.edit')->middleware('throttle:bot-control');
     Route::patch('bots/{bot}', [BotController::class, 'update'])->name('bots.update')->middleware('throttle:bot-control');
+
+    Route::get('risk-limits', [RiskLimitController::class, 'edit'])->name('risk-limits.edit');
+    Route::patch('risk-limits', [RiskLimitController::class, 'update'])->name('risk-limits.update')->middleware('throttle:bot-control');
 
     Route::get('kill-switch', [KillSwitchController::class, 'create'])->name('kill-switch.create');
     Route::post('kill-switch', [KillSwitchController::class, 'store'])->name('kill-switch.store')->middleware('throttle:kill-switch');

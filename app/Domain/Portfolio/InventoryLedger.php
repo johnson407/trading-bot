@@ -31,28 +31,39 @@ class InventoryLedger
         $average = Decimal::of($bot->average_entry_price);
         $realized = Decimal::of($bot->realized_pnl);
 
+        [$baseAsset, $quoteAsset] = array_pad(explode('/', $bot->symbol), 2, 'USDT');
+        $feeCurrency = $fill->fee_currency ?: $quoteAsset;
+        $feeInBase = $feeCurrency === $baseAsset;
+        $feeInQuote = $feeCurrency === $quoteAsset;
+        // Fees in a third asset (for example BNB) are valued at the fill price
+        // for P&L purposes but are not deducted from the pair's quote balance.
+        $quoteFee = $feeInQuote ? $fee : $fee->mul($price);
+
         if ($fill->side === OrderSide::Buy) {
             $cost = $price->mul($quantity);
-            $newBase = $base->add($quantity);
+            $received = $feeInBase ? $quantity->sub($fee)->max(Decimal::zero()) : $quantity;
+            $newBase = $base->add($received);
             $newAverage = $newBase->isZero()
                 ? Decimal::zero()
                 : $base->mul($average)->add($cost)->div($newBase);
-            $newQuote = $quote->sub($cost)->sub($fee);
-            $realized = $realized->sub($fee);
-            $baseDelta = $quantity;
-            $quoteDelta = $cost->add($fee)->negate();
+            $newQuote = $quote->sub($cost)->sub($feeInQuote ? $fee : Decimal::zero());
+            $realized = $realized->sub($quoteFee);
+            $baseDelta = $received;
+            $quoteDelta = $cost->add($feeInQuote ? $fee : Decimal::zero())->negate();
         } else {
-            if ($quantity->greaterThan($base)) {
-                throw NegativeInventoryException::forSale($base->toString(), $quantity->toString(), $bot->id);
+            $baseOut = $feeInBase ? $quantity->add($fee) : $quantity;
+
+            if ($baseOut->greaterThan($base)) {
+                throw NegativeInventoryException::forSale($base->toString(), $baseOut->toString(), $bot->id);
             }
 
             $proceeds = $price->mul($quantity);
-            $newBase = $base->sub($quantity);
+            $newBase = $base->sub($baseOut);
             $newAverage = $newBase->isZero() ? Decimal::zero() : $average;
-            $newQuote = $quote->add($proceeds)->sub($fee);
-            $realized = $realized->add($price->sub($average)->mul($quantity))->sub($fee);
-            $baseDelta = $quantity->negate();
-            $quoteDelta = $proceeds->sub($fee);
+            $newQuote = $quote->add($proceeds)->sub($feeInQuote ? $fee : Decimal::zero());
+            $realized = $realized->add($price->sub($average)->mul($quantity))->sub($quoteFee);
+            $baseDelta = $baseOut->negate();
+            $quoteDelta = $proceeds->sub($feeInQuote ? $fee : Decimal::zero());
         }
 
         $bot->forceFill([
@@ -60,7 +71,7 @@ class InventoryLedger
             'quote_inventory' => $newQuote->toString(),
             'average_entry_price' => $newAverage->toString(),
             'realized_pnl' => $realized->toString(),
-            'fees_paid' => Decimal::of($bot->fees_paid)->add($fee)->toString(),
+            'fees_paid' => Decimal::of($bot->fees_paid)->add($quoteFee)->toString(),
         ])->save();
 
         return InventoryLedgerEntry::create([

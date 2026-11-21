@@ -9,19 +9,23 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
-it('creates and reads user and bot defaults idempotently', function () {
+it('falls back to the user limits until a bot override is created', function () {
     $bot = Bot::factory()->create();
     $service = app(RiskLimitService::class);
 
     $userLimit = $service->forUser($bot->user);
-    $botLimit = $service->forBot($bot);
 
     expect($service->forUser($bot->user)->is($userLimit))->toBeTrue()
-        ->and($service->forBot($bot)->is($botLimit))->toBeTrue()
-        ->and($userLimit->scope->value)->toBe('user')
-        ->and($botLimit->scope->value)->toBe('bot')
-        ->and($botLimit->max_position_notional)->toBe('1000.0000000000000000')
-        ->and($service->limitsFor($bot)['bot']->is($botLimit))->toBeTrue();
+        ->and($service->forBot($bot)->is($userLimit))->toBeTrue()
+        ->and($service->forBot($bot)->scope->value)->toBe('user')
+        ->and($userLimit->max_position_notional)->toBe('1000.0000000000000000')
+        ->and($service->limitsFor($bot))->not->toHaveKey('bot');
+
+    $override = $service->updateForBot($bot, ['max_open_orders' => 3]);
+
+    expect($override->scope->value)->toBe('bot')
+        ->and($service->forBot($bot)->is($override))->toBeTrue()
+        ->and($service->limitsFor($bot)['bot']->is($override))->toBeTrue();
 });
 
 it('updates global and per-bot risk limits', function () {
