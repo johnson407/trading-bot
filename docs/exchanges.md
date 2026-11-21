@@ -24,6 +24,8 @@ Configuration keys:
 | `trading.failure.max_consecutive` | `TRADING_MAX_CONSECUTIVE_FAILURES` | `3` |
 | `trading.reconciliation.tolerance` | `TRADING_RECONCILIATION_TOLERANCE` | `0.0001` |
 | `trading.orders.sync_interval_seconds` | `TRADING_ORDER_SYNC_SECONDS` | `5` |
+| `trading.tick.interval_seconds` | `TRADING_TICK_INTERVAL` | `60` |
+| `trading.tick.stale_after_seconds` | `TRADING_STALE_TICK_SECONDS` | `180` |
 
 Check the effective values with:
 
@@ -63,6 +65,8 @@ Paper is the default mode for every bot.
 - Paper orders are simulated locally: a buy fills when the market price is at
   or below its limit, a sell fills when the market price is at or above its
   limit. Fills happen at the limit price and fees use `trading.paper.fee_rate`.
+  Fills are evaluated from the market last observed when a tick runs, so a price
+  that crosses and recrosses a limit between ticks is not guaranteed to fill.
 - Live mode uses the bot's encrypted credential and places real limit orders
   through `CcxtExchangeClient`.
 - Live execution requires both `TRADING_LIVE_ENABLED=true` and per-bot
@@ -89,7 +93,7 @@ conflicts after a restart pause the bot and require an explicit resume.
 
 ```bash
 php artisan horizon            # process queued exchange/tick jobs
-php artisan schedule:work      # drive one-second bot scheduling
+php artisan schedule:work      # run the one-second bot due-check and scheduled maintenance
 php artisan migrate --force
 php artisan config:show trading
 ```

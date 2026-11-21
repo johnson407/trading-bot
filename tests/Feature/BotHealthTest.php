@@ -37,6 +37,59 @@ it('leaves a healthy running bot alone', function () {
         ->and(ActivityLog::where('bot_id', $bot->id)->count())->toBe(0);
 });
 
+it('does not pause a 60-second bot within its interval plus the health interval', function () {
+    $bot = Bot::factory()->running()->create([
+        'tick_interval_seconds' => 60,
+        'last_tick_at' => now()->subSeconds(80),
+        'last_successful_tick_at' => now()->subSeconds(80),
+    ]);
+
+    $stale = app(BotHealthMonitor::class)->check();
+
+    expect($stale)->toBeEmpty()
+        ->and($bot->fresh()->status)->toBe(BotStatus::Running);
+});
+
+it('does not pause a 60-second bot at ninety seconds', function () {
+    $bot = Bot::factory()->running()->create([
+        'tick_interval_seconds' => 60,
+        'last_tick_at' => now()->subSeconds(90),
+        'last_successful_tick_at' => now()->subSeconds(90),
+    ]);
+
+    $stale = app(BotHealthMonitor::class)->check();
+
+    expect($stale)->toBeEmpty()
+        ->and($bot->fresh()->status)->toBe(BotStatus::Running);
+});
+
+it('does not pause a 300-second bot at the default threshold', function () {
+    $bot = Bot::factory()->running()->create([
+        'tick_interval_seconds' => 300,
+        'last_tick_at' => now()->subSeconds(180),
+        'last_successful_tick_at' => now()->subSeconds(180),
+    ]);
+
+    $stale = app(BotHealthMonitor::class)->check();
+
+    expect($stale)->toBeEmpty()
+        ->and($bot->fresh()->status)->toBe(BotStatus::Running);
+});
+
+it('pauses a 300-second bot past its interval plus the health interval', function () {
+    $bot = Bot::factory()->running()->create([
+        'tick_interval_seconds' => 300,
+        'last_tick_at' => now()->subSeconds(331),
+        'last_successful_tick_at' => now()->subSeconds(331),
+    ]);
+
+    $stale = app(BotHealthMonitor::class)->check();
+
+    expect($stale)->toHaveCount(1)
+        ->and($bot->fresh()->status)->toBe(BotStatus::Paused)
+        ->and(ActivityLog::where('bot_id', $bot->id)->where('type', 'bot.stale')->exists())->toBeTrue();
+});
+
 it('refreshes live base and quote balances', function () {
     config(['trading.live_enabled' => true]);
 

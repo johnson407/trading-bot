@@ -37,8 +37,8 @@ return [
     ],
 
     'tick' => [
-        'interval_seconds' => (int) env('TRADING_TICK_INTERVAL', 1),
-        'stale_after_seconds' => (int) env('TRADING_STALE_TICK_SECONDS', 60),
+        'interval_seconds' => (int) env('TRADING_TICK_INTERVAL', 60),
+        'stale_after_seconds' => (int) env('TRADING_STALE_TICK_SECONDS', 180),
     ],
 
     'health' => [

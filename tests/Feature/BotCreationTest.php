@@ -55,6 +55,23 @@ it('creates a paper bot with strategy configuration and risk limits', function (
     $this->assertDatabaseHas('activity_logs', ['bot_id' => $bot->id, 'type' => 'bot.created']);
 });
 
+it('stores the configured default tick interval for a new bot', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->post(route('bots.store'), botPayload())->assertRedirect(route('bots.index'));
+
+    expect(Bot::where('user_id', $user->id)->firstOrFail()->tick_interval_seconds)->toBe(60);
+});
+
+it('stores the configured tick interval override for a new bot', function () {
+    config(['trading.tick.interval_seconds' => 5]);
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->post(route('bots.store'), botPayload())->assertRedirect(route('bots.index'));
+
+    expect(Bot::where('user_id', $user->id)->firstOrFail()->tick_interval_seconds)->toBe(5);
+});
+
 it('defaults to paper mode when mode is omitted', function () {
     $user = User::factory()->create();
     $payload = botPayload();

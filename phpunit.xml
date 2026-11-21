@@ -32,6 +32,8 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="CONCURRENCY_DRIVER" value="sync"/>
+        <env name="TRADING_TICK_INTERVAL" value="60"/>
+        <env name="TRADING_STALE_TICK_SECONDS" value="180"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

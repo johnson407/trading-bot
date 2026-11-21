@@ -25,15 +25,28 @@ class BotHealthMonitor
     public function check(?CarbonInterface $now = null): array
     {
         $now = $now ? Carbon::instance($now) : now('UTC');
-        $cutoff = $now->copy()->subSeconds((int) config('trading.tick.stale_after_seconds', 15));
+        $staleAfter = (int) config('trading.tick.stale_after_seconds', 180);
+        $healthInterval = (int) config('trading.health.check_interval_seconds', 30);
+
+        $effectiveThreshold = fn (Bot $bot): int => max(
+            $staleAfter,
+            max(1, (int) $bot->tick_interval_seconds) + $healthInterval,
+        );
 
         $stale = Bot::query()
             ->running()
-            ->whereRaw('COALESCE(last_successful_tick_at, last_tick_at, created_at) < ?', [$cutoff])
-            ->get();
+            ->get()
+            ->filter(function (Bot $bot) use ($now, $effectiveThreshold): bool {
+                $last = $bot->last_successful_tick_at ?? $bot->last_tick_at ?? $bot->created_at;
+
+                return $last !== null
+                    && $last->lt($now->copy()->subSeconds($effectiveThreshold($bot)));
+            })
+            ->values();
 
         foreach ($stale as $bot) {
             $last = $bot->last_successful_tick_at ?? $bot->last_tick_at ?? $bot->created_at;
+            $cutoff = $now->copy()->subSeconds($effectiveThreshold($bot));
 
             $bot->forceFill([
                 'status' => BotStatus::Paused,

@@ -52,7 +52,7 @@ class DatabaseSeeder extends Seeder
             'capital_allocation' => '1000',
             'quote_inventory' => '1000',
             'fee_rate' => '0',
-            'tick_interval_seconds' => 1,
+            'tick_interval_seconds' => max(1, (int) config('trading.tick.interval_seconds')),
             'settings' => [],
         ]);
 

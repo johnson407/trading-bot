@@ -30,7 +30,7 @@ class BotFactory extends Factory
             'realized_pnl' => '0',
             'fees_paid' => '0',
             'fee_rate' => '0',
-            'tick_interval_seconds' => 1,
+            'tick_interval_seconds' => max(1, (int) config('trading.tick.interval_seconds')),
             'consecutive_failures' => 0,
             'settings' => [],
         ];

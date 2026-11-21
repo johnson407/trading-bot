@@ -21,7 +21,7 @@ it('reconciles running bots before the scheduler starts', function () {
 });
 
 it('allows slow live ticks before marking a bot stale', function () {
-    expect(config('trading.tick.stale_after_seconds'))->toBe(60);
+    expect(config('trading.tick.stale_after_seconds'))->toBe(180);
 });
 
 it('reuses exchange clients per exchange and credential', function () {

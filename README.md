@@ -15,8 +15,8 @@ The MVP is implemented:
 - Four strategies: Simple, Trailing, Martingale, and Dynamic grid.
 - Durable grid, order, fill, inventory, P&L, strategy-state, and risk data.
 - CCXT market data and live order execution, plus a public-data paper simulator.
-- Queued one-second ticks with per-bot locking, startup reconciliation, health
-  checks, and balance sync.
+- Queued per-bot ticks (60-second default interval) with per-bot locking,
+  startup reconciliation, health checks, and balance sync.
 - Risk controls: position/open-order caps, per-bot and account-wide daily loss
   pauses, kill switch, and live-mode safeguards.
 - Breeze authentication, authorization policies, bot creation/list/detail/edit,
@@ -134,8 +134,9 @@ The dashboard is at <http://localhost:8000>. For frontend development, run
 4. Set the center price, levels per side, spacing, and order quantity. Strategy
    specific fields appear for trailing, martingale, and dynamic grids.
 5. Save, open the bot detail page, and press **Start**.
-6. The scheduler dispatches a tick every second. The detail and list pages poll
-   every five seconds for orders, fills, inventory, and P&L.
+6. The scheduler checks for due bots every second and evaluates each bot at its
+   tick interval (60 seconds by default). The detail and list pages poll every
+   five seconds for orders, fills, inventory, and P&L.
 7. Press **Pause** to keep open orders, or **Stop** to cancel them.
 
 Paper fills use public market data: a buy limit fills when the market price is at
@@ -263,7 +264,8 @@ php artisan queue:failed
 ```
 
 See [docs/runtime.md](docs/runtime.md) for the tick pipeline, locks, recovery,
-Horizon supervision, health checks, and the ten-bot capacity profile.
+Horizon supervision, health checks, and the ten-bot one-second capacity stress
+profile.
 
 ## Project layout
 
