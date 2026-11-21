@@ -23,6 +23,7 @@ it('ticks ten bots inside the one-second budget without drift', function () {
         $bot = Bot::factory()->running()->create([
             'quote_inventory' => '1000',
             'fee_rate' => '0',
+            'tick_interval_seconds' => 1,
         ]);
 
         StrategyConfig::factory()->for($bot)->create([

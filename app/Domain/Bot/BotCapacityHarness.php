@@ -9,7 +9,9 @@ use App\Domain\Bot\ValueObjects\CapacityReport;
  *
  * The harness deliberately does not sleep between rounds. It measures the time
  * spent ticking every bot in a round and compares the slowest round to the
- * configured one-second interval, which is the schedule-drift signal.
+ * one-second stress interval explicitly configured by the caller/test, which
+ * is the schedule-drift signal. This is not the production default tick
+ * interval.
  */
 class BotCapacityHarness
 {

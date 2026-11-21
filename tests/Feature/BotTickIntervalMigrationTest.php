@@ -34,6 +34,14 @@ it('migrates the old default interval to 60 without changing explicit intervals'
 
     expect($oldDefault->fresh()->tick_interval_seconds)->toBe(60)
         ->and($explicit->fresh()->tick_interval_seconds)->toBe(5);
+
+    $this->artisan('migrate:rollback', [
+        '--path' => botTickIntervalMigrationPath(),
+        '--step' => 1,
+    ])->assertSuccessful();
+
+    expect($oldDefault->fresh()->tick_interval_seconds)->toBe(60)
+        ->and($explicit->fresh()->tick_interval_seconds)->toBe(5);
 });
 
 it('sets the bots tick interval column default to 60', function () {
