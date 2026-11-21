@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-11-21
+skip_specs: true
+goal: Fix stale README OpenSpec archive paths, complete .env.example from
+  documented config keys with safe defaults, and propose a sound .env permission
+  fix.
