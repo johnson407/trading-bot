@@ -24,6 +24,10 @@ class StrategyStateLoader
             return $this->pause($bot, 'the strategy configuration is missing');
         }
 
+        if ($config->state === null && $bot->last_successful_tick_at !== null) {
+            return $this->pause($bot, 'persisted strategy state is missing');
+        }
+
         try {
             return $this->serializer->deserialize($config->state, $bot->strategy_key);
         } catch (InvalidStrategyStateException $exception) {

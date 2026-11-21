@@ -25,25 +25,31 @@ class RiskLimitService
         );
     }
 
+    /**
+     * Effective bot limits: an explicit bot override when present, otherwise
+     * the account-wide user row. This never creates a shadowing bot row.
+     */
     public function forBot(Bot $bot): RiskLimit
     {
-        return RiskLimit::query()->firstOrCreate(
-            [
-                'user_id' => $bot->user_id,
-                'scope' => RiskScope::Bot->value,
-                'bot_id' => $bot->id,
-            ],
-            $this->defaults(),
-        );
+        return $this->botOverride($bot) ?? $this->forUser($bot->user);
+    }
+
+    public function botOverride(Bot $bot): ?RiskLimit
+    {
+        return RiskLimit::query()
+            ->where('user_id', $bot->user_id)
+            ->where('scope', RiskScope::Bot->value)
+            ->where('bot_id', $bot->id)
+            ->first();
     }
 
     /** @return array{bot: RiskLimit, user: RiskLimit} */
     public function limitsFor(Bot $bot): array
     {
-        return [
-            'bot' => $this->forBot($bot),
-            'user' => $this->forUser($bot->user),
-        ];
+        $user = $this->forUser($bot->user);
+        $override = $this->botOverride($bot);
+
+        return $override === null ? ['user' => $user] : ['bot' => $override, 'user' => $user];
     }
 
     /** @param array<string, mixed> $data */
@@ -58,7 +64,15 @@ class RiskLimitService
     /** @param array<string, mixed> $data */
     public function updateForBot(Bot $bot, array $data): RiskLimit
     {
-        $limit = $this->forBot($bot);
+        $limit = $this->botOverride($bot) ?? RiskLimit::query()->firstOrCreate(
+            [
+                'user_id' => $bot->user_id,
+                'scope' => RiskScope::Bot->value,
+                'bot_id' => $bot->id,
+            ],
+            $this->defaults(),
+        );
+
         $limit->update($this->validated($data));
 
         return $limit->refresh();
@@ -67,13 +81,13 @@ class RiskLimitService
     /** @return Collection<int, RiskEvent> */
     public function eventsForBot(Bot $bot, int $limit = 50): Collection
     {
-        return $bot->riskEvents()->latest('created_at')->limit($limit)->get();
+        return $bot->riskEvents()->latest('created_at')->latest('id')->limit($limit)->get();
     }
 
     /** @return Collection<int, RiskEvent> */
     public function eventsForUser(User $user, int $limit = 100): Collection
     {
-        return $user->riskEvents()->latest('created_at')->limit($limit)->get();
+        return $user->riskEvents()->latest('created_at')->latest('id')->limit($limit)->get();
     }
 
     /**

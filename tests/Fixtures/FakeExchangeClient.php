@@ -134,8 +134,13 @@ class FakeExchangeClient implements ExchangeClient
         ));
     }
 
-    public function fill(string $exchangeOrderId, string $price, string $quantity): void
-    {
+    public function fill(
+        string $exchangeOrderId,
+        string $price,
+        string $quantity,
+        string $fee = '0',
+        string $feeCurrency = 'USDT',
+    ): void {
         $order = $this->orderOrFail($exchangeOrderId);
 
         $this->orders[$exchangeOrderId] = ExchangeOrder::make(
@@ -147,6 +152,8 @@ class FakeExchangeClient implements ExchangeClient
             $order->quantity,
             $quantity,
             $price,
+            fee: $fee,
+            feeCurrency: $feeCurrency,
         );
     }
 

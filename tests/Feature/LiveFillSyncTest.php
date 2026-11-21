@@ -22,6 +22,8 @@ function liveSyncBot(FakeExchangeClient $fake): Bot
         'symbol' => 'BTC/USDT',
         'strategy_key' => 'simple-grid',
         'quote_inventory' => '1000',
+        'base_inventory' => '1',
+        'average_entry_price' => '100',
         'fee_rate' => '0',
     ]);
 
@@ -65,7 +67,7 @@ it('applies a live fill through the strategy and places the opposite order', fun
 
     expect($buy->status->value)->toBe('filled')
         ->and($buy->filled_quantity)->toBe('1.0000000000000000')
-        ->and($bot->fresh()->base_inventory)->toBe('1.0000000000000000')
+        ->and($bot->fresh()->base_inventory)->toBe('2.0000000000000000')
         ->and($state['data']['disarmed_levels'] ?? [])->toHaveKey('90')
         ->and(Order::query()->where('side', 'buy')->where('status', 'open')->count())->toBe(0);
 
@@ -78,8 +80,8 @@ it('applies a live fill through the strategy and places the opposite order', fun
 
     $bot->refresh();
 
-    expect($bot->base_inventory)->toBe('0.0000000000000000')
-        ->and($bot->realized_pnl)->toBe('20.0000000000000000')
+    expect($bot->base_inventory)->toBe('1.0000000000000000')
+        ->and($bot->realized_pnl)->toBe('15.0000000000000000')
         ->and($fake->placeCalls)->toHaveCount(3)
         ->and(Order::query()->where('side', 'buy')->where('status', 'open')->where('price', '90')->count())->toBe(1);
 });
@@ -102,7 +104,7 @@ it('applies partial live fills in reconciliation without marking the order fille
     expect($result->ok())->toBeTrue()
         ->and($buy->status->value)->toBe('partially_filled')
         ->and($buy->filled_quantity)->toBe('0.4000000000000000')
-        ->and($bot->fresh()->base_inventory)->toBe('0.4000000000000000')
+        ->and($bot->fresh()->base_inventory)->toBe('1.4000000000000000')
         ->and(StrategyConfig::query()->where('bot_id', $bot->id)->firstOrFail()->state['data']['disarmed_levels'] ?? [])->toHaveKey('90');
 });
 

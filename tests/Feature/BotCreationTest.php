@@ -51,7 +51,7 @@ it('creates a paper bot with strategy configuration and risk limits', function (
             'order_quantity' => '0.001',
         ]);
 
-    $this->assertDatabaseHas('risk_limits', ['bot_id' => $bot->id, 'scope' => 'bot']);
+    $this->assertDatabaseHas('risk_limits', ['user_id' => $user->id, 'bot_id' => null, 'scope' => 'user']);
     $this->assertDatabaseHas('activity_logs', ['bot_id' => $bot->id, 'type' => 'bot.created']);
 });
 

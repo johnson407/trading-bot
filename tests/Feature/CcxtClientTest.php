@@ -164,3 +164,22 @@ it('does not retry order creation after an ambiguous network failure', function 
             ->and($fake->count('create_order'))->toBe(1);
     }
 });
+
+it('parses tiny scientific-notation exchange values', function () {
+    $fake = new FakeCcxtClient(
+        ticker: ['last' => 1.0E-5, 'bid' => 1.0E-5, 'ask' => 1.1E-5, 'timestamp' => 1700000000000],
+        market: [
+            'precision' => ['price' => 8, 'amount' => 4],
+            'limits' => ['amount' => ['min' => 1.0E-6], 'cost' => ['min' => 1.0E-7]],
+        ],
+    );
+    $client = new CcxtExchangeClient(clientFactory: fn () => $fake);
+
+    $market = $client->market('SHIB/USDT');
+
+    expect($market->last->toString())->toBe('0.00001')
+        ->and($market->bid?->toString())->toBe('0.00001')
+        ->and($market->ask?->toString())->toBe('0.000011')
+        ->and($market->minAmount->toString())->toBe('0.000001')
+        ->and($market->minNotional->toString())->toBe('0.0000001');
+});

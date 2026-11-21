@@ -12,6 +12,7 @@ use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Domain\Order\Enums\OrderSide;
 use App\Domain\Order\Enums\OrderStatus;
 use App\Domain\Support\Decimal;
+use App\Domain\Support\Number;
 use App\Models\Bot;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -74,13 +75,13 @@ class CcxtExchangeClient implements ExchangeClient
 
             return MarketData::make(
                 $symbol,
-                (string) $last,
-                isset($ticker['bid']) ? (string) $ticker['bid'] : null,
-                isset($ticker['ask']) ? (string) $ticker['ask'] : null,
+                Number::decimalString($last),
+                isset($ticker['bid']) ? Number::decimalString($ticker['bid']) : null,
+                isset($ticker['ask']) ? Number::decimalString($ticker['ask']) : null,
                 $this->precisionToDecimals($market['precision']['price'] ?? 8),
                 $this->precisionToDecimals($market['precision']['amount'] ?? 8),
-                (string) ($market['limits']['amount']['min'] ?? '0'),
-                (string) ($market['limits']['cost']['min'] ?? '0'),
+                Number::decimalString($market['limits']['amount']['min'] ?? '0'),
+                Number::decimalString($market['limits']['cost']['min'] ?? '0'),
                 isset($ticker['timestamp'])
                     ? (new DateTimeImmutable('@'.intdiv((int) $ticker['timestamp'], 1000)))->setTimezone(new DateTimeZone('UTC'))
                     : null,
@@ -95,14 +96,15 @@ class CcxtExchangeClient implements ExchangeClient
             $balances = [];
 
             foreach (($balance['total'] ?? []) as $asset => $total) {
-                $free = $balance['free'][$asset] ?? 0;
-                $used = $balance['used'][$asset] ?? 0;
+                $free = Number::decimalString($balance['free'][$asset] ?? 0);
+                $used = Number::decimalString($balance['used'][$asset] ?? 0);
+                $total = Number::decimalString($total);
 
-                if (Decimal::of((string) $total)->isZero() && Decimal::of((string) $free)->isZero() && Decimal::of((string) $used)->isZero()) {
+                if (Decimal::of($total)->isZero() && Decimal::of($free)->isZero() && Decimal::of($used)->isZero()) {
                     continue;
                 }
 
-                $balances[] = Balance::make((string) $asset, (string) $free, (string) $used, (string) $total);
+                $balances[] = Balance::make((string) $asset, $free, $used, $total);
             }
 
             return $balances;
@@ -166,14 +168,38 @@ class CcxtExchangeClient implements ExchangeClient
             (string) ($order['clientOrderId'] ?? ''),
             $this->mapStatus((string) ($order['status'] ?? 'open')),
             OrderSide::from((string) ($order['side'] ?? 'buy')),
-            (string) ($order['price'] ?? '0'),
-            (string) ($order['amount'] ?? '0'),
-            (string) ($order['filled'] ?? '0'),
-            isset($order['average']) ? (string) $order['average'] : null,
+            Number::decimalString($order['price'] ?? '0'),
+            Number::decimalString($order['amount'] ?? '0'),
+            Number::decimalString($order['filled'] ?? '0'),
+            isset($order['average']) ? Number::decimalString($order['average']) : null,
             isset($order['timestamp'])
                 ? (new DateTimeImmutable('@'.intdiv((int) $order['timestamp'], 1000)))->setTimezone(new DateTimeZone('UTC'))
                 : null,
+            fee: $this->mapFeeCost($order),
+            feeCurrency: $this->mapFeeCurrency($order),
         );
+    }
+
+    /** @param array<string, mixed> $order */
+    private function mapFeeCost(array $order): string
+    {
+        $fee = $order['fee'] ?? ($order['fees'][0] ?? null);
+
+        return is_array($fee) ? Number::decimalString($fee['cost'] ?? '0') : '0';
+    }
+
+    /** @param array<string, mixed> $order */
+    private function mapFeeCurrency(array $order): string
+    {
+        $fee = $order['fee'] ?? ($order['fees'][0] ?? null);
+
+        if (is_array($fee) && isset($fee['currency'])) {
+            return (string) $fee['currency'];
+        }
+
+        $symbol = (string) ($order['symbol'] ?? '');
+
+        return explode('/', $symbol)[1] ?? 'USDT';
     }
 
     private function mapStatus(string $status): OrderStatus

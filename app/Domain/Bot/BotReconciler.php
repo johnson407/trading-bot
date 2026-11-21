@@ -8,6 +8,7 @@ use App\Domain\Bot\Enums\BotStatus;
 use App\Domain\Bot\ValueObjects\ReconcileResult;
 use App\Domain\Exchange\Enums\ExchangeErrorType;
 use App\Domain\Exchange\Exceptions\ExchangeException;
+use App\Domain\Exchange\FeeResolver;
 use App\Domain\Exchange\Contracts\ExchangeClient;
 use App\Domain\Exchange\ValueObjects\ExchangeOrder;
 use App\Domain\Exchange\ValueObjects\MarketData;
@@ -188,12 +189,24 @@ class BotReconciler
             return false;
         }
 
+        $price = $remote->averagePrice->isPositive() ? $remote->averagePrice : Decimal::of($order->price);
+        $recorded = Decimal::zero();
+
+        foreach ($order->fills()->get() as $recordedFill) {
+            if (($recordedFill->fee_currency ?: FeeResolver::quoteCurrency($bot)) === $remote->feeCurrency) {
+                $recorded = $recorded->add($recordedFill->fee);
+            }
+        }
+
+        [$fee, $feeCurrency] = FeeResolver::forFill($bot, $remote, $price, $remaining, $recorded);
+
         $result = $this->fills->process($bot, $order, FillData::make(
             $bot->exchange,
             "reconcile-{$remote->exchangeOrderId}-{$remoteFilled->toString()}",
-            $remote->averagePrice,
+            $price,
             $remaining,
-            '0',
+            $fee->toString(),
+            $feeCurrency,
         ));
 
         $this->pipeline->recordFill($bot, $client, $marketData, $order, $result);
@@ -205,6 +218,10 @@ class BotReconciler
 
     private function balanceConflict(Bot $bot, $client): ?string
     {
+        if (BalanceSynchronizer::isSharedAccount($bot)) {
+            return null;
+        }
+
         try {
             $balances = $client->balances($bot);
         } catch (Throwable $exception) {

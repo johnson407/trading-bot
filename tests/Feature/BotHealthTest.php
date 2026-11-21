@@ -13,8 +13,8 @@ uses(RefreshDatabase::class);
 
 it('pauses a running bot whose last successful tick is stale', function () {
     $bot = Bot::factory()->running()->create([
-        'last_tick_at' => now()->subMinute(),
-        'last_successful_tick_at' => now()->subMinute(),
+        'last_tick_at' => now()->subMinutes(5),
+        'last_successful_tick_at' => now()->subMinutes(5),
     ]);
 
     $stale = app(BotHealthMonitor::class)->check();

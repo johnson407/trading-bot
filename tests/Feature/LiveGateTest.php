@@ -19,6 +19,8 @@ function liveBotForTick(): array
         'symbol' => 'BTC/USDT',
         'strategy_key' => 'simple-grid',
         'quote_inventory' => '1000',
+        'base_inventory' => '1',
+        'average_entry_price' => '100',
         'fee_rate' => '0',
     ]);
 

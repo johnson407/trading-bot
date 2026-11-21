@@ -3,13 +3,14 @@
 it('exposes named routes for every primary dashboard section', function () {
     expect(route('bots.index', absolute: false))->toBe('/bots')
         ->and(route('exchange-credentials.index', absolute: false))->toBe('/exchange-credentials')
-        ->and(route('kill-switch.create', absolute: false))->toBe('/kill-switch');
+        ->and(route('kill-switch.create', absolute: false))->toBe('/kill-switch')
+        ->and(route('risk-limits.edit', absolute: false))->toBe('/risk-limits');
 });
 
 it('links every primary section from the authenticated navigation', function () {
     $layout = file_get_contents(resource_path('js/Layouts/AuthenticatedLayout.vue'));
 
-    foreach (['bots.index', 'exchange-credentials.index', 'kill-switch.create'] as $route) {
+    foreach (['bots.index', 'exchange-credentials.index', 'kill-switch.create', 'risk-limits.edit'] as $route) {
         expect(substr_count($layout, "route('{$route}')"))->toBeGreaterThanOrEqual(2);
     }
 });

@@ -66,6 +66,13 @@ const showingNavigationDropdown = ref(false);
                                 >
                                     Kill switch
                                 </NavLink>
+
+                                <NavLink
+                                    :href="route('risk-limits.edit')"
+                                    :active="route().current('risk-limits.*')"
+                                >
+                                    Risk limits
+                                </NavLink>
                             </div>
                         </div>
 
@@ -199,6 +206,13 @@ const showingNavigationDropdown = ref(false);
                             danger
                         >
                             Kill switch
+                        </ResponsiveNavLink>
+
+                        <ResponsiveNavLink
+                            :href="route('risk-limits.edit')"
+                            :active="route().current('risk-limits.*')"
+                        >
+                            Risk limits
                         </ResponsiveNavLink>
                     </div>
 

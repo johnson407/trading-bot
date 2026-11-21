@@ -87,6 +87,10 @@ limited to the bot owner.
 
 Feature test: `tests/Feature/ActivityLogTest.php`.
 
+## Risk limits — `GET /risk-limits` (`risk-limits.edit`) and `PATCH /risk-limits` (`risk-limits.update`)
+
+Edits the account-wide maximum position notional, maximum open orders, and daily loss limit. These apply to every bot without a bot-scope override. A successful save flashes `Risk limits updated.` and validation errors appear under each field.
+
 ## Kill switch — `GET /kill-switch` (`kill-switch.create`) and `POST /kill-switch` (`kill-switch.store`)
 
 The confirmation page shows how many bots and open orders will be affected.

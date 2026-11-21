@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Jobs\RunBotTick;
 use App\Models\Bot;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 
 class DispatchBotTicks extends Command
 {
@@ -24,6 +25,12 @@ class DispatchBotTicks extends Command
                 $dueAt = $now->copy()->subSeconds($interval);
 
                 if ($bot->last_tick_at !== null && $bot->last_tick_at->greaterThan($dueAt)) {
+                    return;
+                }
+
+                // Queue latency can leave last_tick_at stale while a tick is
+                // still waiting; this guard keeps one tick per interval.
+                if (! Cache::add('bot-dispatch:'.$bot->id, 1, $interval)) {
                     return;
                 }
 

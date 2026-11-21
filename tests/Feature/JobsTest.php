@@ -54,7 +54,7 @@ it('re-delivers RunBotTick without duplicating orders', function () {
     $job->handle(app(\App\Domain\Bot\BotTickPipeline::class));
     $job->handle(app(\App\Domain\Bot\BotTickPipeline::class));
 
-    expect(Order::where('bot_id', $bot->id)->count())->toBe(2)
+    expect(Order::where('bot_id', $bot->id)->count())->toBe(1)
         ->and(Fill::where('bot_id', $bot->id)->count())->toBe(0);
 });
 

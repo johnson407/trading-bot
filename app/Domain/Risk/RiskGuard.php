@@ -34,7 +34,53 @@ class RiskGuard
 
         $limits = $this->limits($bot);
         $notional = $price->mul($quantity);
-        $positionNotional = Decimal::of($bot->base_inventory)->abs()->mul($price);
+        $base = Decimal::of($bot->base_inventory);
+        $openOrders = $bot->orders()
+            ->whereIn('status', [
+                OrderStatus::Pending->value,
+                OrderStatus::Open->value,
+                OrderStatus::PartiallyFilled->value,
+            ])
+            ->get();
+
+        $openBuyNotional = Decimal::zero();
+        $reservedSellQuantity = Decimal::zero();
+
+        foreach ($openOrders as $openOrder) {
+            $remaining = Decimal::of($openOrder->quantity)->sub($openOrder->filled_quantity);
+
+            if (! $remaining->isPositive()) {
+                continue;
+            }
+
+            if ($openOrder->side === OrderSide::Buy) {
+                $openBuyNotional = $openBuyNotional->add($remaining->mul($openOrder->price));
+            } else {
+                $reservedSellQuantity = $reservedSellQuantity->add($remaining);
+            }
+        }
+
+        if ($side === OrderSide::Sell) {
+            $available = $base->sub($reservedSellQuantity);
+
+            if ($quantity->greaterThan($available)) {
+                // Waiting for a buy to fund the sell side is an expected state,
+                // not a breach, so it is reported without a per-tick risk event.
+                return RiskDecision::block(
+                    'risk.insufficient_inventory',
+                    'Sell quantity exceeds the uncommitted base inventory held by the bot.',
+                    [
+                        'base_inventory' => $base->toString(),
+                        'reserved_sell_quantity' => $reservedSellQuantity->toString(),
+                        'available' => $available->toString(),
+                        'quantity' => $quantity->toString(),
+                    ],
+                    RiskSeverity::Warning,
+                );
+            }
+        }
+
+        $positionNotional = $base->abs()->mul($price)->add($openBuyNotional);
         $projected = $side === OrderSide::Buy
             ? $positionNotional->add($notional)
             : $positionNotional->sub($notional)->max(Decimal::zero());
@@ -53,20 +99,14 @@ class RiskGuard
             ));
         }
 
-        $openOrders = $bot->orders()
-            ->whereIn('status', [
-                OrderStatus::Pending->value,
-                OrderStatus::Open->value,
-                OrderStatus::PartiallyFilled->value,
-            ])
-            ->count();
+        $openOrderCount = $openOrders->count();
 
-        if ($openOrders + 1 > $limits['max_open_orders']) {
+        if ($openOrderCount + 1 > $limits['max_open_orders']) {
             return $this->reject($bot, RiskDecision::block(
                 'risk.open_order_limit',
                 'Order would exceed the maximum number of open orders.',
                 [
-                    'open_orders' => $openOrders,
+                    'open_orders' => $openOrderCount,
                     'max_open_orders' => $limits['max_open_orders'],
                 ],
                 RiskSeverity::Warning,

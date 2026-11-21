@@ -48,7 +48,7 @@ it('drives a paper bot through a complete tick with fills and inventory', functi
     $first = $pipeline->tick($bot);
 
     expect($first->successful())->toBeTrue()
-        ->and($first->ordersPlaced)->toBe(2)
+        ->and($first->ordersPlaced)->toBe(1)
         ->and($bot->fresh()->activeGrid->levels)->toHaveCount(2);
 
     $fake->price = '89';
@@ -103,9 +103,9 @@ it('does not fill orders placed during the same tick', function () {
     $first = $pipeline->tick($bot);
 
     expect($first->successful())->toBeTrue()
-        ->and($first->ordersPlaced)->toBe(2)
+        ->and($first->ordersPlaced)->toBe(1)
         ->and($first->fills)->toBe(0)
-        ->and(Order::query()->where('bot_id', $bot->id)->where('status', 'open')->count())->toBe(2);
+        ->and(Order::query()->where('bot_id', $bot->id)->where('status', 'open')->count())->toBe(1);
 
     $second = $pipeline->tick($bot->fresh());
 

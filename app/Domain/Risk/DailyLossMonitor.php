@@ -102,6 +102,10 @@ class DailyLossMonitor
 
     private function resetIfNeeded(RiskLimit $limit, Bot $bot): Decimal
     {
+        if ($this->limits->botOverride($bot) === null) {
+            return $this->botSettingsBaseline($bot);
+        }
+
         $today = Carbon::now('UTC')->startOfDay();
 
         if ($limit->day_start !== null && $limit->day_start->greaterThanOrEqualTo($today)) {
@@ -166,6 +170,39 @@ class DailyLossMonitor
         }
 
         return null;
+    }
+
+    /**
+     * Bots without an explicit override share the user limits, so their daily
+     * baseline is stored on the bot itself instead of mutating the user row.
+     */
+    private function botSettingsBaseline(Bot $bot): Decimal
+    {
+        $today = Carbon::now('UTC')->toDateString();
+        $baseline = $bot->settings['daily_loss_baseline'] ?? null;
+
+        if (is_array($baseline) && ($baseline['day'] ?? null) === $today) {
+            return Decimal::of($baseline['realized'] ?? '0');
+        }
+
+        return DB::transaction(function () use ($bot, $today) {
+            $locked = Bot::query()->lockForUpdate()->findOrFail($bot->id);
+            $settings = $locked->settings ?? [];
+            $baseline = $settings['daily_loss_baseline'] ?? null;
+
+            if (is_array($baseline) && ($baseline['day'] ?? null) === $today) {
+                return Decimal::of($baseline['realized'] ?? '0');
+            }
+
+            $settings['daily_loss_baseline'] = [
+                'day' => $today,
+                'realized' => $locked->realized_pnl,
+            ];
+
+            $locked->forceFill(['settings' => $settings])->save();
+
+            return Decimal::of($locked->realized_pnl);
+        });
     }
 
     private function pause(Bot $bot, Decimal $loss, Decimal $limit, string $scope): void
