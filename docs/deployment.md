@@ -146,10 +146,10 @@ Nginx so public uploads work.
    chmod 600 /share/Docker/trading-bot/.env
    ```
 
-3. Log in to GHCR with a GitHub fine-grained or classic token that has only
-   `read:packages`. Do not reuse a write-capable CI token. Store the credential
-   beside the deployment files so the scheduled task works regardless of which
-   account runs it:
+3. Log in to GHCR with a GitHub **personal access token (classic)** that has only
+   `read:packages`. Fine-grained tokens do not support GitHub Packages/GHCR. Do
+   not reuse a write-capable CI token. Store the credential beside the deployment
+   files so the scheduled task works regardless of which account runs it:
 
    ```sh
    mkdir -p /share/Docker/trading-bot/.docker
@@ -160,8 +160,10 @@ Nginx so public uploads work.
    chmod 600 /share/Docker/trading-bot/.docker/config.json
    ```
 
-   `deploy.sh` automatically uses `.docker/config.json` when it exists. Rotate the
-   credential by logging in again with a new token and revoking the old one.
+   If the registry rejects `johnson407`, retry with `x-access-token` as the
+   username. `deploy.sh` automatically uses `.docker/config.json` when it exists.
+   Rotate the credential by logging in again with a new token and revoking the
+   old one.
 
 4. Validate the stack definition and the script:
 
@@ -193,6 +195,12 @@ Nginx so public uploads work.
    curl -fsS http://127.0.0.1:8000/login > /dev/null
    docker compose -f docker-compose.prod.yml logs --tail=100 app horizon scheduler
    ```
+
+   First deployment recorded on 2026-11-22: image
+   `sha-b4239202475ad86b94b8580663fb750980088c27`, all six services healthy,
+   `/up` and `/login` returned HTTP 200, `app_env=production`, live trading
+   disabled, and the database contained zero users before bootstrap. The UI is
+   available at `http://192.168.88.150:8000`.
 
 7. Create the first account. The production database starts empty; no development
    rows or exchange credentials are copied. Open `/register`, create the account,
