@@ -1,6 +1,17 @@
 #!/bin/sh
 set -eu
 
+# QNAP Container Station keeps Docker outside the non-interactive PATH.
+if ! command -v docker >/dev/null 2>&1; then
+    for docker_dir in /share/CACHEDEV2_DATA/.qpkg/container-station/bin /usr/local/bin /usr/bin; do
+        if [ -x "$docker_dir/docker" ]; then
+            PATH="$docker_dir:$PATH"
+            break
+        fi
+    done
+fi
+export PATH
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$SCRIPT_DIR"
 
@@ -8,6 +19,10 @@ APP_IMAGE_REPO=${APP_IMAGE_REPO:-ghcr.io/johnson407/trading-bot}
 NGINX_IMAGE_REPO=${NGINX_IMAGE_REPO:-ghcr.io/johnson407/trading-bot-nginx}
 COMPOSE_FILE=${COMPOSE_FILE:-docker-compose.prod.yml}
 STATE_DIR=${STATE_DIR:-$SCRIPT_DIR}
+if [ -f "$STATE_DIR/.docker/config.json" ]; then
+    DOCKER_CONFIG="$STATE_DIR/.docker"
+    export DOCKER_CONFIG
+fi
 LOG_FILE=${LOG_FILE:-$SCRIPT_DIR/deploy.log}
 DESIRED_FILE="$STATE_DIR/.desired-tag"
 LAST_GOOD_FILE="$STATE_DIR/.last-good"
@@ -166,6 +181,35 @@ container_image_id() {
 
 image_id_for() {
     docker image inspect --format '{{.Id}}' "$1" 2>/dev/null || true
+}
+
+repo_digest_for() {
+    ref=$(docker image inspect --format '{{index .RepoDigests 0}}' "$1" 2>/dev/null || true)
+    printf '%s\n' "${ref##*@}"
+}
+
+remote_repo_digest() {
+    if docker buildx version >/dev/null 2>&1; then
+        digest=$(docker buildx imagetools inspect --raw "$1" 2>/dev/null | sha256sum 2>/dev/null | awk '{print $1}')
+        if [ -n "$digest" ]; then
+            printf 'sha256:%s\n' "$digest"
+        fi
+    fi
+}
+
+all_healthy() {
+    for svc in $SERVICES; do
+        [ "$(health_of "$svc")" = "healthy" ] || return 1
+    done
+}
+
+images_current() {
+    [ -n "$CURRENT_APP_ID" ] && [ -n "$CURRENT_NGINX_ID" ] || return 1
+    app_remote=$(remote_repo_digest "$APP_IMAGE_REPO:$TAG")
+    nginx_remote=$(remote_repo_digest "$NGINX_IMAGE_REPO:$TAG")
+    [ -n "$app_remote" ] && [ -n "$nginx_remote" ] || return 1
+    [ "$app_remote" = "$(repo_digest_for "$APP_IMAGE_REPO:$TAG")" ] &&
+        [ "$nginx_remote" = "$(repo_digest_for "$NGINX_IMAGE_REPO:$TAG")" ]
 }
 
 health_of() {
@@ -393,6 +437,10 @@ main() {
     if [ "$DRY_RUN" != "1" ]; then
         CURRENT_APP_ID=$(container_image_id app)
         CURRENT_NGINX_ID=$(container_image_id nginx)
+        if images_current && all_healthy; then
+            log "desired image $TAG is already running and healthy; nothing to do"
+            exit 0
+        fi
     fi
 
     if ! pull_images; then

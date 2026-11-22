@@ -27,49 +27,53 @@ PHP, Composer, or Node.js.
 
 ## Preflight
 
-Run these on the NAS over SSH before the first install. The SSH account and
-results are still to be recorded because the generated key
-`~/.ssh/id_ed25519_qnap` is not yet authorized on the NAS.
+Run these on the NAS over SSH before the first install. The account is
+`johnson-admin`, and the generated key `~/.ssh/id_ed25519_qnap` is authorized.
 
 ```sh
+export PATH="/share/CACHEDEV2_DATA/.qpkg/container-station/bin:$PATH"
 uname -m
 id
 docker version
 docker compose version
 docker-compose version
-ls -ld /share/Container
-df -h /share/Container
+ls -ld /share/Docker
+df -h /share/Docker
+ls -l /etc/config/crontab
 crontab -l
 ```
 
-Record the account, architecture, Docker Engine version, Compose version,
-Container Station share path, free space, and cron state here:
+Recorded on 2026-11-22:
 
 | Item | Value |
 | --- | --- |
-| SSH host / account | `192.168.88.150` / pending |
-| Architecture | pending; expected `x86_64` |
-| Docker Engine | pending |
-| Docker Compose | pending |
-| Container share | pending; expected `/share/Container` |
-| Free space | pending |
-| Cron persistence | pending |
+| SSH host / account | `192.168.88.150` / `johnson-admin`; ED25519 host key `SHA256:L8xAi87zl8yZN3t3PLsFNM7/nl8ti/I6uy1LT0Poryo` |
+| NAS / OS | QNAP `TS-X53II`, QTS `5.2.11` (build `20261114`) |
+| Architecture | `x86_64`; CI images are `linux/amd64` |
+| Docker Engine | `27.1.2-qnap8`; binary at `/share/CACHEDEV2_DATA/.qpkg/container-station/bin/docker`, not on the default non-interactive PATH |
+| Docker Compose | `v2.29.1-qnap2` |
+| Container share | `/share/Docker` → `/share/CACHEDEV2_DATA/Docker`; `/share/Container` does not exist |
+| Free space | 1.3 TB available on `/share/CACHEDEV2_DATA` (79% used) |
+| Cron state | Installed 2026-11-22 in `/etc/config/crontab`; first scheduled poll at 18:55 logged `desired image latest is already running and healthy`. QTS reads `/tmp/cron/crontabs/admin`, which must match the source file. |
 
-If `docker compose version` is unavailable, the deploy script falls back to
-`docker-compose`. If Container Station uses a different share, substitute it for
-`/share/Container` everywhere below. The architecture must be `amd64`; the CI
-images are built for `linux/amd64`.
+Port `8000` is free; port `443` is already used by QTS. The Docker socket is
+`/var/run/docker.sock`, owned by `admin:administrators`; `johnson-admin` is in
+`administrators` and can run Docker when the Container Station directory is on
+`PATH`. If `docker compose version` is unavailable, the deploy script falls back
+to `docker-compose`. The architecture must be `amd64`; the CI images are built
+for `linux/amd64`.
 
 ## NAS layout
 
 Keep configuration, state, and logs together in a persistent directory. The
-examples use `/share/Container/trading-bot`:
+examples use `/share/Docker/trading-bot`:
 
 ```text
-/share/Container/trading-bot/
+/share/Docker/trading-bot/
 ├── docker-compose.prod.yml   # reference copy of the repository file
 ├── deploy.sh                 # outbound deploy script
 ├── .env                      # secrets and runtime configuration, mode 600
+├── .docker/                  # registry credential, mode 700/600
 ├── .desired-tag              # optional pin; absent means latest
 ├── .last-good                # last fully healthy tag and image IDs
 ├── .hold                     # failed image ID to skip
@@ -88,14 +92,16 @@ Nginx so public uploads work.
 
 ## First installation
 
-1. Create the directory and copy the two runtime files. From the repository:
+1. Create the directory and copy the two runtime files. In each NAS shell, put
+   Container Station's Docker binary on `PATH` first:
 
    ```sh
-   ssh <account>@192.168.88.150 'mkdir -p /share/Container/trading-bot'
+   export PATH="/share/CACHEDEV2_DATA/.qpkg/container-station/bin:$PATH"
+   ssh johnson-admin@192.168.88.150 'mkdir -p /share/Docker/trading-bot'
    scp docker-compose.prod.yml deploy/qnap/deploy.sh \
-       <account>@192.168.88.150:/share/Container/trading-bot/
-   ssh <account>@192.168.88.150 \
-       'chmod 755 /share/Container/trading-bot/deploy.sh'
+       johnson-admin@192.168.88.150:/share/Docker/trading-bot/
+   ssh johnson-admin@192.168.88.150 \
+       'chmod 755 /share/Docker/trading-bot/deploy.sh'
    ```
 
 2. Create `.env` on the NAS. Never commit it or bake it into an image. Start from
@@ -137,24 +143,32 @@ Nginx so public uploads work.
    the key makes existing credentials unreadable.
 
    ```sh
-   chmod 600 /share/Container/trading-bot/.env
+   chmod 600 /share/Docker/trading-bot/.env
    ```
 
-3. Log in to GHCR with a GitHub fine-grained or classic token that has only
-   `read:packages`. Do not reuse a write-capable CI token.
+3. Log in to GHCR with a GitHub **personal access token (classic)** that has only
+   `read:packages`. Fine-grained tokens do not support GitHub Packages/GHCR. Do
+   not reuse a write-capable CI token. Store the credential beside the deployment
+   files so the scheduled task works regardless of which account runs it:
 
    ```sh
+   mkdir -p /share/Docker/trading-bot/.docker
+   chmod 700 /share/Docker/trading-bot/.docker
    printf '%s' '<read-only-token>' | \
-       docker login ghcr.io -u <github-username> --password-stdin
+       DOCKER_CONFIG=/share/Docker/trading-bot/.docker \
+       docker login ghcr.io -u johnson407 --password-stdin
+   chmod 600 /share/Docker/trading-bot/.docker/config.json
    ```
 
-   The credential is stored in the deploy account's Docker config. Rotate it by
-   logging in again with a new token and revoking the old one.
+   If the registry rejects `johnson407`, retry with `x-access-token` as the
+   username. `deploy.sh` automatically uses `.docker/config.json` when it exists.
+   Rotate the credential by logging in again with a new token and revoking the
+   old one.
 
 4. Validate the stack definition and the script:
 
    ```sh
-   cd /share/Container/trading-bot
+   cd /share/Docker/trading-bot
    docker compose -f docker-compose.prod.yml config
    DRY_RUN=1 ./deploy.sh
    ```
@@ -182,6 +196,12 @@ Nginx so public uploads work.
    docker compose -f docker-compose.prod.yml logs --tail=100 app horizon scheduler
    ```
 
+   First deployment recorded on 2026-11-22: image
+   `sha-b4239202475ad86b94b8580663fb750980088c27`, all six services healthy,
+   `/up` and `/login` returned HTTP 200, `app_env=production`, live trading
+   disabled, and the database contained zero users before bootstrap. The UI is
+   available at `http://192.168.88.150:8000`.
+
 7. Create the first account. The production database starts empty; no development
    rows or exchange credentials are copied. Open `/register`, create the account,
    and verify the email. Mail uses the `log` driver by default, so the verification
@@ -200,21 +220,38 @@ Nginx so public uploads work.
    ```
 
 8. Install the five-minute poll. On QTS, add this line to `/etc/config/crontab`
-   and restart cron:
+   and restart cron. `johnson-admin` cannot write that file, so use a
+   sudo-capable account or the QTS Task Scheduler running as `admin`:
 
    ```cron
-   */5 * * * * cd /share/Container/trading-bot && ./deploy.sh >/dev/null 2>&1
+   */5 * * * * cd /share/Docker/trading-bot && ./deploy.sh >/dev/null 2>&1
    ```
 
    ```sh
-   /etc/init.d/cron restart
-   crontab -l
+   sudo sh -c 'echo "*/5 * * * * cd /share/Docker/trading-bot && ./deploy.sh >/dev/null 2>&1" >> /etc/config/crontab'
+   sudo /etc/init.d/crond.sh restart
+   grep trading-bot /etc/config/crontab
    ```
 
-   The script writes `deploy.log` itself, so cron does not redirect into the same
-   file. If the installed QTS does not persist `/etc/config/crontab`, use the QTS
-   scheduled-task UI or an `autorun.sh` entry with the same command. Confirm the
-   entry survives a reboot.
+   On the tested NAS, restarting cron did not refresh the active spool. Confirm
+   `/tmp/cron/crontabs/admin` matches `/etc/config/crontab`; if it does not, sync
+   it and restart again:
+
+   ```sh
+   sudo cp /etc/config/crontab /tmp/cron/crontabs/admin
+   sudo chown 0:0 /tmp/cron/crontabs/admin
+   sudo chmod 600 /tmp/cron/crontabs/admin
+   sudo /etc/init.d/crond.sh restart
+   ```
+
+   The first scheduled poll on 2026-11-22 ran at 18:55 and logged
+   `desired image latest is already running and healthy; nothing to do`. The
+   command also works from an account with Docker access because the script
+   discovers Container Station's Docker binary and reads
+   `.docker/config.json` beside itself. The script writes `deploy.log` itself, so
+   cron does not redirect into the same file. If the installed QTS does not
+   persist `/etc/config/crontab`, use the QTS scheduled-task UI or an
+   `autorun.sh` entry with the same command. Confirm the entry survives a reboot.
 
 ## Routine operation
 
@@ -225,14 +262,16 @@ pulls the new desired image, activates it, and records it as last-good.
 Watch a deployment:
 
 ```sh
-cd /share/Container/trading-bot
+cd /share/Docker/trading-bot
 tail -f deploy.log
 docker compose -f docker-compose.prod.yml ps
 ```
 
 The deploy script takes a single-instance lock. If a poll arrives while a deploy
-is running, it exits without changing anything. Successful deployments prune
-dangling images; tagged images and named volumes are preserved.
+is running, it exits without changing anything. When the desired registry image
+already matches the running application and all six services are healthy, the
+poll exits without pulling or restarting. Successful deployments prune dangling
+images; tagged images and named volumes are preserved.
 
 ## State files and operator commands
 

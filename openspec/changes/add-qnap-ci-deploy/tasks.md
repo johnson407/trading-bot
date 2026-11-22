@@ -2,8 +2,8 @@
 
 ## 1. Preflight and recorded constraints
 
-- [ ] 1.1 Confirm the NAS SSH account and architecture by running `ssh qnap 'uname -m; id'` and record the account, host key, and `x86_64` result in `docs/deployment.md`. Verify: the command succeeds and the recorded values match.
-- [ ] 1.2 Record Docker Engine, Compose, share, disk, and cron facts on the NAS by running `docker version`, `docker compose version`, `ls -ld /share/Container`, `df -h /share/Container`, and `crontab -l`. Verify: every command's result is captured in the preflight section of `docs/deployment.md`, including the fallback if Compose v1 or a different share path is found.
+- [x] 1.1 Confirm the NAS SSH account and architecture by running `ssh qnap 'uname -m; id'` and record the account, host key, and `x86_64` result in `docs/deployment.md`. Verify: the command succeeds and the recorded values match.
+- [x] 1.2 Record Docker Engine, Compose, share, disk, and cron facts on the NAS by running `docker version`, `docker compose version`, `ls -ld /share/Docker`, `df -h /share/Docker`, and `crontab -l`. Verify: every command's result is captured in the preflight section of `docs/deployment.md`, including the fallback if Compose v1 or a different share path is found.
 
 ## 2. CI test gate and registry publication
 
@@ -50,12 +50,12 @@
 
 ## 9. NAS first installation and steady state
 
-- [ ] 9.1 Create `/share/Container/trading-bot`, copy `docker-compose.prod.yml` and `deploy/qnap/deploy.sh`, mark the script executable, create a mode-600 `.env` with a fresh `APP_KEY`, and log in to GHCR with the read-only token. Verify: `docker compose -f docker-compose.prod.yml config` succeeds and `docker pull` of both images succeeds.
-- [ ] 9.2 Run `DRY_RUN=1 ./deploy.sh`, then the first real deploy. Verify: all six services report healthy, `/up` and `/login` respond, and the application logs are clean.
-- [ ] 9.3 Create the first application user through registration plus verification or an explicit tinker command. Verify: the user can log in and the production database contains no development rows.
+- [x] 9.1 Create `/share/Docker/trading-bot`, copy `docker-compose.prod.yml` and `deploy/qnap/deploy.sh`, mark the script executable, create a mode-600 `.env` with a fresh `APP_KEY`, and log in to GHCR with the read-only token. Verify: `docker compose -f docker-compose.prod.yml config` succeeds and `docker pull` of both images succeeds.
+- [x] 9.2 Run `DRY_RUN=1 ./deploy.sh`, then the first real deploy. Verify: all six services report healthy, `/up` and `/login` respond, and the application logs are clean.
+- [x] 9.3 Create the first application user through registration plus verification or an explicit tinker command. Verify: the user can log in and the production database contains no development rows.
 - [ ] 9.4 Install the five-minute cron entry, restart cron, and confirm `deploy.log` receives output. Verify: a green push to `main` produces a successful Actions run and the NAS activates the new SHA within one polling interval.
 - [ ] 9.5 Configure branch protection on `main` to require the `tests` job. Verify: the repository setting shows the required check and a pull request cannot merge with a failing test.
-- [ ] 9.6 Record the actual NAS versions, share path, cron command, first-deploy results, and any deviations in `docs/deployment.md`. Verify: the runbook matches the live NAS and no placeholders remain.
+- [x] 9.6 Record the actual NAS versions, share path, cron command, first-deploy results, and any deviations in `docs/deployment.md`. Verify: the runbook matches the live NAS and no placeholders remain.
 
 ## Workflow follow-up
 
