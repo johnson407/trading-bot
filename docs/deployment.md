@@ -257,8 +257,10 @@ docker compose -f docker-compose.prod.yml ps
 ```
 
 The deploy script takes a single-instance lock. If a poll arrives while a deploy
-is running, it exits without changing anything. Successful deployments prune
-dangling images; tagged images and named volumes are preserved.
+is running, it exits without changing anything. When the desired registry image
+already matches the running application and all six services are healthy, the
+poll exits without pulling or restarting. Successful deployments prune dangling
+images; tagged images and named volumes are preserved.
 
 ## State files and operator commands
 

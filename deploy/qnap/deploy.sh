@@ -183,6 +183,35 @@ image_id_for() {
     docker image inspect --format '{{.Id}}' "$1" 2>/dev/null || true
 }
 
+repo_digest_for() {
+    ref=$(docker image inspect --format '{{index .RepoDigests 0}}' "$1" 2>/dev/null || true)
+    printf '%s\n' "${ref##*@}"
+}
+
+remote_repo_digest() {
+    if docker buildx version >/dev/null 2>&1; then
+        digest=$(docker buildx imagetools inspect --raw "$1" 2>/dev/null | sha256sum 2>/dev/null | awk '{print $1}')
+        if [ -n "$digest" ]; then
+            printf 'sha256:%s\n' "$digest"
+        fi
+    fi
+}
+
+all_healthy() {
+    for svc in $SERVICES; do
+        [ "$(health_of "$svc")" = "healthy" ] || return 1
+    done
+}
+
+images_current() {
+    [ -n "$CURRENT_APP_ID" ] && [ -n "$CURRENT_NGINX_ID" ] || return 1
+    app_remote=$(remote_repo_digest "$APP_IMAGE_REPO:$TAG")
+    nginx_remote=$(remote_repo_digest "$NGINX_IMAGE_REPO:$TAG")
+    [ -n "$app_remote" ] && [ -n "$nginx_remote" ] || return 1
+    [ "$app_remote" = "$(repo_digest_for "$APP_IMAGE_REPO:$TAG")" ] &&
+        [ "$nginx_remote" = "$(repo_digest_for "$NGINX_IMAGE_REPO:$TAG")" ]
+}
+
 health_of() {
     cid=$(compose ps -q "$1" 2>/dev/null | head -n 1 || true)
     if [ -z "$cid" ]; then
@@ -408,6 +437,10 @@ main() {
     if [ "$DRY_RUN" != "1" ]; then
         CURRENT_APP_ID=$(container_image_id app)
         CURRENT_NGINX_ID=$(container_image_id nginx)
+        if images_current && all_healthy; then
+            log "desired image $TAG is already running and healthy; nothing to do"
+            exit 0
+        fi
     fi
 
     if ! pull_images; then
