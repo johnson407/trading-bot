@@ -27,46 +27,49 @@ PHP, Composer, or Node.js.
 
 ## Preflight
 
-Run these on the NAS over SSH before the first install. The SSH account and
-results are still to be recorded because the generated key
-`~/.ssh/id_ed25519_qnap` is not yet authorized on the NAS.
+Run these on the NAS over SSH before the first install. The account is
+`johnson-admin`, and the generated key `~/.ssh/id_ed25519_qnap` is authorized.
 
 ```sh
+export PATH="/share/CACHEDEV2_DATA/.qpkg/container-station/bin:$PATH"
 uname -m
 id
 docker version
 docker compose version
 docker-compose version
-ls -ld /share/Container
-df -h /share/Container
+ls -ld /share/Docker
+df -h /share/Docker
+ls -l /etc/config/crontab
 crontab -l
 ```
 
-Record the account, architecture, Docker Engine version, Compose version,
-Container Station share path, free space, and cron state here:
+Recorded on 2026-11-22:
 
 | Item | Value |
 | --- | --- |
-| SSH host / account | `192.168.88.150` / pending |
-| Architecture | pending; expected `x86_64` |
-| Docker Engine | pending |
-| Docker Compose | pending |
-| Container share | pending; expected `/share/Container` |
-| Free space | pending |
-| Cron persistence | pending |
+| SSH host / account | `192.168.88.150` / `johnson-admin`; ED25519 host key `SHA256:L8xAi87zl8yZN3t3PLsFNM7/nl8ti/I6uy1LT0Poryo` |
+| NAS / OS | QNAP `TS-X53II`, QTS `5.2.11` (build `20261114`) |
+| Architecture | `x86_64`; CI images are `linux/amd64` |
+| Docker Engine | `27.1.2-qnap8`; binary at `/share/CACHEDEV2_DATA/.qpkg/container-station/bin/docker`, not on the default non-interactive PATH |
+| Docker Compose | `v2.29.1-qnap2` |
+| Container share | `/share/Docker` → `/share/CACHEDEV2_DATA/Docker`; `/share/Container` does not exist |
+| Free space | 1.3 TB available on `/share/CACHEDEV2_DATA` (79% used) |
+| Cron state | `/etc/config/crontab` exists; `johnson-admin` cannot write it, `crontab` reports “must be suid”, and `sudo` requires a password. Use QTS Task Scheduler or a sudo-capable account. |
 
-If `docker compose version` is unavailable, the deploy script falls back to
-`docker-compose`. If Container Station uses a different share, substitute it for
-`/share/Container` everywhere below. The architecture must be `amd64`; the CI
-images are built for `linux/amd64`.
+Port `8000` is free; port `443` is already used by QTS. The Docker socket is
+`/var/run/docker.sock`, owned by `admin:administrators`; `johnson-admin` is in
+`administrators` and can run Docker when the Container Station directory is on
+`PATH`. If `docker compose version` is unavailable, the deploy script falls back
+to `docker-compose`. The architecture must be `amd64`; the CI images are built
+for `linux/amd64`.
 
 ## NAS layout
 
 Keep configuration, state, and logs together in a persistent directory. The
-examples use `/share/Container/trading-bot`:
+examples use `/share/Docker/trading-bot`:
 
 ```text
-/share/Container/trading-bot/
+/share/Docker/trading-bot/
 ├── docker-compose.prod.yml   # reference copy of the repository file
 ├── deploy.sh                 # outbound deploy script
 ├── .env                      # secrets and runtime configuration, mode 600
@@ -88,14 +91,16 @@ Nginx so public uploads work.
 
 ## First installation
 
-1. Create the directory and copy the two runtime files. From the repository:
+1. Create the directory and copy the two runtime files. In each NAS shell, put
+   Container Station's Docker binary on `PATH` first:
 
    ```sh
-   ssh <account>@192.168.88.150 'mkdir -p /share/Container/trading-bot'
+   export PATH="/share/CACHEDEV2_DATA/.qpkg/container-station/bin:$PATH"
+   ssh johnson-admin@192.168.88.150 'mkdir -p /share/Docker/trading-bot'
    scp docker-compose.prod.yml deploy/qnap/deploy.sh \
-       <account>@192.168.88.150:/share/Container/trading-bot/
-   ssh <account>@192.168.88.150 \
-       'chmod 755 /share/Container/trading-bot/deploy.sh'
+       johnson-admin@192.168.88.150:/share/Docker/trading-bot/
+   ssh johnson-admin@192.168.88.150 \
+       'chmod 755 /share/Docker/trading-bot/deploy.sh'
    ```
 
 2. Create `.env` on the NAS. Never commit it or bake it into an image. Start from
@@ -137,7 +142,7 @@ Nginx so public uploads work.
    the key makes existing credentials unreadable.
 
    ```sh
-   chmod 600 /share/Container/trading-bot/.env
+   chmod 600 /share/Docker/trading-bot/.env
    ```
 
 3. Log in to GHCR with a GitHub fine-grained or classic token that has only
@@ -145,7 +150,7 @@ Nginx so public uploads work.
 
    ```sh
    printf '%s' '<read-only-token>' | \
-       docker login ghcr.io -u <github-username> --password-stdin
+       docker login ghcr.io -u johnson407 --password-stdin
    ```
 
    The credential is stored in the deploy account's Docker config. Rotate it by
@@ -154,7 +159,7 @@ Nginx so public uploads work.
 4. Validate the stack definition and the script:
 
    ```sh
-   cd /share/Container/trading-bot
+   cd /share/Docker/trading-bot
    docker compose -f docker-compose.prod.yml config
    DRY_RUN=1 ./deploy.sh
    ```
@@ -203,7 +208,7 @@ Nginx so public uploads work.
    and restart cron:
 
    ```cron
-   */5 * * * * cd /share/Container/trading-bot && ./deploy.sh >/dev/null 2>&1
+   */5 * * * * cd /share/Docker/trading-bot && ./deploy.sh >/dev/null 2>&1
    ```
 
    ```sh
@@ -225,7 +230,7 @@ pulls the new desired image, activates it, and records it as last-good.
 Watch a deployment:
 
 ```sh
-cd /share/Container/trading-bot
+cd /share/Docker/trading-bot
 tail -f deploy.log
 docker compose -f docker-compose.prod.yml ps
 ```

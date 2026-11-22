@@ -1,6 +1,17 @@
 #!/bin/sh
 set -eu
 
+# QNAP Container Station keeps Docker outside the non-interactive PATH.
+if ! command -v docker >/dev/null 2>&1; then
+    for docker_dir in /share/CACHEDEV2_DATA/.qpkg/container-station/bin /usr/local/bin /usr/bin; do
+        if [ -x "$docker_dir/docker" ]; then
+            PATH="$docker_dir:$PATH"
+            break
+        fi
+    done
+fi
+export PATH
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$SCRIPT_DIR"
 
