@@ -65,7 +65,10 @@ function destroy(run) {
         <template #header>
             <div class="flex items-center justify-between">
                 <h2 class="text-xl font-semibold leading-tight text-slate-100">Backtests</h2>
-                <Link :href="route('backtests.create')" class="rounded-md bg-blue-700 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white">New backtest</Link>
+                <div class="flex items-center gap-3">
+                    <Link :href="route('backtest-sweeps.index')" class="rounded-md border border-slate-600 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-200">Parameter sweeps</Link>
+                    <Link :href="route('backtests.create')" class="rounded-md bg-blue-700 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white">New backtest</Link>
+                </div>
             </div>
         </template>
 

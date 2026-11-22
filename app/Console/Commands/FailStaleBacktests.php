@@ -19,9 +19,16 @@ class FailStaleBacktests extends Command
         $message = 'The backtest worker stopped before the run finished.';
 
         $failed = BacktestRun::query()
-            ->where('status', BacktestStatus::Running->value)
-            // Progress updates touch updated_at, so this is a heartbeat.
-            ->where('updated_at', '<', $cutoff)
+            ->where(function ($query) use ($cutoff): void {
+                $query->where(function ($running) use ($cutoff): void {
+                    $running->where('status', BacktestStatus::Running->value)
+                        // Progress updates touch updated_at, so this is a heartbeat.
+                        ->where('updated_at', '<', $cutoff);
+                })->orWhere(function ($pending) use ($cutoff): void {
+                    $pending->where('status', BacktestStatus::Pending->value)
+                        ->where('created_at', '<', $cutoff);
+                });
+            })
             ->update([
                 'status' => BacktestStatus::Failed->value,
                 'error' => $message,

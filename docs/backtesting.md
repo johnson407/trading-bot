@@ -5,13 +5,14 @@ and saves the result in the dashboard. It is intended to answer one question
 before capital is committed: *would this configuration have made or lost money
 over this period?* It is a directional aid, not a prediction.
 
-The implementation lives in three layers:
+The implementation lives in four layers:
 
 | Layer | Location |
 | --- | --- |
 | Historical candles | `App\Services\Backtest\CcxtCandleProvider`, `CandleStore`, `market_candles` |
 | Side-effect-free replay | `App\Domain\Backtest` |
 | Saved runs and dashboard | `App\Models\BacktestRun`, `RunBacktest`, `BacktestController` |
+| Parameter sweeps | `App\Models\BacktestSweep`, `CreateBacktestSweep`, `BacktestSweepController` |
 
 ## Creating a run
 
@@ -206,6 +207,65 @@ Runs with a different symbol, timeframe, or range are rejected with an
 explanation. Comparing results from different timeframes is misleading because
 the fill model observes one close per interval.
 
+## Parameter sweeps
+
+A parameter sweep is one grid bot, one timeframe, and one date range evaluated
+across lists of center prices, spacing values, and level counts. Open
+**Backtests → Parameter sweeps → New sweep**, select a configured grid bot, and
+enter each list as comma-separated values.
+
+The sweep creates the **cartesian product**: every center price is combined with
+every spacing value and every level count. For example, two centers, two spacings,
+and two level counts produce eight runs. The create page shows the live
+combination count before submission.
+
+- A sweep must produce at least 2 and at most `backtest.sweep_max_runs` runs. The
+  default cap is 24; deployments can raise it in configuration, but the effective
+  minimum stays at 2.
+- Center prices and spacing values must be positive decimals. Level counts must be
+  whole numbers from 1 to 50.
+- Duplicate values are rejected after decimal normalization, so `50000` and
+  `50000.0` count as the same center price and cannot bypass the cap.
+- Non-grid strategies, another owner's bot, an unconfigured bot, an invalid date
+  range, and a range above the candle limit are rejected before any row is
+  created. A rejected request creates neither a sweep nor a run.
+- Only `center_price`, `spacing_value`, `level_count`, and the strategy's
+  `levels_per_side` mapping are overridden in each run's immutable snapshot.
+  Capital, fees, risk limits, exits, order quantity, spacing type, and every other
+  setting come from the bot.
+
+Creation is atomic: the sweep and all of its runs are inserted in one transaction,
+then one `RunBacktest` job is dispatched per run after the commit. If a dispatch
+fails, the failure is logged and that run is immediately marked `failed` with
+`The backtest job could not be queued.`, so the sweep reaches a terminal state
+instead of waiting forever. The scheduled `backtests:fail-stale` command also
+fails stale running runs and pending runs that never started.
+
+Each generated run stores `sweep_id` and a name describing its combination, and
+behaves like a normal backtest: it has its own snapshot, status, progress, end
+reason, metrics, equity curve, and fills. Sweeps do not have a user-facing delete
+action. If a sweep row is removed at the database level (or through user
+deletion), `sweep_id` is nulled on its runs without deleting them; deleting a bot
+also leaves the runs readable.
+
+Sweep status is derived from its runs rather than stored:
+
+- `incomplete` when the sweep no longer has any runs.
+- `pending` while runs are queued and none has started.
+- `running` while any run is running.
+- `failed` once all runs are finished and at least one failed.
+- `completed` when every run completed.
+
+The list and detail pages show completed, failed, and active counts plus the
+percentage of runs that have finished. They poll every three seconds only while a
+sweep has pending or running runs.
+
+The detail page lists each combination's swept values, status, return, maximum
+drawdown, and end reason, and links to each run. When two to four runs have
+completed, it offers **Compare completed**, which hands those runs to the existing
+comparison page. A partially failed sweep stays inspectable; it does not retry the
+whole batch.
+
 ## Stated assumptions
 
 Every run detail page repeats these limitations:
@@ -243,9 +303,24 @@ docker compose exec -T -e APP_ENV=testing -e CACHE_STORE=array app php artisan t
   tests/Feature/BacktestParityTest.php \
   tests/Feature/BacktestExitGuardTest.php \
   tests/Feature/RunBacktestTest.php \
-  tests/Feature/BacktestDashboardTest.php
+  tests/Feature/BacktestDashboardTest.php \
+  tests/Feature/BacktestSweepTest.php \
+  tests/Feature/BacktestSweepDashboardTest.php \
+  tests/Feature/StoreBacktestSweepRequestTest.php
 ```
 
 The parity tests compare portfolio arithmetic with `InventoryLedger` and the fill
 rule with `PaperExchangeClient::qualifyingFills`. If either production rule
 changes, update both sides and rerun those tests.
+
+## Test map
+
+| Flow | Test |
+| --- | --- |
+| Sweep schema and run link | `BacktestSweepMigrationTest` |
+| Sweep model relations and cascade behavior | `BacktestSweepModelTest` |
+| Sweep configuration cap | `BacktestSweepConfigTest` |
+| Cartesian creation, overrides, rollback, dispatch failure | `BacktestSweepTest` |
+| Snapshot strategy overrides | `BacktestSnapshotBuilderTest` |
+| Sweep request validation and ownership | `StoreBacktestSweepRequestTest` |
+| Sweep pages, derived counts, compare link, end-to-end | `BacktestSweepDashboardTest` |

@@ -16,6 +16,7 @@ use LogicException;
  * @property int $id
  * @property int $user_id
  * @property int|null $bot_id
+ * @property int|null $sweep_id
  * @property string $name
  * @property string $exchange
  * @property string $symbol
@@ -39,6 +40,7 @@ use LogicException;
  * @property Carbon|null $updated_at
  * @property-read Bot|null $bot
  * @property-read Collection<int, BacktestFill> $fills
+ * @property-read BacktestSweep|null $sweep
  * @property-read User $user
  */
 class BacktestRun extends Model
@@ -48,6 +50,7 @@ class BacktestRun extends Model
     protected $fillable = [
         'user_id',
         'bot_id',
+        'sweep_id',
         'name',
         'exchange',
         'symbol',
@@ -113,6 +116,12 @@ class BacktestRun extends Model
     public function fills(): HasMany
     {
         return $this->hasMany(BacktestFill::class);
+    }
+
+    /** @return BelongsTo<BacktestSweep, $this> */
+    public function sweep(): BelongsTo
+    {
+        return $this->belongsTo(BacktestSweep::class, 'sweep_id');
     }
 
     public function isActive(): bool

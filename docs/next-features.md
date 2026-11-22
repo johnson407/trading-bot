@@ -6,8 +6,9 @@ shortlist to revisit before opening an OpenSpec change.
 > **Update (2026-11-22):** the backtest/replay engine shipped through the
 > `backtest-engine` change, proactive alerting shipped through the
 > `alerts-and-notifications` change, per-bot protective exits shipped through
-> the `bot-exit-guard` change, and live account equity analytics shipped through
-> the `live-equity-analytics` change. See [backtesting.md](backtesting.md),
+> the `bot-exit-guard` change, live account equity analytics shipped through
+> the `live-equity-analytics` change, and parameter sweeps shipped through the
+> `backtest-parameter-sweep` change. See [backtesting.md](backtesting.md),
 > [alerts.md](alerts.md), [risk.md](risk.md), and
 > [analytics.md](analytics.md). The remaining candidates below are still open.
 
@@ -15,14 +16,15 @@ shortlist to revisit before opening an OpenSpec change.
 
 The MVP is complete: 10 capability specs, 4 strategies, paper and live CCXT
 execution, risk guards, kill switch, restart recovery, historical backtesting,
-owner-scoped alerting, per-bot protective exits, account equity history, and a
-growing test suite. At capture time there were no active OpenSpec changes;
-backtesting, alerting, protective exits, and equity analytics have since shipped.
+parameter sweeps, owner-scoped alerting, per-bot protective exits, account
+equity history, and a growing test suite. At capture time there were no active
+OpenSpec changes; backtesting, parameter sweeps, alerting, protective exits, and
+equity analytics have since shipped.
 
 Capabilities already in place: `bots`, `grids`, `grid_levels`, `orders`, `fills`,
 `inventory_ledger_entries`, `risk_events`, `activity_logs`, strategy state,
-`backtesting`, `alerts`, `analytics`, per-bot protective exits, and the Inertia
-dashboard.
+`backtesting`, parameter sweeps, `alerts`, `analytics`, per-bot protective exits,
+and the Inertia dashboard.
 
 ## Gaps found in the codebase
 
@@ -41,8 +43,9 @@ dashboard.
                     PROVE                        PROTECT
         +----------------------------+  +----------------------------+
         | Backtest / replay (shipped)|  | Per-bot stop-loss /        |
-        | Equity curve + drawdown    |  | take-profit / range guard  |
-        | analytics (shipped)        |  | (shipped), alerts (shipped)|
+        | Parameter sweep (shipped)  |  | take-profit / range guard  |
+        | Equity curve + drawdown    |  | (shipped), alerts (shipped)|
+        | analytics (shipped)        |  |                            |
         +----------------------------+  +----------------------------+
                     EXPAND                       OPERATE
         +----------------------------+  +----------------------------+
@@ -56,6 +59,7 @@ dashboard.
 | Candidate | Status | Why it fits | Effort | Main risk |
 | --- | --- | --- | --- | --- |
 | Backtest / replay engine | Shipped | `StrategyInterface` is pure and already driven through `PaperExchangeClient`; the replay driver runs the same strategies over historical candles. | Large | Fill-model fidelity: last-price paper fills do not translate directly to candles, which need high/low plus fee/slippage rules. |
+| Parameter sweep | Shipped | Runs the bounded cartesian product of center prices, spacing values, and level counts against one bot and period, then reuses comparison. | Medium | Queue burst and partial failure; both are bounded by the run cap and stale-run handling. |
 | Alerts and notifications | Shipped | `RiskEventRecorder` and `ActivityRecorder` are natural event sources; the alert recorder maps a curated catalog into an inbox and queued email. | Small | None significant. |
 | Equity curve and analytics | Shipped | Account snapshots are captured every five minutes and charted with return, peak, and drawdown metrics; history is forward-only. | Medium | Resolved: no backfill from fills or ledger entries. |
 | Stop-loss / take-profit / range exit | Shipped | Extends the tick pipeline and risk controls, is configurable per bot in every state, and is reported through alerts. | Medium | Resolved: triggers pause and cancel orders, leaving inventory for manual exit. |
@@ -64,21 +68,21 @@ dashboard.
 
 ## Recommendation
 
-**Next: a parameter sweep** over center, spacing, and level count. The live
-dashboard now shows whether an account is growing and how deep its drawdowns run,
-so the next research gap is comparing strategy settings instead of judging them
-one run at a time. Multi-exchange support is the alternative if reach matters more
-than research.
+**Next: multi-exchange support.** Parameter sweeps now cover the research loop:
+center, spacing, and level count can be compared across a bounded set of runs,
+with a live combination count, cap, derived progress, and a direct path to the
+existing 2–4 run comparison. That closes the "compare settings" gap, so the next
+alternative is breadth rather than more backtest machinery.
 
-The backtest direction is not exhausted: the replay engine already supports manual
-run comparison, and a parameter sweep is its natural follow-up. API/webhooks and
-export remain lower priority because they add attack surface before the strategy
-research loop is complete.
+Multi-exchange support is the next candidate because CCXT is already abstracted
+behind `ExchangeClient` and `trading.exchanges` is an allowlist. API/webhooks and
+export remain lower priority because they add attack surface before venue breadth
+is proven.
 
 ## Decision to resolve before starting
 
-> Is the next milestone about **research throughput** (parameter sweep) or
-> **expanding reach** (multi-exchange, API)?
+> Is the next milestone about **expanding reach** (multi-exchange) or
+> **operating the account** (API, webhooks, export)?
 
 ## How to pick this up
 

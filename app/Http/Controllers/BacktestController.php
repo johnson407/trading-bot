@@ -10,6 +10,7 @@ use App\Http\Resources\BacktestFillResource;
 use App\Http\Resources\BacktestRunResource;
 use App\Jobs\RunBacktest;
 use App\Models\BacktestRun;
+use App\Services\Backtest\BacktestPeriodValidator;
 use App\Services\Backtest\BacktestSnapshotBuilder;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -84,6 +85,7 @@ class BacktestController extends Controller
     public function store(
         StoreBacktestRequest $request,
         BacktestSnapshotBuilder $snapshots,
+        BacktestPeriodValidator $periods,
     ): RedirectResponse {
         $bot = $request->user()->bots()->find($request->integer('bot_id'));
 
@@ -95,19 +97,11 @@ class BacktestController extends Controller
         $startAt = $this->utc((string) $request->validated('start_at'));
         $endAt = $this->utc((string) $request->validated('end_at'));
 
-        if ($endAt <= $startAt) {
-            throw ValidationException::withMessages([
-                'end_at' => 'The end date must be after the start date.',
-            ]);
-        }
+        $periodError = $periods->validate($timeframe, $startAt, $endAt);
 
-        $seconds = max(1, $timeframe->seconds());
-        $estimated = (int) floor(($endAt->getTimestamp() - $startAt->getTimestamp()) / $seconds);
-        $max = (int) config('backtest.max_candles', 200_000);
-
-        if ($estimated > $max) {
+        if ($periodError !== null) {
             throw ValidationException::withMessages([
-                'timeframe' => "This range produces about {$estimated} candles; the limit is {$max}. Choose a shorter range or a larger timeframe.",
+                $periodError['field'] => $periodError['message'],
             ]);
         }
 

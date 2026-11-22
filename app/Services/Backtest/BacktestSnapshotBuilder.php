@@ -14,6 +14,14 @@ use RuntimeException;
 
 class BacktestSnapshotBuilder
 {
+    /** Strategy fields a parameter sweep is allowed to override. */
+    private const SWEEP_OVERRIDES = [
+        'center_price',
+        'spacing_value',
+        'level_count',
+        'levels_per_side',
+    ];
+
     public function __construct(
         private readonly RiskLimitService $riskLimits,
         private readonly StrategyRegistry $strategies,
@@ -22,6 +30,7 @@ class BacktestSnapshotBuilder
     /**
      * Build an immutable snapshot of everything the replay needs.
      *
+     * @param  array<string, mixed>  $strategyOverrides
      * @return array<string, mixed>
      */
     public function build(
@@ -29,6 +38,7 @@ class BacktestSnapshotBuilder
         Timeframe $timeframe,
         DateTimeImmutable $startAt,
         DateTimeImmutable $endAt,
+        array $strategyOverrides = [],
     ): array {
         $config = $bot->strategyConfig()->first();
 
@@ -40,6 +50,7 @@ class BacktestSnapshotBuilder
             throw new RuntimeException("The bot strategy [{$bot->strategy_key}] is not available for replay.");
         }
 
+        $configuration = $this->configurationWithOverrides($config->configuration ?? [], $strategyOverrides);
         $limits = $this->riskLimits->effectiveForBot($bot);
         $exitRules = new ExitRules(
             $bot->stop_loss_percent === null ? null : Decimal::of($bot->stop_loss_percent)->toString(),
@@ -61,7 +72,7 @@ class BacktestSnapshotBuilder
             ],
             'strategy' => [
                 'key' => $bot->strategy_key,
-                'configuration' => $config->configuration ?? [],
+                'configuration' => $configuration,
             ],
             'risk' => [
                 'max_position_notional' => $limits['max_position_notional']->toString(),
@@ -75,5 +86,25 @@ class BacktestSnapshotBuilder
                 'end_at' => $endAt->setTimezone($utc)->format(DATE_ATOM),
             ],
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $configuration
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function configurationWithOverrides(array $configuration, array $overrides): array
+    {
+        foreach ($overrides as $key => $value) {
+            if (! in_array($key, self::SWEEP_OVERRIDES, true) || ! is_scalar($value)) {
+                continue;
+            }
+
+            $configuration[$key] = in_array($key, ['level_count', 'levels_per_side'], true)
+                ? (int) $value
+                : Decimal::of((string) $value)->toString();
+        }
+
+        return $configuration;
     }
 }

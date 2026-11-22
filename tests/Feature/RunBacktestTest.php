@@ -124,16 +124,26 @@ it('marks a pending or running run failed when the job itself fails', function (
         ->and($run->finished_at)->not->toBeNull();
 });
 
-it('fails stale running runs whose worker disappeared', function () {
-    $stale = runFor();
-    $stale->update(['status' => BacktestStatus::Running, 'started_at' => now()->subMinutes(20)]);
-    DB::table('backtest_runs')->where('id', $stale->id)->update(['updated_at' => now()->subMinutes(20)]);
-    $fresh = runFor();
-    $fresh->update(['status' => BacktestStatus::Running, 'started_at' => now()->subMinute()]);
+it('fails stale running and aged pending runs whose worker disappeared', function () {
+    $staleRunning = runFor();
+    $staleRunning->update(['status' => BacktestStatus::Running, 'started_at' => now()->subMinutes(20)]);
+    DB::table('backtest_runs')->where('id', $staleRunning->id)->update(['updated_at' => now()->subMinutes(20)]);
+
+    $stalePending = runFor();
+    DB::table('backtest_runs')->where('id', $stalePending->id)->update(['created_at' => now()->subMinutes(20)]);
+
+    $freshRunning = runFor();
+    $freshRunning->update(['status' => BacktestStatus::Running, 'started_at' => now()->subMinute()]);
+
+    $freshPending = runFor();
 
     $this->artisan('backtests:fail-stale')->assertSuccessful();
 
-    expect($stale->refresh()->status)->toBe(BacktestStatus::Failed)
-        ->and($stale->error)->toBe('The backtest worker stopped before the run finished.')
-        ->and($fresh->refresh()->status)->toBe(BacktestStatus::Running);
+    expect($staleRunning->refresh()->status)->toBe(BacktestStatus::Failed)
+        ->and($staleRunning->error)->toBe('The backtest worker stopped before the run finished.')
+        ->and($stalePending->refresh()->status)->toBe(BacktestStatus::Failed)
+        ->and($stalePending->error)->toBe('The backtest worker stopped before the run finished.')
+        ->and($stalePending->finished_at)->not->toBeNull()
+        ->and($freshRunning->refresh()->status)->toBe(BacktestStatus::Running)
+        ->and($freshPending->refresh()->status)->toBe(BacktestStatus::Pending);
 });

@@ -171,6 +171,35 @@ id is rejected with 404.
 Feature tests: `tests/Feature/AlertInboxTest.php`,
 `tests/Feature/AlertIntegrationTest.php`.
 
+## Backtest parameter sweeps — `/backtests/sweeps`
+
+Routes: `backtest-sweeps.index`, `backtest-sweeps.create`,
+`backtest-sweeps.store`, and `backtest-sweeps.show`.
+
+- **List** shows the signed-in owner's latest 100 sweeps with bot, symbol,
+  timeframe, period, combination count, progress bar, derived status, and
+  completed/failed/active counts. It polls every three seconds only while a sweep
+  has active runs.
+- **Create** offers only the owner's configured grid bots, the configured
+  timeframes, date presets, comma-separated center/spacing/level inputs, a live
+  combination count, and a warning when the count exceeds the configured cap. It
+  posts to `backtest-sweeps.store`.
+- **Detail** shows the swept value lists, derived status and progress, and one row
+  per run with its center, spacing, levels, status, return, maximum drawdown, and
+  end reason. Each row links to the normal backtest detail page. While any run is
+  pending or running, the page polls the sweep, runs, compare URL, and active flag.
+  When two to four runs have completed, it shows **Compare completed**, which opens
+  the existing `backtests.compare` page.
+- All four routes are inside the authenticated, verified group and are
+  owner-scoped. Another owner's sweep returns 404. Sweep runs are ordinary
+  backtests, so another owner's run is denied with 403 by the normal backtest
+  authorization.
+- A rejected create request returns field errors and creates no sweep or run. Only
+  center price, spacing value, level count, and `levels_per_side` differ per run;
+  everything else comes from the bot snapshot.
+
+Feature test: `tests/Feature/BacktestSweepDashboardTest.php`.
+
 ## Polling and freshness
 
 List and detail pages poll every five seconds, meeting the MVP's five-second
@@ -192,4 +221,5 @@ protection; a failed action never leaves a partial state change visible.
 | Kill switch | `kill-switch.create`, `kill-switch.store` | `KillSwitchUiTest` |
 | Credentials | `exchange-credentials.*` | `ExchangeCredentialUiTest` |
 | Alerts | `alerts.index`, `alerts.read`, `alerts.read-all` | `AlertInboxTest` |
+| Backtest sweeps | `backtest-sweeps.index`, `backtest-sweeps.create`, `backtest-sweeps.store`, `backtest-sweeps.show` | `BacktestSweepDashboardTest` |
 | Authorization | all bot/credential routes | `AuthorizationTest` |

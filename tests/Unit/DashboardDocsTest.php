@@ -23,6 +23,10 @@ it('documents every dashboard route that exists', function () {
         'exchange-credentials.edit',
         'exchange-credentials.update',
         'exchange-credentials.destroy',
+        'backtest-sweeps.index',
+        'backtest-sweeps.create',
+        'backtest-sweeps.store',
+        'backtest-sweeps.show',
     ];
 
     foreach ($routes as $route) {
@@ -43,6 +47,7 @@ it('names the feature test covering each documented flow', function () {
         'ActivityLogTest',
         'KillSwitchUiTest',
         'ExchangeCredentialUiTest',
+        'BacktestSweepDashboardTest',
     ] as $test) {
         expect($docs)->toContain($test);
     }

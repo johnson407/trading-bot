@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\BacktestController;
+use App\Http\Controllers\BacktestSweepController;
 use App\Http\Controllers\BotController;
 use App\Http\Controllers\BotExitGuardController;
 use App\Http\Controllers\DashboardController;
@@ -36,6 +37,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('bots/{bot}/exit-guard', [BotExitGuardController::class, 'update'])->name('bots.exit-guard.update')->middleware('throttle:bot-control');
 
     Route::get('backtests/compare', [BacktestController::class, 'compare'])->name('backtests.compare');
+    Route::get('backtests/sweeps', [BacktestSweepController::class, 'index'])->name('backtest-sweeps.index');
+    Route::get('backtests/sweeps/create', [BacktestSweepController::class, 'create'])->name('backtest-sweeps.create');
+    Route::post('backtests/sweeps', [BacktestSweepController::class, 'store'])->name('backtest-sweeps.store')->middleware('throttle:backtests');
+    Route::get('backtests/sweeps/{sweep}', [BacktestSweepController::class, 'show'])->name('backtest-sweeps.show');
     Route::get('backtests', [BacktestController::class, 'index'])->name('backtests.index');
     Route::get('backtests/create', [BacktestController::class, 'create'])->name('backtests.create');
     Route::post('backtests', [BacktestController::class, 'store'])->name('backtests.store')->middleware('throttle:backtests');

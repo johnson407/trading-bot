@@ -2,40 +2,45 @@
 
 namespace App\Models;
 
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Notifications\DatabaseNotificationCollection;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
  * @property string $name
  * @property string $email
- * @property \Illuminate\Support\Carbon|null $email_verified_at
+ * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $remember_token
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ActivityLog> $activityLogs
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Collection<int, ActivityLog> $activityLogs
  * @property-read int|null $activity_logs_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Alert> $alerts
+ * @property-read Collection<int, Alert> $alerts
  * @property-read int|null $alerts_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Bot> $bots
+ * @property-read Collection<int, Bot> $bots
  * @property-read int|null $bots_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ExchangeCredential> $exchangeCredentials
+ * @property-read Collection<int, ExchangeCredential> $exchangeCredentials
  * @property-read int|null $exchange_credentials_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\EquitySnapshot> $equitySnapshots
+ * @property-read Collection<int, EquitySnapshot> $equitySnapshots
  * @property-read int|null $equity_snapshots_count
- * @property-read \Illuminate\Notifications\DatabaseNotificationCollection<int, \Illuminate\Notifications\DatabaseNotification> $notifications
+ * @property-read DatabaseNotificationCollection<int, DatabaseNotification> $notifications
  * @property-read int|null $notifications_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\RiskEvent> $riskEvents
+ * @property-read Collection<int, RiskEvent> $riskEvents
  * @property-read int|null $risk_events_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\RiskLimit> $riskLimits
+ * @property-read Collection<int, RiskLimit> $riskLimits
  * @property-read int|null $risk_limits_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Alert> $unreadAlerts
+ * @property-read Collection<int, Alert> $unreadAlerts
  * @property-read int|null $unread_alerts_count
+ *
  * @method static \Database\Factories\UserFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User newQuery()
@@ -48,6 +53,7 @@ use Illuminate\Notifications\Notifiable;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User wherePassword($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereRememberToken($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereUpdatedAt($value)
+ *
  * @mixin \Eloquent
  */
 class User extends Authenticatable implements MustVerifyEmail
@@ -123,6 +129,12 @@ class User extends Authenticatable implements MustVerifyEmail
     public function backtestRuns(): HasMany
     {
         return $this->hasMany(BacktestRun::class);
+    }
+
+    /** @return HasMany<BacktestSweep, $this> */
+    public function backtestSweeps(): HasMany
+    {
+        return $this->hasMany(BacktestSweep::class);
     }
 
     /** @return HasMany<Alert, $this> */
