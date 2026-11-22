@@ -54,7 +54,7 @@ Recorded on 2026-11-22:
 | Docker Compose | `v2.29.1-qnap2` |
 | Container share | `/share/Docker` → `/share/CACHEDEV2_DATA/Docker`; `/share/Container` does not exist |
 | Free space | 1.3 TB available on `/share/CACHEDEV2_DATA` (79% used) |
-| Cron state | `/etc/config/crontab` exists; `johnson-admin` cannot write it, `crontab` reports “must be suid”, and `sudo` requires a password. Use QTS Task Scheduler or a sudo-capable account. |
+| Cron state | Installed 2026-11-22 in `/etc/config/crontab`; first scheduled poll at 18:55 logged `desired image latest is already running and healthy`. QTS reads `/tmp/cron/crontabs/admin`, which must match the source file. |
 
 Port `8000` is free; port `443` is already used by QTS. The Docker socket is
 `/var/run/docker.sock`, owned by `admin:administrators`; `johnson-admin` is in
@@ -220,27 +220,38 @@ Nginx so public uploads work.
    ```
 
 8. Install the five-minute poll. On QTS, add this line to `/etc/config/crontab`
-   and restart cron:
+   and restart cron. `johnson-admin` cannot write that file, so use a
+   sudo-capable account or the QTS Task Scheduler running as `admin`:
 
    ```cron
    */5 * * * * cd /share/Docker/trading-bot && ./deploy.sh >/dev/null 2>&1
    ```
 
    ```sh
-   /etc/init.d/crond.sh restart
+   sudo sh -c 'echo "*/5 * * * * cd /share/Docker/trading-bot && ./deploy.sh >/dev/null 2>&1" >> /etc/config/crontab'
+   sudo /etc/init.d/crond.sh restart
    grep trading-bot /etc/config/crontab
    ```
 
-   On the tested NAS, `johnson-admin` cannot write `/etc/config/crontab`
-   (`crontab` reports “must be suid” and `sudo` requires a password). Use the QTS
-   Task Scheduler instead, running the same command as `admin`, or use a
-   sudo-capable account. The `.docker/config.json` credential is read by either
-   account.
+   On the tested NAS, restarting cron did not refresh the active spool. Confirm
+   `/tmp/cron/crontabs/admin` matches `/etc/config/crontab`; if it does not, sync
+   it and restart again:
 
-   The script writes `deploy.log` itself, so cron does not redirect into the same
-   file. If the installed QTS does not persist `/etc/config/crontab`, use the QTS
-   scheduled-task UI or an `autorun.sh` entry with the same command. Confirm the
-   entry survives a reboot.
+   ```sh
+   sudo cp /etc/config/crontab /tmp/cron/crontabs/admin
+   sudo chown 0:0 /tmp/cron/crontabs/admin
+   sudo chmod 600 /tmp/cron/crontabs/admin
+   sudo /etc/init.d/crond.sh restart
+   ```
+
+   The first scheduled poll on 2026-11-22 ran at 18:55 and logged
+   `desired image latest is already running and healthy; nothing to do`. The
+   command also works from an account with Docker access because the script
+   discovers Container Station's Docker binary and reads
+   `.docker/config.json` beside itself. The script writes `deploy.log` itself, so
+   cron does not redirect into the same file. If the installed QTS does not
+   persist `/etc/config/crontab`, use the QTS scheduled-task UI or an
+   `autorun.sh` entry with the same command. Confirm the entry survives a reboot.
 
 ## Routine operation
 

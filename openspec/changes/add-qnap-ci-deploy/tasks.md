@@ -55,7 +55,7 @@
 - [x] 9.3 Create the first application user through registration plus verification or an explicit tinker command. Verify: the user can log in and the production database contains no development rows.
 - [ ] 9.4 Install the five-minute cron entry, restart cron, and confirm `deploy.log` receives output. Verify: a green push to `main` produces a successful Actions run and the NAS activates the new SHA within one polling interval.
 - [ ] 9.5 Configure branch protection on `main` to require the `tests` job. Verify: the repository setting shows the required check and a pull request cannot merge with a failing test.
-- [ ] 9.6 Record the actual NAS versions, share path, cron command, first-deploy results, and any deviations in `docs/deployment.md`. Verify: the runbook matches the live NAS and no placeholders remain.
+- [x] 9.6 Record the actual NAS versions, share path, cron command, first-deploy results, and any deviations in `docs/deployment.md`. Verify: the runbook matches the live NAS and no placeholders remain.
 
 ## Workflow follow-up
 
