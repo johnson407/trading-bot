@@ -73,6 +73,7 @@ examples use `/share/Docker/trading-bot`:
 ├── docker-compose.prod.yml   # reference copy of the repository file
 ├── deploy.sh                 # outbound deploy script
 ├── .env                      # secrets and runtime configuration, mode 600
+├── .docker/                  # registry credential, mode 700/600
 ├── .desired-tag              # optional pin; absent means latest
 ├── .last-good                # last fully healthy tag and image IDs
 ├── .hold                     # failed image ID to skip
@@ -146,15 +147,21 @@ Nginx so public uploads work.
    ```
 
 3. Log in to GHCR with a GitHub fine-grained or classic token that has only
-   `read:packages`. Do not reuse a write-capable CI token.
+   `read:packages`. Do not reuse a write-capable CI token. Store the credential
+   beside the deployment files so the scheduled task works regardless of which
+   account runs it:
 
    ```sh
+   mkdir -p /share/Docker/trading-bot/.docker
+   chmod 700 /share/Docker/trading-bot/.docker
    printf '%s' '<read-only-token>' | \
+       DOCKER_CONFIG=/share/Docker/trading-bot/.docker \
        docker login ghcr.io -u johnson407 --password-stdin
+   chmod 600 /share/Docker/trading-bot/.docker/config.json
    ```
 
-   The credential is stored in the deploy account's Docker config. Rotate it by
-   logging in again with a new token and revoking the old one.
+   `deploy.sh` automatically uses `.docker/config.json` when it exists. Rotate the
+   credential by logging in again with a new token and revoking the old one.
 
 4. Validate the stack definition and the script:
 
@@ -212,9 +219,15 @@ Nginx so public uploads work.
    ```
 
    ```sh
-   /etc/init.d/cron restart
-   crontab -l
+   /etc/init.d/crond.sh restart
+   grep trading-bot /etc/config/crontab
    ```
+
+   On the tested NAS, `johnson-admin` cannot write `/etc/config/crontab`
+   (`crontab` reports “must be suid” and `sudo` requires a password). Use the QTS
+   Task Scheduler instead, running the same command as `admin`, or use a
+   sudo-capable account. The `.docker/config.json` credential is read by either
+   account.
 
    The script writes `deploy.log` itself, so cron does not redirect into the same
    file. If the installed QTS does not persist `/etc/config/crontab`, use the QTS

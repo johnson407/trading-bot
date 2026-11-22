@@ -19,6 +19,10 @@ APP_IMAGE_REPO=${APP_IMAGE_REPO:-ghcr.io/johnson407/trading-bot}
 NGINX_IMAGE_REPO=${NGINX_IMAGE_REPO:-ghcr.io/johnson407/trading-bot-nginx}
 COMPOSE_FILE=${COMPOSE_FILE:-docker-compose.prod.yml}
 STATE_DIR=${STATE_DIR:-$SCRIPT_DIR}
+if [ -f "$STATE_DIR/.docker/config.json" ]; then
+    DOCKER_CONFIG="$STATE_DIR/.docker"
+    export DOCKER_CONFIG
+fi
 LOG_FILE=${LOG_FILE:-$SCRIPT_DIR/deploy.log}
 DESIRED_FILE="$STATE_DIR/.desired-tag"
 LAST_GOOD_FILE="$STATE_DIR/.last-good"
