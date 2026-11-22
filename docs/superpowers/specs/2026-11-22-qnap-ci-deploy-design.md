@@ -455,35 +455,63 @@ not exist, use the Container Station share that does and keep the same layout.
 New file: `deploy/qnap/deploy.sh` (copied to the NAS). POSIX `sh`, no bash-only
 features, because QNAP's shell may be BusyBox ash.
 
+State files live next to the script on the NAS:
+
+- `.desired-tag` — the tag the NAS should run. Absent means `latest`; a value of
+  `sha-<commit>` pins the deployment until explicitly cleared.
+- `.last-good` — the immutable tag and image ID of the last deployment that
+  passed every health check.
+- `.hold` — the image ID of a deployment that failed health checks. While the
+  pulled image matches it, the script skips the restart; a new image clears it
+  automatically.
+
 Behavior:
 
 1. `set -eu`; `cd` to the script's directory.
 2. Take a single-instance lock. Prefer `flock` when available; fall back to a
    `mkdir` lock with stale-lock cleanup. If another deploy is running, log and
    exit 0.
-3. Read `IMAGE_TAG` from the environment, defaulting to `latest`.
+3. Resolve the desired tag:
+   - An argument or `IMAGE_TAG` value wins and is written to `.desired-tag`.
+   - Otherwise read `.desired-tag`; if absent, use `latest`.
+   - `--use-latest` removes `.desired-tag` and `.hold`, then deploys `latest`.
+   - `--clear-hold` removes `.hold` and continues with the desired tag.
+   - `--rollback` sets the desired tag to the immutable tag in `.last-good`.
 4. Record the image IDs currently used by `app` and `nginx`, if those
    containers exist.
-5. `docker compose -f docker-compose.prod.yml pull`.
-6. `docker compose -f docker-compose.prod.yml up -d --remove-orphans`.
-7. Wait up to 180 seconds for `app` and `nginx` to report `healthy` via
+5. Pull the desired tag. Pull, authentication, or network failures log and exit
+   1 without writing `.hold`, so the next tick retries.
+6. Resolve the pulled image ID. If `.hold` contains that ID, log that the same
+   failed image is held and exit 0. If `.hold` contains another ID, remove it
+   and continue.
+7. `docker compose -f docker-compose.prod.yml up -d --remove-orphans`.
+8. Wait up to 180 seconds for **all six** services to report `healthy` via
    `docker inspect`. A missing health check or an exited container counts as
    failure.
-8. On success:
-   - Log the deployed `IMAGE_TAG` and the resolved image digests.
-   - Remove the temporary `:rollback` tags, if any.
+9. On success:
+   - Derive the immutable `sha-<revision>` tag from the app image's
+     `org.opencontainers.image.revision` label (set by
+     `docker/metadata-action`) and ensure the local image carries that tag.
+   - Write `.last-good` with that tag and the app image ID.
+   - Remove `.hold` and any temporary `:rollback` tags.
    - `docker image prune -f` (dangling images only; tagged images stay).
    - Exit 0.
-9. On failure:
-   - If previous image IDs were recorded, retag them as
-     `ghcr.io/johnson407/trading-bot:rollback` and
-     `ghcr.io/johnson407/trading-bot-nginx:rollback`.
-   - Run `IMAGE_TAG=rollback docker compose -f docker-compose.prod.yml up -d
-     --remove-orphans`.
-   - Wait for health again (shorter, 120 seconds).
-   - Log the failure and the rollback result, and exit 1 so cron/monitoring can
-     see it.
-   - Do not run `docker image prune` on failure.
+10. On failure:
+    - If `app`, `nginx`, `horizon`, or `scheduler` is unhealthy and previous
+      image IDs exist, retag the previous app and nginx image IDs as
+      `ghcr.io/johnson407/trading-bot:rollback` and
+      `ghcr.io/johnson407/trading-bot-nginx:rollback`, then run
+      `IMAGE_TAG=rollback docker compose -f docker-compose.prod.yml up -d
+      --pull never --remove-orphans`. Wait up to 120 seconds for recovery.
+    - If PostgreSQL or Redis is unhealthy, log an infrastructure failure and do
+      not roll back the images; the images are not the cause. Do not write
+      `.hold` for this case, so the next tick retries.
+    - For an application-stack health failure, write `.hold` with the failed
+      image ID, so the same image is not retried every five minutes.
+      `--clear-hold` or a new image releases it.
+    - Log the failure and the rollback result, and exit 1 so cron and monitoring
+      can see it.
+    - Do not run `docker image prune` on failure.
 
 Support `DRY_RUN=1` to print the compose commands without executing them. This
 makes the script testable on a workstation and during first-time setup.
@@ -507,6 +535,11 @@ QTS), run as the account that has Docker access:
 
 Then restart cron (for example `/etc/init.d/cron restart`) and verify with
 `crontab -l` or by tailing `deploy.log` after a test push.
+
+The cron command always calls the script with no arguments. The script reads
+`.desired-tag`, `.last-good`, and `.hold` from its own directory, so a manual pin
+or rollback is not undone by the next tick. To return to automatic `latest`,
+run `./deploy.sh --use-latest` once; cron then continues with `latest`.
 
 Fallback if the QTS build does not persist or expose `/etc/config/crontab`: use
 the QTS scheduled-task UI to run the same command every 5 minutes, or add it to
@@ -563,6 +596,14 @@ Required values:
 Do not copy the development `.env` wholesale. In particular, do not reuse its
 `APP_KEY` or database password.
 
+This is a fresh production deployment: the database starts empty and no
+development data is carried over. Exchange credentials are encrypted with
+`APP_KEY`, so copying development rows into a database protected by a new key
+would make those credentials undecryptable. If data is ever migrated later,
+either reuse the old key or re-enter the credentials. The first account is
+created through `/register` (then verified) or with tinker; the demo seeder is
+optional and is not part of the production bootstrap.
+
 ### 9.11 Health, rollback, and data safety
 
 Health is defined by the compose health checks, not by "the container started".
@@ -572,14 +613,20 @@ Health is defined by the compose health checks, not by "the container started".
 - `horizon` is healthy when `horizon:status` reports running.
 - `scheduler` is healthy when `schedule:work` is running.
 
-The deploy is considered successful only when `app` and `nginx` are healthy
-within the timeout. The workers depend on `app` being healthy, so a broken app
-never leaves workers running against an unmigrated schema.
+The deploy is considered successful only when **all six** services are healthy
+within the 180-second window. The workers depend on `app` being healthy, so a
+broken app never leaves workers running against an unmigrated schema. A broken
+Horizon or scheduler is a failed deployment: for this application it means bots
+stop ticking even though the UI still responds.
 
-Rollback is image-level. The previous `app` and `nginx` image IDs are retagged
-and brought back. The database is **not** rolled back. If a migration is not
-backward-compatible, restoring from a QNAP snapshot or a `pg_dump` backup is the
-only recovery; this is why backups are called out as a recommended follow-up.
+Rollback is image-level. If `app`, `nginx`, `horizon`, or `scheduler` fails
+health, the previous `app` and `nginx` image IDs are retagged and brought back,
+and the failed image ID is written to `.hold`. If PostgreSQL or Redis is
+unhealthy, the script logs an infrastructure
+failure, does not roll back the images, and retries on the next tick. The
+database is **not** rolled back. If a migration is not backward-compatible,
+restoring from a QNAP snapshot or a `pg_dump` backup is the only recovery; this
+is why backups are called out as a recommended follow-up.
 
 Data safety:
 
@@ -688,13 +735,21 @@ Trading safety:
 ## 12. Rollback and recovery
 
 Normal rollback is automatic on a failed health check, as described in 9.7.
+After a failure the script records the failed image ID in `.hold`, so the same
+image is not redeployed on every tick while the problem is being investigated.
 
 Manual rollback:
 
 1. SSH to the NAS.
-2. Run `IMAGE_TAG=sha-<previous-commit> ./deploy.sh` (the SHA tag still exists
-   in GHCR) or use the local `:rollback` tags if the registry is unavailable.
-3. Verify health and logs.
+2. Run `./deploy.sh --rollback` to deploy the immutable tag recorded in
+   `.last-good`. This writes that tag to `.desired-tag`, so subsequent cron
+   ticks keep it. If the registry tag is unavailable, retag the recorded
+   `.last-good` image ID as `:rollback` and start with `--pull never`.
+3. Alternatively, run `./deploy.sh sha-<previous-commit>` to pin any SHA tag
+   that still exists in GHCR.
+4. Verify health and logs. `./deploy.sh --use-latest` returns to automatic
+   latest; `./deploy.sh --clear-hold` retries a held image after an operator
+   fix.
 
 Database recovery:
 
@@ -711,11 +766,21 @@ Database recovery:
   build.
 - **Poll every 5 minutes.** Short enough for a personal deployment, long enough
   to avoid needless registry traffic. Adjustable in cron.
-- **Use `latest` for normal deploys, SHA tags for identity and rollback.** The
-  deploy script records image IDs before pulling, so rollback does not depend on
-  the moving `latest` tag.
+- **`latest` is the default desired tag, backed by a persistent state file.**
+  `.desired-tag` lets an operator pin a SHA tag and keeps cron from undoing it.
+  A successful deploy records an immutable `.last-good` tag; a failed image is
+  held by ID so the stack does not flap every five minutes. Rollback uses the
+  previous image ID locally and `--pull never` when the registry tag is
+  unavailable.
+- **All six services define deploy success.** A healthy UI with a dead Horizon
+  or scheduler is still a failure for a trading bot. Any application-stack
+  service failure triggers an image rollback. PostgreSQL/Redis failures are
+  treated as infrastructure failures and retried without an image rollback.
 - **Automatic image rollback on health failure, no database rollback.** Code
   rollback is fast and safe; schema rollback is not, so it stays manual.
+- **Fresh production database, no data migration.** The `APP_KEY` change would
+  make copied credential rows undecryptable; a fresh bootstrap is simpler and
+  matches the human's "fresh deployment" answer.
 - **Keep the compose file and `.env` on the NAS, updated by the operator.**
   Auto-syncing them would require repository credentials on the appliance and a
   second delivery mechanism.
@@ -739,6 +804,11 @@ Database recovery:
 - Implement the workflow, Dockerfile stage, Nginx image, production compose,
   entrypoint gate, deploy script, and docs.
 - Test the production images and compose stack locally before touching the NAS.
+- Implement and test the `.desired-tag` / `.last-good` / `.hold` lifecycle,
+  including first deploy with no previous image, pin/unpin, manual rollback, and
+  holding a failed image across repeated cron ticks.
+- Confirm the installed Compose supports `up --pull never`; if it does not, use
+  the v1-compatible equivalent (a local `:rollback` tag with no pull).
 - Run the first deploy on the NAS and record the actual paths, versions, and
   cron command in `docs/deployment.md`.
 - Configure the GHCR token and Docker login on the NAS.
@@ -757,9 +827,14 @@ Database recovery:
 - [ ] The NAS deploys automatically within one polling interval of a green
   `main` push.
 - [ ] All six services become healthy after a deploy.
+- [ ] A failed health check on `app`, `nginx`, `horizon`, or `scheduler`
+  triggers an image rollback and a non-zero exit.
+- [ ] A failed image is held by ID; repeated cron ticks do not redeploy it.
+- [ ] A manual SHA pin survives cron ticks, and `--use-latest` clears it.
+- [ ] `--rollback` restores the immutable `.last-good` tag and persists it.
 - [ ] PostgreSQL, Redis, and app storage data survive a deploy and a stack
   restart.
-- [ ] A failed health check triggers an image rollback and a non-zero exit.
+- [ ] The production database starts empty; no development rows are migrated.
 - [ ] Live trading remains disabled unless the operator explicitly changes the
   production `.env`.
 - [ ] No secret is present in the repository or the image.
