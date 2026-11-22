@@ -29,7 +29,7 @@ const chartData = computed(() => ({
         data: series.values.map((value) => (value === null || value === undefined ? null : Number(value))),
         borderColor: colors[index % colors.length],
         backgroundColor: `${colors[index % colors.length]}22`,
-        pointRadius: 0,
+        pointRadius: props.labels.length === 1 ? 4 : 0,
         borderWidth: 2,
         tension: 0.15,
         fill: props.series.length === 1,

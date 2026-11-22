@@ -1,7 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import EquityChart from '@/Components/EquityChart.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { onBeforeUnmount, onMounted } from 'vue';
+import { computed, onBeforeUnmount, onMounted } from 'vue';
 
 const props = defineProps({
     summary: {
@@ -12,11 +13,40 @@ const props = defineProps({
         type: Array,
         required: true,
     },
+    equityHistory: {
+        type: Object,
+        required: true,
+    },
 });
 
 const money = (value) => Number(value ?? 0).toFixed(2);
+const percent = (value) => `${Number(value ?? 0).toFixed(2)}%`;
+const signedPercent = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(value ?? 0).toFixed(2)}%`;
+
+const equityLabels = computed(() =>
+    props.equityHistory.points.map((point) => new Date(point.at).toLocaleString()),
+);
+const equitySeries = computed(() => [
+    {
+        label: 'Account equity',
+        values: props.equityHistory.points.map((point) => point.equity),
+    },
+]);
+
+const selectRange = (range) => {
+    router.get(
+        route('dashboard'),
+        { range },
+        {
+            only: ['equityHistory'],
+            preserveScroll: true,
+            preserveState: true,
+        },
+    );
+};
 
 let poller = null;
+let equityPoller = null;
 
 onMounted(() => {
     poller = setInterval(() => {
@@ -26,11 +56,23 @@ onMounted(() => {
             preserveState: true,
         });
     }, 5000);
+
+    equityPoller = setInterval(() => {
+        router.reload({
+            only: ['equityHistory'],
+            preserveScroll: true,
+            preserveState: true,
+        });
+    }, 60_000);
 });
 
 onBeforeUnmount(() => {
     if (poller !== null) {
         clearInterval(poller);
+    }
+
+    if (equityPoller !== null) {
+        clearInterval(equityPoller);
     }
 });
 const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(value ?? 0).toFixed(2)}`;
@@ -79,6 +121,68 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                             {{ signedMoney(summary.unrealized_pnl) }}
                         </div>
                     </div>
+                </div>
+
+                <div class="bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg">
+                    <div class="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-slate-700">
+                        <div>
+                            <h3 class="text-lg font-medium text-slate-100">Equity history</h3>
+                            <p class="mt-1 text-sm text-slate-400">Captured on a schedule from inventory and mark prices.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button
+                                v-for="range in equityHistory.available_ranges"
+                                :key="range"
+                                type="button"
+                                class="rounded border px-3 py-1 text-sm"
+                                :class="range === equityHistory.range_days ? 'border-blue-400 bg-blue-500/10 text-blue-200' : 'border-slate-600 text-slate-300 hover:border-slate-500'"
+                                @click="selectRange(range)"
+                            >
+                                {{ range }} days
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="!equityHistory.has_history" class="p-6 text-sm text-slate-300">
+                        No equity history yet. Snapshots are collected on a schedule; check back after a few capture intervals.
+                    </div>
+
+                    <template v-else>
+                        <p v-if="equityHistory.collecting" class="px-6 pt-4 text-sm text-yellow-200">
+                            Collecting history - at least two snapshots are needed for period metrics.
+                        </p>
+
+                        <div v-if="equityHistory.metrics" class="grid gap-4 p-6 sm:grid-cols-3">
+                            <div class="rounded-lg border border-slate-700 p-4">
+                                <div class="text-sm text-slate-300">Period return</div>
+                                <div
+                                    class="mt-1 text-2xl font-semibold"
+                                    :class="equityHistory.metrics.period_return === null ? 'text-slate-400' : Number(equityHistory.metrics.period_return) < 0 ? 'text-red-300' : 'text-green-300'"
+                                >
+                                    {{ equityHistory.metrics.period_return === null ? '—' : signedPercent(equityHistory.metrics.period_return) }}
+                                </div>
+                            </div>
+                            <div class="rounded-lg border border-slate-700 p-4">
+                                <div class="text-sm text-slate-300">Peak equity</div>
+                                <div class="mt-1 text-2xl font-semibold text-slate-100">
+                                    {{ money(equityHistory.metrics.peak_equity) }}
+                                </div>
+                            </div>
+                            <div class="rounded-lg border border-slate-700 p-4">
+                                <div class="text-sm text-slate-300">Maximum drawdown</div>
+                                <div
+                                    class="mt-1 text-2xl font-semibold"
+                                    :class="Number(equityHistory.metrics.max_drawdown) > 0 ? 'text-red-300' : 'text-slate-100'"
+                                >
+                                    {{ percent(equityHistory.metrics.max_drawdown) }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-6 pt-0">
+                            <EquityChart :labels="equityLabels" :series="equitySeries" value-label="Account equity" />
+                        </div>
+                    </template>
                 </div>
 
                 <div class="bg-slate-800 overflow-x-auto shadow-sm sm:rounded-lg">

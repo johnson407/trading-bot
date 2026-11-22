@@ -11,6 +11,22 @@ profile management. Guests are redirected to `/login`; unauthenticated access to
 bot, credential, or control endpoint is rejected. `AuthorizationTest` covers guest
 redirects, owner access, and cross-user denial.
 
+## Dashboard — `GET /dashboard` (`dashboard`)
+
+Shows bot counts by state, aggregate realized and unrealized P&L, the account
+equity history, and the ten most recent activity rows for the signed-in owner.
+
+The equity section accepts `?range=7`, `?range=30`, or `?range=90`; an omitted or
+unknown range falls back to the configured 30-day default. It renders the selected
+range's account equity curve with period return, peak equity, and maximum
+drawdown. A range with no snapshots shows an empty state, and a range with fewer
+than two snapshots is marked as collecting without fabricated metrics. The section
+refreshes independently every minute, while the summary and recent activity keep
+their five-second partial reload. See [analytics.md](analytics.md) for capture
+cadence, formulas, and retention.
+
+Feature test: `tests/Feature/DashboardTest.php`.
+
 ## Bot list — `GET /bots` (`bots.index`)
 
 Shows the signed-in user's bots with name, symbol, exchange, mode, status,
@@ -166,6 +182,7 @@ protection; a failed action never leaves a partial state change visible.
 
 | Flow | Route | Test |
 | --- | --- | --- |
+| Dashboard | `dashboard` | `DashboardTest` |
 | Bot list | `bots.index` | `BotListTest` |
 | Create bot | `bots.create`, `bots.store` | `BotCreationTest` |
 | Bot detail | `bots.show` | `BotDetailTest` |

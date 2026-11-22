@@ -26,6 +26,8 @@ use Illuminate\Notifications\Notifiable;
  * @property-read int|null $bots_count
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ExchangeCredential> $exchangeCredentials
  * @property-read int|null $exchange_credentials_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\EquitySnapshot> $equitySnapshots
+ * @property-read int|null $equity_snapshots_count
  * @property-read \Illuminate\Notifications\DatabaseNotificationCollection<int, \Illuminate\Notifications\DatabaseNotification> $notifications
  * @property-read int|null $notifications_count
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\RiskEvent> $riskEvents
@@ -133,5 +135,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function unreadAlerts(): HasMany
     {
         return $this->hasMany(Alert::class)->whereNull('read_at');
+    }
+
+    /** @return HasMany<EquitySnapshot, $this> */
+    public function equitySnapshots(): HasMany
+    {
+        return $this->hasMany(EquitySnapshot::class);
     }
 }

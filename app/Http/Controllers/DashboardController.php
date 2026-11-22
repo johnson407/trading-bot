@@ -2,22 +2,24 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Analytics\EquityHistory;
 use App\Domain\Portfolio\InventoryLedger;
 use App\Domain\Portfolio\MarkPrice;
 use App\Domain\Support\Decimal;
 use App\Models\ActivityLog;
 use App\Models\Bot;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, InventoryLedger $ledger): Response
+    public function __invoke(Request $request, InventoryLedger $ledger, EquityHistory $history): Response
     {
         $user = $request->user();
 
-        /** @var \Illuminate\Database\Eloquent\Collection<int, Bot> $bots */
+        /** @var Collection<int, Bot> $bots */
         $bots = Bot::query()->where('user_id', $user->id)->get();
 
         $counts = [
@@ -60,6 +62,12 @@ class DashboardController extends Controller
             ])
             ->all();
 
+        $ranges = array_map('intval', (array) config('analytics.ranges', [7, 30, 90]));
+        $defaultRange = (int) config('analytics.default_range_days', 30);
+        $requestedRange = $request->query('range');
+        $requestedRange = is_numeric($requestedRange) ? (int) $requestedRange : null;
+        $rangeDays = in_array($requestedRange, $ranges, true) ? $requestedRange : $defaultRange;
+
         return Inertia::render('Dashboard', [
             'summary' => [
                 ...$counts,
@@ -67,6 +75,7 @@ class DashboardController extends Controller
                 'unrealized_pnl' => $unrealized->toString(),
             ],
             'recentActivity' => $activity,
+            'equityHistory' => fn () => $history->forUser($user, $rangeDays),
         ]);
     }
 }
