@@ -126,7 +126,7 @@ jobs:
 
       - name: Verify images
         run: |
-          docker run --rm trading-bot:ci php artisan --version
+          docker run --rm --entrypoint php trading-bot:ci artisan --version
           docker run --rm trading-bot-nginx:ci test -f /var/www/html/public/index.php
 
   build-and-push:
