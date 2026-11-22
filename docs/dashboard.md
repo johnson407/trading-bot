@@ -47,6 +47,27 @@ next poll.
 
 Feature test: `tests/Feature/BotDetailTest.php`.
 
+## Protective exits — `PATCH /bots/{bot}/exit-guard` (`bots.exit-guard.update`)
+
+The bot detail page shows a **Protective exits** card for every bot state. The
+owner can set an optional stop-loss percent, take-profit percent, range low, and
+range high. Leaving a field blank disables that rule.
+
+- Stop-loss and take-profit are percentages from the bot's average entry price;
+  they require positive base inventory and an average entry.
+- Range low/high are absolute mark-price bounds and work with or without
+  inventory. When both are set, high must be greater than low.
+- Stop-loss and take-profit must be greater than 0 and less than 100. Range
+  values must be greater than 0. Percentages allow up to 4 decimal places and
+  ranges up to 8; larger values are rejected rather than silently rounded.
+- Saving flashes `Protective exits updated.` and records
+  `bot.exit_guard_updated` with the before/after values.
+- A trigger pauses the bot and cancels open orders; it never sells inventory and
+  does not resume automatically. See [risk.md](risk.md) and
+  [bot-parameters.md](bot-parameters.md).
+
+Feature test: `tests/Feature/BotExitGuardTest.php`.
+
 ## Controls — `POST /bots/{bot}/start|pause|stop`
 
 - **Start** (`bots.start`) moves idle/paused/stopped/error bots to running and
@@ -148,6 +169,7 @@ protection; a failed action never leaves a partial state change visible.
 | Bot list | `bots.index` | `BotListTest` |
 | Create bot | `bots.create`, `bots.store` | `BotCreationTest` |
 | Bot detail | `bots.show` | `BotDetailTest` |
+| Protective exits | `bots.exit-guard.update` | `BotExitGuardTest` |
 | Start/pause/stop | `bots.start`, `bots.pause`, `bots.stop` | `BotControlTest` |
 | Activity | `bots.activity` | `ActivityLogTest` |
 | Kill switch | `kill-switch.create`, `kill-switch.store` | `KillSwitchUiTest` |

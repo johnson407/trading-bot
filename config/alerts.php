@@ -56,5 +56,21 @@ return [
             'severity' => 'critical',
             'title' => 'Orders could not be canceled after exchange failure pause',
         ],
+        'risk.stop_loss_triggered' => [
+            'severity' => 'critical',
+            'title' => 'Stop-loss triggered',
+        ],
+        'risk.take_profit_triggered' => [
+            'severity' => 'warning',
+            'title' => 'Take-profit triggered',
+        ],
+        'risk.range_exit_triggered' => [
+            'severity' => 'warning',
+            'title' => 'Range exit triggered',
+        ],
+        'risk.exit_cancel_failed' => [
+            'severity' => 'critical',
+            'title' => 'Orders could not be canceled after protective exit',
+        ],
     ],
 ];

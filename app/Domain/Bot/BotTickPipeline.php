@@ -11,6 +11,7 @@ use App\Domain\Exchange\Contracts\ExchangeClient;
 use App\Domain\Exchange\Exceptions\ExchangeException;
 use App\Domain\Exchange\Enums\ExchangeErrorType;
 use App\Domain\Exchange\ValueObjects\MarketData;
+use App\Domain\Exit\ExitGuardMonitor;
 use App\Domain\Grid\Enums\GridLevelState;
 use App\Domain\Grid\Enums\GridSpacingType;
 use App\Domain\Grid\Enums\GridStatus;
@@ -58,6 +59,7 @@ class BotTickPipeline
         private readonly StrategyStateLoader $stateLoader,
         private readonly StrategyStateSerializer $stateSerializer,
         private readonly RiskGuard $riskGuard,
+        private readonly ExitGuardMonitor $exitGuard,
         private readonly DailyLossMonitor $dailyLoss,
         private readonly OrderPlacementService $placement,
         private readonly OrderStateMachine $stateMachine,
@@ -101,6 +103,13 @@ class BotTickPipeline
             $settings['mark_price'] = $marketData->last->toString();
 
             $bot->forceFill(['settings' => $settings])->save();
+
+            $this->exitGuard->evaluate($bot, $marketData->last->toString());
+            $bot->refresh();
+
+            if (! $bot->isRunning()) {
+                return new TickResult('skipped', durationMs: $this->elapsed($started));
+            }
 
             $this->dailyLoss->evaluate($bot, $marketData->last);
             $bot->refresh();

@@ -179,6 +179,7 @@ class BacktestController extends Controller
                 'Every run starts flat with quote inventory equal to the bot capital allocation, zero base inventory, and no open orders. Inventory held by the live bot is not carried in.',
                 'Buying is bounded by available quote inventory, including fees. Orders placed during a candle are not eligible to fill until the next candle.',
                 'Exchange precision and minimum amount/notional rules are not applied in this version. Orders use the strategy values as produced.',
+                'Protective exits are evaluated at the candle close only, not intrabar. A trigger cancels simulated orders and ends the run; inventory is not liquidated.',
                 'Results are directional, not predictive. A past range is not a promise of future performance. Each close-only fill observes one close per interval, so results depend on the timeframe; compare runs using the same timeframe and range.',
             ],
         ]);

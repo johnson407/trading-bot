@@ -3,12 +3,15 @@
 namespace App\Domain\Backtest\ValueObjects;
 
 use App\Domain\Backtest\Enums\Timeframe;
+use App\Domain\Exit\ExitRules;
 use App\Domain\Support\Decimal;
 use DateTimeImmutable;
 use DateTimeZone;
 
 final readonly class BacktestConfiguration
 {
+    public ExitRules $exitRules;
+
     /** @param array<string, mixed> $strategyConfiguration */
     public function __construct(
         public int $botId,
@@ -23,7 +26,10 @@ final readonly class BacktestConfiguration
         public Decimal $feeRate,
         public array $strategyConfiguration,
         public BacktestRiskLimits $riskLimits,
-    ) {}
+        ?ExitRules $exitRules = null,
+    ) {
+        $this->exitRules = $exitRules ?? new ExitRules();
+    }
 
     /**
      * Rebuild a run configuration from its immutable JSON snapshot.
@@ -36,6 +42,7 @@ final readonly class BacktestConfiguration
         $strategy = is_array($snapshot['strategy'] ?? null) ? $snapshot['strategy'] : [];
         $period = is_array($snapshot['period'] ?? null) ? $snapshot['period'] : [];
         $risk = is_array($snapshot['risk'] ?? null) ? $snapshot['risk'] : [];
+        $exit = is_array($snapshot['exit'] ?? null) ? $snapshot['exit'] : [];
 
         return new self(
             botId: (int) ($bot['id'] ?? 0),
@@ -50,6 +57,12 @@ final readonly class BacktestConfiguration
             feeRate: Decimal::of($bot['fee_rate'] ?? '0'),
             strategyConfiguration: is_array($strategy['configuration'] ?? null) ? $strategy['configuration'] : [],
             riskLimits: BacktestRiskLimits::fromArray($risk),
+            exitRules: new ExitRules(
+                $exit['stop_loss_percent'] ?? null,
+                $exit['take_profit_percent'] ?? null,
+                $exit['range_low'] ?? null,
+                $exit['range_high'] ?? null,
+            ),
         );
     }
 
@@ -71,6 +84,7 @@ final readonly class BacktestConfiguration
                 'configuration' => $this->strategyConfiguration,
             ],
             'risk' => $this->riskLimits->toArray(),
+            'exit' => $this->exitRules->toArray(),
             'period' => [
                 'timeframe' => $this->timeframe->value,
                 'start_at' => $this->startAt->format(DATE_ATOM),

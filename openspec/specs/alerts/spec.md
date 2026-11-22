@@ -8,7 +8,7 @@ Delivers owner-scoped alerts for trading incidents that require attention, and p
 
 ### Requirement: Alert on operational incidents
 
-The system SHALL create an alert when a covered incident occurs: a bot pauses from the daily-loss limit, consecutive exchange failures, a stale tick loop, a reconciliation conflict, or the live-trading gate; the user activates the kill-switch; or an order cancellation fails while pausing. It SHALL NOT create an alert for routine order, fill, balance, or expected inventory-deferral events.
+The system SHALL create an alert when a covered incident occurs: a bot pauses from the daily-loss limit, consecutive exchange failures, a stale tick loop, a reconciliation conflict, the live-trading gate, or a protective exit; the user activates the kill-switch; or an order cancellation fails while pausing. It SHALL NOT create an alert for routine order, fill, balance, or expected inventory-deferral events.
 
 #### Scenario: Daily-loss pause creates an alert
 
@@ -40,9 +40,14 @@ The system SHALL create an alert when a covered incident occurs: a bot pauses fr
 - **WHEN** a user activates the account-wide kill-switch
 - **THEN** an account-level alert is created for that user without a bot association
 
+#### Scenario: Protective exit creates an alert
+
+- **WHEN** a bot pauses because a stop-loss, take-profit, or range exit triggers
+- **THEN** an alert is created for the bot's owner with the matching protective-exit incident type
+
 #### Scenario: Cancellation failure while pausing creates an alert
 
-- **WHEN** an open order cannot be canceled while a bot is pausing for a risk breach
+- **WHEN** an open order cannot be canceled while a bot is pausing for a risk breach, including a protective exit
 - **THEN** an alert is created for the bot's owner with the cancellation-failure incident type
 
 #### Scenario: Expected inventory deferral does not alert

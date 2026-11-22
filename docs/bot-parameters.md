@@ -140,7 +140,27 @@ this strategy.
 
 ---
 
-## 4. Runtime parameters (not in the form)
+## 4. Protective exits (per-bot, optional)
+
+These four nullable fields live on the bot row and are edited from the bot detail page, not the
+create/edit form. Blank means the rule is disabled.
+
+| Field | Validation | Effect |
+| --- | --- | --- |
+| **stop_loss_percent** | null or decimal `0 < x < 100`, up to 4 decimal places | Pauses when the mark is at or below `average_entry_price * (1 - x / 100)`. Requires positive base inventory and average entry. |
+| **take_profit_percent** | null or decimal `0 < x < 100`, up to 4 decimal places | Pauses when the mark is at or above `average_entry_price * (1 + x / 100)`. Requires positive base inventory and average entry. |
+| **range_low** | null or decimal `> 0`, up to 8 decimal places | Pauses when the mark is at or below this price. Works without inventory. |
+| **range_high** | null or decimal `> 0`, up to 8 decimal places | Pauses when the mark is at or above this price. Works without inventory. `range_low` must be below `range_high` when both are set. |
+
+Rules are evaluated every running tick after the mark price is stored and before the daily-loss
+check and strategy logic. Precedence is stop-loss, take-profit, range exit; only one trigger is
+recorded per tick. A trigger pauses and cancels open orders but never sells inventory. There is no
+liquidation, market order, or automatic resume. The exit guard remains editable while the bot is
+running, paused, or stopped; strategy fields still require an idle or stopped bot.
+
+---
+
+## 5. Runtime parameters (not in the form)
 
 These live in `.env`, `config/trading.php`, and `config/risk.php`:
 
@@ -172,9 +192,10 @@ immediately.
 
 ---
 
-## 5. Editing and lifecycle notes
+## 6. Editing and lifecycle notes
 
 - A bot is only editable while idle or stopped.
+- Protective exit rules are separate from the strategy form and remain editable in every bot state.
 - The edit form can change name, `capital_allocation`, `fee_rate`, and strategy configuration -
   not exchange, symbol, strategy, or mode.
 - If a structural config field changes (center, levels, spacing, quantity, strategy-specific

@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Backtest\Enums\BacktestEndReason;
 use App\Domain\Backtest\Enums\Timeframe;
 use App\Domain\Backtest\ValueObjects\BacktestConfiguration;
 use App\Domain\Backtest\ValueObjects\BacktestMetrics;
@@ -7,6 +8,7 @@ use App\Domain\Backtest\ValueObjects\BacktestRiskLimits;
 use App\Domain\Backtest\ValueObjects\Candle;
 use App\Domain\Backtest\ValueObjects\EquityPoint;
 use App\Domain\Backtest\ValueObjects\SimulatedFill;
+use App\Domain\Exit\ExitRules;
 use App\Domain\Order\Enums\OrderSide;
 use App\Domain\Support\Decimal;
 
@@ -21,6 +23,12 @@ it('exposes timeframe durations, labels, and configured values', function () {
         ->and(Timeframe::values())->toBe(['1m', '5m', '15m', '1h', '4h', '1d'])
         ->and(Timeframe::configured())->toBe(['1m', '5m', '15m', '1h', '4h', '1d'])
         ->and(Timeframe::fromConfig('1h'))->toBe(Timeframe::H1);
+});
+
+it('exposes protective exit end reasons', function () {
+    expect(BacktestEndReason::StopLoss->value)->toBe('stop_loss')
+        ->and(BacktestEndReason::TakeProfit->value)->toBe('take_profit')
+        ->and(BacktestEndReason::RangeExit->value)->toBe('range_exit');
 });
 
 it('rejects an unsupported timeframe', function () {
@@ -111,6 +119,7 @@ it('round-trips a configuration through its snapshot', function () {
         feeRate: Decimal::of('0.001'),
         strategyConfiguration: ['center_price' => '2000'],
         riskLimits: BacktestRiskLimits::make('5000', 12, '250'),
+        exitRules: new ExitRules('4', '9', '1800', '2400'),
     );
 
     $restored = BacktestConfiguration::fromSnapshot($configuration->toSnapshot());
@@ -122,7 +131,21 @@ it('round-trips a configuration through its snapshot', function () {
         ->and($restored->startAt->format(DATE_ATOM))->toBe('2026-01-01T00:00:00+00:00')
         ->and($restored->capitalAllocation->toString())->toBe('2500')
         ->and($restored->riskLimits->maxOpenOrders)->toBe(12)
+        ->and($restored->exitRules->toArray())->toBe([
+            'stop_loss_percent' => '4',
+            'take_profit_percent' => '9',
+            'range_low' => '1800',
+            'range_high' => '2400',
+        ])
         ->and($restored->strategyConfiguration)->toBe(['center_price' => '2000']);
+});
+
+it('defaults missing exit rules to none when hydrating a snapshot', function () {
+    $configuration = BacktestConfiguration::fromSnapshot([
+        'period' => ['timeframe' => '1d'],
+    ]);
+
+    expect($configuration->exitRules->isEmpty())->toBeTrue();
 });
 
 it('falls back to safe configuration defaults for a partial snapshot', function () {

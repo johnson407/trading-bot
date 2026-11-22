@@ -29,6 +29,10 @@ class BotSummaryResource extends JsonResource
             'realized_pnl' => $this->realized_pnl,
             'unrealized_pnl' => $this->unrealized_pnl ?? null,
             'fees_paid' => $this->fees_paid,
+            'stop_loss_percent' => $this->stop_loss_percent,
+            'take_profit_percent' => $this->take_profit_percent,
+            'range_low' => $this->range_low,
+            'range_high' => $this->range_high,
             'open_orders_count' => (int) ($this->open_orders_count ?? 0),
             'active_grid' => $this->whenLoaded('activeGrid', fn () => $this->activeGrid === null ? null : [
                 'id' => $this->activeGrid->id,

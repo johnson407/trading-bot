@@ -33,7 +33,8 @@ form shows the approximate candle count before submitting.
   shorter range or larger timeframe instead.
 
 Creation snapshots the bot's name, exchange, symbol, strategy key, strategy
-configuration, capital allocation, fee rate, effective risk limits, and period.
+configuration, capital allocation, fee rate, effective risk limits, protective
+exit rules, and period.
 The snapshot is stored immutably on the run. Later edits to the bot do not change
 an existing run. If the bot is deleted, the run remains readable.
 
@@ -117,21 +118,34 @@ exceeds free quote inventory. This guard is intentional for a fresh deployment
 and is stricter than live paper mode, which does not enforce quote affordability.
 The run continues after a rejected order.
 
-The snapshot includes the effective risk limits at creation: the bot-specific
-limit when one exists, otherwise the user-wide limit. The replay enforces:
+The snapshot includes the effective risk limits and protective exit rules at
+creation: the bot-specific limit when one exists, otherwise the user-wide limit.
+The replay enforces:
 
 - Maximum position notional.
 - Maximum open orders.
 - Uncommitted base inventory for sells.
 - UTC daily loss limit.
+- Stop-loss, take-profit, and range exits.
 
 A position, open-order, or inventory rejection skips that order and continues.
 A daily-loss breach cancels open orders and ends the run with `risk_pause`. Runs
 never resume automatically. Daily loss resets at the UTC calendar-day boundary
 during the replay.
 
-`risk_pause` and `strategy_stop` are terminal outcomes for the saved run, just as
-a paused live bot does not resume by itself.
+Protective exits are evaluated once per candle, at the close, before the
+daily-loss check and before the strategy sees the candle. A stop-loss or
+take-profit needs positive base inventory and a positive average entry price; the
+range rules work without inventory and may use only one bound. Precedence is
+stop-loss, then take-profit, then range, with one trigger per candle. A trigger
+cancels simulated open orders and ends the run with `stop_loss`, `take_profit`, or
+`range_exit`. It does not sell the remaining base inventory. Because evaluation is
+close-only, a candle that trades through a threshold intrabar is detected at its
+close, so the recorded exit price can be worse than the configured threshold.
+
+`risk_pause`, `strategy_stop`, `stop_loss`, `take_profit`, and `range_exit` are
+terminal outcomes for the saved run, just as a paused live bot does not resume by
+itself.
 
 ## Outcomes and metrics
 
@@ -142,6 +156,9 @@ A run can end for any of these reasons:
 | `range_end` | The replay consumed the requested range |
 | `risk_pause` | The UTC daily loss limit was breached |
 | `strategy_stop` | The strategy requested a stop |
+| `stop_loss` | The stop-loss threshold was reached or crossed |
+| `take_profit` | The take-profit threshold was reached or crossed |
+| `range_exit` | The mark price left the configured range |
 
 The completed run stores:
 
@@ -197,7 +214,8 @@ Every run detail page repeats these limitations:
 2. The run starts flat with the bot's capital allocation, not its live inventory.
 3. Buying is bounded by available quote inventory; same-candle orders wait.
 4. Exchange precision and minimum rules are omitted.
-5. Results are directional, not predictive.
+5. Protective exits are evaluated at candle close, not intrabar.
+6. Results are directional, not predictive.
 
 ## Operational notes
 
@@ -223,6 +241,7 @@ docker compose exec -T -e APP_ENV=testing -e CACHE_STORE=array app php artisan t
   tests/Unit/CcxtCandleProviderTest.php \
   tests/Feature/CandleStoreTest.php \
   tests/Feature/BacktestParityTest.php \
+  tests/Feature/BacktestExitGuardTest.php \
   tests/Feature/RunBacktestTest.php \
   tests/Feature/BacktestDashboardTest.php
 ```

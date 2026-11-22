@@ -6,6 +6,7 @@ use App\Domain\Backtest\Enums\Timeframe;
 use App\Domain\Backtest\ValueObjects\BacktestConfiguration;
 use App\Domain\Backtest\ValueObjects\BacktestRiskLimits;
 use App\Domain\Backtest\ValueObjects\Candle;
+use App\Domain\Exit\ExitRules;
 use App\Domain\Strategy\Contracts\StrategyInterface;
 use App\Domain\Strategy\StrategyRegistry;
 use App\Domain\Strategy\ValueObjects\CancelEvent;
@@ -42,6 +43,7 @@ function backtestConfiguration(array $overrides = []): BacktestConfiguration
             'levels_per_side' => 2,
         ],
         riskLimits: BacktestRiskLimits::make('1000', 20, '100'),
+        exitRules: $overrides['exitRules'] ?? null,
     );
 }
 
@@ -318,6 +320,102 @@ it('uses the candle close time as the replay clock', function () {
 
     expect($result->equityCurve[0]->at->format(DATE_ATOM))->toBe('2026-01-01T00:15:00+00:00')
         ->and($result->equityCurve[1]->at->format(DATE_ATOM))->toBe('2026-01-01T00:30:00+00:00');
+});
+
+it('ends with a stop-loss when the mark falls below the percentage threshold', function () {
+    $engine = new BacktestEngine(app(StrategyRegistry::class), new MetricsCalculator);
+
+    $result = $engine->run(
+        backtestConfiguration(['exitRules' => new ExitRules(stopLossPercent: '10')]),
+        [
+            candle('2026-01-01T00:00:00Z', '100'),
+            candle('2026-01-01T00:15:00Z', '90'),
+            candle('2026-01-01T00:30:00Z', '70'),
+        ],
+    );
+
+    expect($result->metrics->endReason)->toBe('stop_loss')
+        ->and($result->metrics->candlesProcessed)->toBe(3)
+        ->and($result->metrics->finalBaseInventory->toString())->toBe('1')
+        ->and($result->fills)->toHaveCount(1);
+});
+
+it('ends with a take-profit when the mark rises above the percentage threshold', function () {
+    $engine = new BacktestEngine(app(StrategyRegistry::class), new MetricsCalculator);
+
+    $result = $engine->run(
+        backtestConfiguration(['exitRules' => new ExitRules(takeProfitPercent: '10')]),
+        [
+            candle('2026-01-01T00:00:00Z', '100'),
+            candle('2026-01-01T00:15:00Z', '90'),
+            candle('2026-01-01T00:30:00Z', '100'),
+        ],
+    );
+
+    expect($result->metrics->endReason)->toBe('take_profit')
+        ->and($result->metrics->candlesProcessed)->toBe(3)
+        ->and($result->metrics->finalBaseInventory->toString())->toBe('1');
+});
+
+it('ends with a range exit without requiring inventory', function () {
+    $engine = new BacktestEngine(app(StrategyRegistry::class), new MetricsCalculator);
+
+    $result = $engine->run(
+        backtestConfiguration(['exitRules' => new ExitRules(rangeLow: '80')]),
+        [
+            candle('2026-01-01T00:00:00Z', '100'),
+            candle('2026-01-01T00:15:00Z', '79'),
+        ],
+    );
+
+    expect($result->metrics->endReason)->toBe('range_exit')
+        ->and($result->metrics->candlesProcessed)->toBe(2)
+        ->and($result->metrics->finalBaseInventory->toString())->toBe('0');
+});
+
+it('gives stop-loss precedence over a range exit on the same candle', function () {
+    $engine = new BacktestEngine(app(StrategyRegistry::class), new MetricsCalculator);
+
+    $result = $engine->run(
+        backtestConfiguration(['exitRules' => new ExitRules(stopLossPercent: '10', rangeLow: '85')]),
+        [
+            candle('2026-01-01T00:00:00Z', '100'),
+            candle('2026-01-01T00:15:00Z', '90'),
+            candle('2026-01-01T00:30:00Z', '80'),
+        ],
+    );
+
+    expect($result->metrics->endReason)->toBe('stop_loss');
+});
+
+it('checks protective exits before the daily loss pause', function () {
+    $engine = new BacktestEngine(app(StrategyRegistry::class), new MetricsCalculator);
+    $configuration = backtestConfiguration([
+        'exitRules' => new ExitRules(stopLossPercent: '10'),
+    ]);
+    $configuration = new BacktestConfiguration(
+        botId: $configuration->botId,
+        botName: $configuration->botName,
+        exchange: $configuration->exchange,
+        symbol: $configuration->symbol,
+        strategyKey: $configuration->strategyKey,
+        timeframe: $configuration->timeframe,
+        startAt: $configuration->startAt,
+        endAt: $configuration->endAt,
+        capitalAllocation: $configuration->capitalAllocation,
+        feeRate: $configuration->feeRate,
+        strategyConfiguration: $configuration->strategyConfiguration,
+        riskLimits: BacktestRiskLimits::make('1000', 20, '15'),
+        exitRules: $configuration->exitRules,
+    );
+
+    $result = $engine->run($configuration, [
+        candle('2026-01-01T00:00:00Z', '100'),
+        candle('2026-01-01T00:15:00Z', '90'),
+        candle('2026-01-01T00:30:00Z', '70'),
+    ]);
+
+    expect($result->metrics->endReason)->toBe('stop_loss');
 });
 
 it('ends with a risk pause when the daily loss limit is breached', function () {

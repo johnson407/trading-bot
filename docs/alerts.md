@@ -24,9 +24,14 @@ bot activity feed.
 | `risk.strategy_stop_cancel_failed` | critical | Orders could not be canceled after a strategy stop. |
 | `risk.live_cancel_failed` | critical | Orders could not be canceled after a live-gate pause. |
 | `risk.failure_cancel_failed` | critical | Orders could not be canceled after a consecutive-failure pause. |
+| `risk.stop_loss_triggered` | critical | A protective stop-loss paused a bot and canceled its open orders. |
+| `risk.take_profit_triggered` | warning | A protective take-profit paused a bot and canceled its open orders. |
+| `risk.range_exit_triggered` | warning | A protective range bound paused a bot and canceled its open orders. |
+| `risk.exit_cancel_failed` | critical | Orders could not be canceled after a protective exit pause. |
 
 Cancellation failures are critical because they leave orders live after the bot
-has been paused.
+has been paused. Stop-loss and exit-cancellation alerts are emailed; take-profit
+and range exits are warning-level and stay in the in-app inbox.
 
 These events do **not** alert, because they are normal trading behavior or already
 visible in the activity feed:
@@ -137,3 +142,4 @@ records are audit data and are never pruned by this command.
 | Inbox, filters, read state, badge | `AlertInboxTest` |
 | Retention command | `AlertRetentionTest` |
 | End-to-end daily loss and kill switch | `AlertIntegrationTest` |
+| Protective exits | `ExitGuardAlertTest` |

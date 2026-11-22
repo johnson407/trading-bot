@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Backtest\Enums\BacktestStatus;
+use App\Domain\Backtest\ValueObjects\BacktestConfiguration;
 use App\Jobs\RunBacktest;
 use App\Models\BacktestFill;
 use App\Models\BacktestRun;
@@ -104,6 +105,61 @@ it('renders the run list with owner-scoped summaries', function () {
         );
 });
 
+it('snapshots the bot exit rules and hydrates them for the replay', function () {
+    Queue::fake();
+    $user = User::factory()->create();
+    $bot = ownedBot($user, [
+        'stop_loss_percent' => '4',
+        'take_profit_percent' => '9',
+        'range_low' => '80000',
+        'range_high' => '120000',
+    ]);
+
+    $this->actingAs($user)->post(route('backtests.store'), [
+        'bot_id' => $bot->id,
+        'timeframe' => '15m',
+        'start_at' => now('UTC')->subDay()->format('Y-m-d'),
+        'end_at' => now('UTC')->format('Y-m-d'),
+    ])->assertRedirect();
+
+    $run = BacktestRun::query()->firstOrFail();
+    $configuration = BacktestConfiguration::fromSnapshot($run->config_snapshot);
+
+    expect($run->config_snapshot['exit'])->toBe([
+        'stop_loss_percent' => '4',
+        'take_profit_percent' => '9',
+        'range_low' => '80000',
+        'range_high' => '120000',
+    ])
+        ->and($configuration->exitRules->toArray())->toBe($run->config_snapshot['exit']);
+});
+
+it('keeps exit rules in the snapshot after the bot rules change', function () {
+    Queue::fake();
+    $user = User::factory()->create();
+    $bot = ownedBot($user, [
+        'stop_loss_percent' => '4',
+        'take_profit_percent' => null,
+        'range_low' => null,
+        'range_high' => null,
+    ]);
+
+    $this->actingAs($user)->post(route('backtests.store'), [
+        'bot_id' => $bot->id,
+        'timeframe' => '15m',
+        'start_at' => now('UTC')->subDay()->format('Y-m-d'),
+        'end_at' => now('UTC')->format('Y-m-d'),
+    ]);
+
+    $run = BacktestRun::query()->firstOrFail();
+    $original = $run->config_snapshot['exit'];
+
+    $bot->update(['stop_loss_percent' => '12', 'take_profit_percent' => '20']);
+
+    expect($run->refresh()->config_snapshot['exit'])->toBe($original)
+        ->and($original['stop_loss_percent'])->toBe('4');
+});
+
 it('rejects a range larger than the candle cap', function () {
     Queue::fake();
     $user = User::factory()->create();
@@ -157,6 +213,34 @@ it('scopes run detail and deletion to the owner', function () {
             ->has('compareIds', 0)
             ->etc()
         );
+});
+
+it('displays protective exit outcomes on the backtest detail page', function () {
+    $user = User::factory()->create();
+    $reasons = [
+        'stop_loss' => 'Stop-loss',
+        'take_profit' => 'Take-profit',
+        'range_exit' => 'Range exit',
+    ];
+
+    foreach ($reasons as $value => $label) {
+        $run = BacktestRun::factory()->for($user)->completed()->create(['end_reason' => $value]);
+
+        $this->actingAs($user)
+            ->get(route('backtests.show', $run))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backtests/Show')
+                ->where('run.end_reason', $value)
+                ->etc()
+            );
+    }
+
+    $page = file_get_contents(resource_path('js/Pages/Backtests/Show.vue'));
+
+    foreach ($reasons as $label) {
+        expect($page)->toContain($label);
+    }
 });
 
 it('rejects a bot without a strategy configuration or with an unavailable strategy', function () {

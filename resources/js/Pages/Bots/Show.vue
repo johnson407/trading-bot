@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { onMounted, onUnmounted, ref } from 'vue';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
     bot: { type: Object, required: true },
@@ -34,6 +34,31 @@ const timestamp = (value) => (value ? new Date(value).toLocaleString() : '—');
 
 const page = usePage();
 const confirmation = ref('');
+const exitForm = useForm({
+    stop_loss_percent: props.bot.stop_loss_percent ?? '',
+    take_profit_percent: props.bot.take_profit_percent ?? '',
+    range_low: props.bot.range_low ?? '',
+    range_high: props.bot.range_high ?? '',
+});
+const saveExitGuard = () => exitForm.patch(route('bots.exit-guard.update', props.bot.id), {
+    preserveScroll: true,
+    onSuccess: () => exitForm.defaults({ ...exitForm.data() }),
+});
+
+watch(
+    () => [props.bot.stop_loss_percent, props.bot.take_profit_percent, props.bot.range_low, props.bot.range_high],
+    ([stopLoss, takeProfit, rangeLow, rangeHigh]) => {
+        if (exitForm.processing || exitForm.isDirty) return;
+
+        exitForm.defaults({
+            stop_loss_percent: stopLoss ?? '',
+            take_profit_percent: takeProfit ?? '',
+            range_low: rangeLow ?? '',
+            range_high: rangeHigh ?? '',
+        });
+        exitForm.reset();
+    },
+);
 
 const start = () => router.post(route('bots.start', props.bot.id), { confirmation: confirmation.value }, { preserveScroll: true });
 const pause = () => router.post(route('bots.pause', props.bot.id), {}, { preserveScroll: true });
@@ -101,6 +126,38 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                     </div>
                     <p v-if="page.props.errors?.confirmation" class="mt-3 text-sm text-rose-300">{{ page.props.errors.confirmation }}</p>
                     <p v-if="page.props.errors?.action" class="mt-3 text-sm text-rose-300">{{ page.props.errors.action }}</p>
+                </div>
+
+                <div class="rounded-lg bg-slate-800 p-6 shadow">
+                    <div>
+                        <h3 class="font-semibold text-slate-100">Protective exits</h3>
+                        <p class="mt-1 text-sm text-slate-300">Optional. A trigger pauses this bot and cancels its open orders; it does not sell inventory. Leave a field blank to disable that rule.</p>
+                    </div>
+                    <form class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4" @submit.prevent="saveExitGuard">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-200" :for="`stop-loss-${bot.id}`">Stop-loss percent</label>
+                            <input :id="`stop-loss-${bot.id}`" v-model="exitForm.stop_loss_percent" type="number" min="0.0001" max="99.9999" step="0.0001" placeholder="Off" class="mt-1 w-full rounded border-slate-500 shadow-sm" />
+                            <p v-if="exitForm.errors.stop_loss_percent" class="mt-1 text-sm text-rose-300">{{ exitForm.errors.stop_loss_percent }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-200" :for="`take-profit-${bot.id}`">Take-profit percent</label>
+                            <input :id="`take-profit-${bot.id}`" v-model="exitForm.take_profit_percent" type="number" min="0.0001" max="99.9999" step="0.0001" placeholder="Off" class="mt-1 w-full rounded border-slate-500 shadow-sm" />
+                            <p v-if="exitForm.errors.take_profit_percent" class="mt-1 text-sm text-rose-300">{{ exitForm.errors.take_profit_percent }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-200" :for="`range-low-${bot.id}`">Range low</label>
+                            <input :id="`range-low-${bot.id}`" v-model="exitForm.range_low" type="number" min="0.00000001" max="99999999.99999999" step="0.00000001" placeholder="Off" class="mt-1 w-full rounded border-slate-500 shadow-sm" />
+                            <p v-if="exitForm.errors.range_low" class="mt-1 text-sm text-rose-300">{{ exitForm.errors.range_low }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-200" :for="`range-high-${bot.id}`">Range high</label>
+                            <input :id="`range-high-${bot.id}`" v-model="exitForm.range_high" type="number" min="0.00000001" max="99999999.99999999" step="0.00000001" placeholder="Off" class="mt-1 w-full rounded border-slate-500 shadow-sm" />
+                            <p v-if="exitForm.errors.range_high" class="mt-1 text-sm text-rose-300">{{ exitForm.errors.range_high }}</p>
+                        </div>
+                        <div class="md:col-span-2 lg:col-span-4">
+                            <button type="submit" :disabled="exitForm.processing" class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">Save protective exits</button>
+                        </div>
+                    </form>
                 </div>
 
                 <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">

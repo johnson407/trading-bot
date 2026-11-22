@@ -21,6 +21,10 @@ it('exposes alert defaults and a complete incident catalog', function () {
         'risk.strategy_stop_cancel_failed' => 'critical',
         'risk.live_cancel_failed' => 'critical',
         'risk.failure_cancel_failed' => 'critical',
+        'risk.stop_loss_triggered' => 'critical',
+        'risk.take_profit_triggered' => 'warning',
+        'risk.range_exit_triggered' => 'warning',
+        'risk.exit_cancel_failed' => 'critical',
     ];
 
     expect($incidents)->toHaveKeys(array_keys($expected));

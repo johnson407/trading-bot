@@ -89,6 +89,20 @@ final class BacktestEngine
                 $dayStartRealized = $portfolio->realized;
             }
 
+            $exitSignal = $configuration->exitRules->evaluate(
+                $close->toString(),
+                $portfolio->averageEntry->toString(),
+                $portfolio->base->toString(),
+            );
+
+            if ($exitSignal !== null) {
+                $state = $this->cancelAll($book, $strategy, $configuration, $strategyConfiguration, $state, $portfolio, $close, $recentPrices, $at);
+                $equity[] = new EquityPoint($at, $portfolio->equity($close));
+                $processed++;
+                $endReason = $exitSignal->rule->value;
+                break;
+            }
+
             if ($this->dailyLossBreached($risk, $portfolio, $close, $dayStartRealized)) {
                 $state = $this->cancelAll($book, $strategy, $configuration, $strategyConfiguration, $state, $portfolio, $close, $recentPrices, $at);
                 $equity[] = new EquityPoint($at, $portfolio->equity($close));

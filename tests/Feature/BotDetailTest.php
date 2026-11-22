@@ -59,3 +59,26 @@ it('reflects a new fill on the next poll', function () {
             ->where('recentFills.0.price', '101.0000000000000000')
             ->etc());
 });
+
+it('exposes protective exit rules and an editable card', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->running()->withExitRules()->create();
+
+    $this->actingAs($user)->get(route('bots.show', $bot))->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Bots/Show')
+            ->where('bot.stop_loss_percent', '4.0000')
+            ->where('bot.take_profit_percent', '9.0000')
+            ->where('bot.range_low', '80000.00000000')
+            ->where('bot.range_high', '120000.00000000')
+            ->etc());
+
+    $show = file_get_contents(resource_path('js/Pages/Bots/Show.vue'));
+
+    expect($show)->toContain("route('bots.exit-guard.update'")
+        ->and($show)->toContain('stop_loss_percent')
+        ->and($show)->toContain('take_profit_percent')
+        ->and($show)->toContain('range_low')
+        ->and($show)->toContain('range_high')
+        ->and($show)->toContain('does not sell inventory');
+});

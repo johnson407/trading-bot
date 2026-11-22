@@ -33,6 +33,22 @@ New bots do not receive a bot-scope row, so the account-wide limits apply immedi
 - A global breach pauses all of the user's bots and cancels their open orders.
 - A paused bot is never resumed by the monitor.
 
+## Protective exits
+
+Each bot can carry optional stop-loss, take-profit, and range-exit rules. They are configured per bot on its detail page and are evaluated on every running tick after the latest mark price is stored and before the daily-loss check and strategy logic. Null or blank fields disable a rule.
+
+| Rule | Trigger |
+| --- | --- |
+| Stop-loss | Mark price at or below `average_entry_price * (1 - stop_loss_percent / 100)` |
+| Take-profit | Mark price at or above `average_entry_price * (1 + take_profit_percent / 100)` |
+| Range exit | Mark price at or below `range_low`, or at or above `range_high` |
+
+Stop-loss and take-profit require positive base inventory and a positive average entry price. A range exit works without inventory and may use only one bound. When several rules match on the same tick, precedence is stop-loss, then take-profit, then range exit, and only one trigger is recorded.
+
+A trigger pauses the bot, cancels its pending, open, and partially-filled orders, records a risk event, and writes a `bot.exit_guard_triggered` activity row. The bot's base and quote inventory are never changed: there is no market order, liquidation, or automatic resume. Exit is manual, and a resumed bot that is still beyond its threshold pauses again on its next tick.
+
+A cancellation failure during the exit is recorded as `risk.exit_cancel_failed` and does not prevent the pause. Trigger events are `risk.stop_loss_triggered` (critical), `risk.take_profit_triggered` (warning), and `risk.range_exit_triggered` (warning); the alert catalog mirrors those severities, so stop-loss reaches email while take-profit and range exits stay in the in-app inbox.
+
 ## Kill-switch
 
 `ActivateKillSwitch` pauses every non-stopped bot owned by the user immediately, then cancels each bot's open orders in parallel. A failure on one order is recorded as a `risk.kill_switch_cancel_failed` risk event and reported in the result; other orders and bots continue. This is the emergency control for live trading.
@@ -50,7 +66,7 @@ Paper mode is the default and never sends private exchange orders. There is no s
 
 ## Risk events
 
-Risk events are queryable per bot and per user, newest first. Important types include `risk.position_limit`, `risk.open_order_limit`, `risk.daily_loss_limit`, `risk.kill_switch_cancel_failed`, and `exchange.failure_threshold`. Each event stores severity, message, and JSON context.
+Risk events are queryable per bot and per user, newest first. Important types include `risk.position_limit`, `risk.open_order_limit`, `risk.daily_loss_limit`, `risk.kill_switch_cancel_failed`, `exchange.failure_threshold`, `risk.stop_loss_triggered`, `risk.take_profit_triggered`, `risk.range_exit_triggered`, and `risk.exit_cancel_failed`. Each event stores severity, message, and JSON context.
 
 ## Fees
 

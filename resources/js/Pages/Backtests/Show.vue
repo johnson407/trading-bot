@@ -56,6 +56,19 @@ const statusClass = computed(() => ({
     failed: 'bg-red-950 text-red-300',
 }[props.run.status] ?? 'bg-slate-900 text-slate-300'));
 
+const endReasonLabels = {
+    range_end: 'Range end',
+    risk_pause: 'Risk pause',
+    strategy_stop: 'Strategy stop',
+    stop_loss: 'Stop-loss',
+    take_profit: 'Take-profit',
+    range_exit: 'Range exit',
+};
+
+function endReasonLabel(value) {
+    return endReasonLabels[value] ?? (value ? value.replaceAll('_', ' ') : '');
+}
+
 function number(value, digits = 2) {
     return Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
@@ -105,7 +118,7 @@ function destroy() {
                             <span class="rounded-full px-2 py-1 text-sm capitalize" :class="statusClass">{{ run.status }}</span>
                         </p>
                         <p v-if="run.status === 'running'" class="mt-2 text-xs text-slate-400">{{ run.progress }}% · {{ run.candles_processed }} candles</p>
-                        <p v-if="run.end_reason" class="mt-2 text-xs text-slate-400">Ended: {{ run.end_reason.replace('_', ' ') }}</p>
+                        <p v-if="run.end_reason" class="mt-2 text-xs text-slate-400">Ended: {{ endReasonLabel(run.end_reason) }}</p>
                         <p v-if="run.error" class="mt-2 text-xs text-red-300">{{ run.error }}</p>
                     </div>
                     <div class="bg-slate-800 p-5 shadow sm:rounded-lg">

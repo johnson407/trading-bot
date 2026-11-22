@@ -3,6 +3,7 @@
 namespace App\Services\Backtest;
 
 use App\Domain\Backtest\Enums\Timeframe;
+use App\Domain\Exit\ExitRules;
 use App\Domain\Risk\RiskLimitService;
 use App\Domain\Strategy\StrategyRegistry;
 use App\Domain\Support\Decimal;
@@ -40,6 +41,12 @@ class BacktestSnapshotBuilder
         }
 
         $limits = $this->riskLimits->effectiveForBot($bot);
+        $exitRules = new ExitRules(
+            $bot->stop_loss_percent === null ? null : Decimal::of($bot->stop_loss_percent)->toString(),
+            $bot->take_profit_percent === null ? null : Decimal::of($bot->take_profit_percent)->toString(),
+            $bot->range_low === null ? null : Decimal::of($bot->range_low)->toString(),
+            $bot->range_high === null ? null : Decimal::of($bot->range_high)->toString(),
+        );
         $utc = new DateTimeZone('UTC');
 
         return [
@@ -61,6 +68,7 @@ class BacktestSnapshotBuilder
                 'max_open_orders' => $limits['max_open_orders'],
                 'daily_loss_limit' => $limits['daily_loss_limit']->toString(),
             ],
+            'exit' => $exitRules->toArray(),
             'period' => [
                 'timeframe' => $timeframe->value,
                 'start_at' => $startAt->setTimezone($utc)->format(DATE_ATOM),

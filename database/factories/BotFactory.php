@@ -45,4 +45,24 @@ class BotFactory extends Factory
     {
         return $this->state(fn () => ['mode' => BotMode::Live]);
     }
+
+    public function withExitRules(): static
+    {
+        return $this->state(fn () => [
+            'stop_loss_percent' => '4',
+            'take_profit_percent' => '9',
+            'range_low' => '80000',
+            'range_high' => '120000',
+        ]);
+    }
+
+    public function withoutExitRules(): static
+    {
+        return $this->state(fn () => [
+            'stop_loss_percent' => null,
+            'take_profit_percent' => null,
+            'range_low' => null,
+            'range_high' => null,
+        ]);
+    }
 }

@@ -27,6 +27,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property numeric $realized_pnl
  * @property numeric $fees_paid
  * @property numeric $fee_rate
+ * @property numeric|null $stop_loss_percent
+ * @property numeric|null $take_profit_percent
+ * @property numeric|null $range_low
+ * @property numeric|null $range_high
  * @property int $tick_interval_seconds
  * @property int $consecutive_failures
  * @property \Illuminate\Support\Carbon|null $last_tick_at
@@ -106,6 +110,10 @@ class Bot extends Model
         'realized_pnl',
         'fees_paid',
         'fee_rate',
+        'stop_loss_percent',
+        'take_profit_percent',
+        'range_low',
+        'range_high',
         'tick_interval_seconds',
         'consecutive_failures',
         'last_tick_at',
@@ -126,6 +134,10 @@ class Bot extends Model
             'realized_pnl' => 'decimal:16',
             'fees_paid' => 'decimal:16',
             'fee_rate' => 'decimal:8',
+            'stop_loss_percent' => 'decimal:4',
+            'take_profit_percent' => 'decimal:4',
+            'range_low' => 'decimal:8',
+            'range_high' => 'decimal:8',
             'tick_interval_seconds' => 'integer',
             'consecutive_failures' => 'integer',
             'last_tick_at' => 'datetime',
