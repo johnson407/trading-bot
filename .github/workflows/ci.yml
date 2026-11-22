@@ -72,6 +72,11 @@ jobs:
           restore-keys: |
             composer-${{ runner.os }}-
 
+      - name: Prepare writable directories
+        run: |
+          mkdir -p bootstrap/cache
+          mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs
+
       - name: Install PHP dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
 
