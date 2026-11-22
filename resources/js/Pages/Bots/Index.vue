@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { formatSignedMoney } from '@/Support/money.js';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { onMounted, onUnmounted } from 'vue';
 
@@ -19,14 +20,9 @@ onUnmounted(() => {
     if (poller) clearInterval(poller);
 });
 
-function money(value) {
-    return Number(value ?? 0).toFixed(2);
-}
-
 function timestamp(value) {
     return value ? new Date(value).toLocaleString() : '—';
 }
-const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(value ?? 0).toFixed(2)}`;
 </script>
 
 <template>
@@ -70,8 +66,8 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                                 </td>
                                 <td class="px-6 py-4 text-sm text-slate-300">{{ bot.status }}</td>
                                 <td class="px-6 py-4 text-right text-sm text-slate-300">{{ bot.open_orders_count }}</td>
-                                <td class="px-6 py-4 text-right text-sm" :class="Number(bot.realized_pnl) < 0 ? 'text-red-300' : 'text-green-300'">{{ signedMoney(bot.realized_pnl) }}</td>
-                                <td class="px-6 py-4 text-right text-sm" :class="Number(bot.unrealized_pnl) < 0 ? 'text-red-300' : 'text-green-300'">{{ signedMoney(bot.unrealized_pnl) }}</td>
+                                <td class="px-6 py-4 text-right text-sm" :class="Number(bot.realized_pnl) < 0 ? 'text-red-300' : 'text-green-300'">{{ formatSignedMoney(bot.realized_pnl) }}</td>
+                                <td class="px-6 py-4 text-right text-sm" :class="Number(bot.unrealized_pnl) < 0 ? 'text-red-300' : 'text-green-300'">{{ formatSignedMoney(bot.unrealized_pnl) }}</td>
                                 <td class="px-6 py-4 text-sm text-slate-300">{{ timestamp(bot.last_tick_at) }}</td>
                             </tr>
                             <tr v-if="bots.length === 0">

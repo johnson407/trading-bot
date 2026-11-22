@@ -1,14 +1,20 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { formatMoney } from '@/Support/money.js';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { onMounted, onUnmounted, watch } from 'vue';
 
 const props = defineProps({
     sweep: { type: Object, required: true },
     runs: { type: Array, default: () => [] },
+    spacingType: { type: String, default: 'arithmetic' },
     compareUrl: { type: String, default: null },
     active: { type: Boolean, default: false },
 });
+
+function displaySpacing(value, type = props.spacingType) {
+    return type === 'geometric' ? (value ?? '—') : formatMoney(value);
+}
 
 let poller = null;
 
@@ -127,13 +133,13 @@ function endReasonLabel(value) {
                         <div>
                             <p class="text-xs uppercase tracking-wide text-slate-400">Center prices</p>
                             <div class="mt-1 flex flex-wrap gap-1">
-                                <span v-for="value in sweep.parameters.center_prices" :key="value" class="rounded-full bg-slate-900 px-2 py-0.5 text-xs text-slate-200">{{ value }}</span>
+                                <span v-for="value in sweep.parameters.center_prices" :key="value" class="rounded-full bg-slate-900 px-2 py-0.5 text-xs text-slate-200">{{ formatMoney(value) }}</span>
                             </div>
                         </div>
                         <div>
                             <p class="text-xs uppercase tracking-wide text-slate-400">Spacing values</p>
                             <div class="mt-1 flex flex-wrap gap-1">
-                                <span v-for="value in sweep.parameters.spacing_values" :key="value" class="rounded-full bg-slate-900 px-2 py-0.5 text-xs text-slate-200">{{ value }}</span>
+                                <span v-for="value in sweep.parameters.spacing_values" :key="value" class="rounded-full bg-slate-900 px-2 py-0.5 text-xs text-slate-200">{{ displaySpacing(value) }}</span>
                             </div>
                         </div>
                         <div>
@@ -169,8 +175,8 @@ function endReasonLabel(value) {
                                     <td class="px-5 py-3 text-sm text-slate-100">
                                         <Link :href="route('backtests.show', run.id)" class="font-medium underline">{{ run.name }}</Link>
                                     </td>
-                                    <td class="px-5 py-3 text-right text-sm text-slate-200">{{ run.swept.center_price }}</td>
-                                    <td class="px-5 py-3 text-right text-sm text-slate-200">{{ run.swept.spacing_value }}</td>
+                                    <td class="px-5 py-3 text-right text-sm text-slate-200">{{ formatMoney(run.swept.center_price) }}</td>
+                                    <td class="px-5 py-3 text-right text-sm text-slate-200">{{ displaySpacing(run.swept.spacing_value, run.swept.spacing_type ?? spacingType) }}</td>
                                     <td class="px-5 py-3 text-right text-sm text-slate-200">{{ run.swept.level_count }}</td>
                                     <td class="px-5 py-3 text-sm">
                                         <span class="rounded-full px-2 py-1 text-xs capitalize" :class="statusClass(run.status)">{{ run.status }}</span>

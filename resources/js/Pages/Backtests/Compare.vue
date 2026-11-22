@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import EquityChart from '@/Components/EquityChart.vue';
+import { formatMoney, formatSignedMoney } from '@/Support/money.js';
 import { Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -58,7 +59,7 @@ function signed(value, digits = 2) {
                 <div class="bg-slate-800 p-5 shadow sm:rounded-lg">
                     <h3 class="text-base font-semibold text-slate-100">Normalized equity</h3>
                     <p class="mb-4 mt-1 text-xs text-slate-400">Each curve is divided by its starting capital, so all runs begin at 1.0.</p>
-                    <EquityChart :labels="labels" :series="series" value-label="Equity / capital" />
+                    <EquityChart :labels="labels" :series="series" value-label="Equity / capital" format="normalized" />
                 </div>
 
                 <div class="overflow-x-auto bg-slate-800 shadow sm:rounded-lg">
@@ -90,10 +91,10 @@ function signed(value, digits = 2) {
                                     {{ run.metrics ? signed(run.metrics.return_percent) + '%' : '—' }}
                                 </td>
                                 <td class="px-5 py-4 text-right text-sm" :class="Number(run.metrics?.net_pnl ?? 0) < 0 ? 'text-red-300' : 'text-green-300'">
-                                    {{ run.metrics ? signed(run.metrics.net_pnl) : '—' }}
+                                    {{ run.metrics ? formatSignedMoney(run.metrics.net_pnl) : '—' }}
                                 </td>
                                 <td class="px-5 py-4 text-right text-sm text-slate-300">{{ run.metrics ? number(run.metrics.max_drawdown_percent) + '%' : '—' }}</td>
-                                <td class="px-5 py-4 text-right text-sm text-slate-300">{{ run.metrics ? number(run.metrics.fees, 4) : '—' }}</td>
+                                <td class="px-5 py-4 text-right text-sm text-slate-300">{{ run.metrics ? formatMoney(run.metrics.fees) : '—' }}</td>
                                 <td class="px-5 py-4 text-right text-sm text-slate-300">{{ run.metrics?.fill_count ?? '—' }}</td>
                             </tr>
                         </tbody>

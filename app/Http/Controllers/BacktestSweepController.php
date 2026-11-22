@@ -79,10 +79,14 @@ class BacktestSweepController extends Controller
     {
         abort_unless($sweep->user_id === $request->user()->id, 404);
 
-        $sweep->load('bot:id,name');
+        $sweep->load('bot:id,name', 'bot.strategyConfig');
         $sweep->loadCount($this->runCounts());
 
         $runs = $sweep->runs()->latest('id')->get();
+
+        $spacingType = $runs->first()?->config_snapshot['strategy']['configuration']['spacing_type']
+            ?? $sweep->bot?->strategyConfig?->configuration['spacing_type']
+            ?? 'arithmetic';
         $completedIds = $runs
             ->filter(fn ($run) => $run->status === BacktestStatus::Completed)
             ->take(4)
@@ -92,6 +96,7 @@ class BacktestSweepController extends Controller
         return Inertia::render('Backtests/Sweeps/Show', [
             'sweep' => BacktestSweepResource::make($sweep)->resolve(),
             'runs' => BacktestSweepRunResource::collection($runs)->resolve(),
+            'spacingType' => $spacingType,
             'compareUrl' => $completedIds->count() >= 2
                 ? route('backtests.compare', ['ids' => $completedIds->all()])
                 : null,

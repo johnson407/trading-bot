@@ -25,6 +25,7 @@ class BacktestSweepRunResource extends JsonResource
             'swept' => [
                 'center_price' => $configuration['center_price'] ?? null,
                 'spacing_value' => $configuration['spacing_value'] ?? null,
+                'spacing_type' => $configuration['spacing_type'] ?? null,
                 'level_count' => $configuration['level_count'] ?? $configuration['levels_per_side'] ?? null,
                 'levels_per_side' => $configuration['levels_per_side'] ?? null,
             ],

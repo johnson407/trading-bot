@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import EquityChart from '@/Components/EquityChart.vue';
+import { formatMoney, formatSignedMoney } from '@/Support/money.js';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 
@@ -19,7 +20,6 @@ const props = defineProps({
     },
 });
 
-const money = (value) => Number(value ?? 0).toFixed(2);
 const percent = (value) => `${Number(value ?? 0).toFixed(2)}%`;
 const signedPercent = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(value ?? 0).toFixed(2)}%`;
 
@@ -75,7 +75,6 @@ onBeforeUnmount(() => {
         clearInterval(equityPoller);
     }
 });
-const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(value ?? 0).toFixed(2)}`;
 </script>
 
 <template>
@@ -112,13 +111,13 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                     <div class="bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
                         <div class="text-sm text-slate-300">Realized P&amp;L</div>
                         <div class="mt-1 text-2xl font-semibold" :class="Number(summary.realized_pnl) < 0 ? 'text-red-300' : 'text-slate-100'">
-                            {{ signedMoney(summary.realized_pnl) }}
+                            {{ formatSignedMoney(summary.realized_pnl) }}
                         </div>
                     </div>
                     <div class="bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
                         <div class="text-sm text-slate-300">Unrealized P&amp;L</div>
                         <div class="mt-1 text-2xl font-semibold" :class="Number(summary.unrealized_pnl) < 0 ? 'text-red-300' : 'text-slate-100'">
-                            {{ signedMoney(summary.unrealized_pnl) }}
+                            {{ formatSignedMoney(summary.unrealized_pnl) }}
                         </div>
                     </div>
                 </div>
@@ -165,7 +164,7 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                             <div class="rounded-lg border border-slate-700 p-4">
                                 <div class="text-sm text-slate-300">Peak equity</div>
                                 <div class="mt-1 text-2xl font-semibold text-slate-100">
-                                    {{ money(equityHistory.metrics.peak_equity) }}
+                                    {{ formatMoney(equityHistory.metrics.peak_equity) }}
                                 </div>
                             </div>
                             <div class="rounded-lg border border-slate-700 p-4">
@@ -180,7 +179,7 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                         </div>
 
                         <div class="p-6 pt-0">
-                            <EquityChart :labels="equityLabels" :series="equitySeries" value-label="Account equity" />
+                            <EquityChart :labels="equityLabels" :series="equitySeries" value-label="Account equity" format="money" />
                         </div>
                     </template>
                 </div>

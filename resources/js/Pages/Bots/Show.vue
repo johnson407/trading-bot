@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { formatMoney, formatSignedMoney, submittedMoney } from '@/Support/money.js';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { onMounted, onUnmounted, ref, watch } from 'vue';
 
@@ -29,34 +30,52 @@ onUnmounted(() => {
     if (timer) clearInterval(timer);
 });
 
-const money = (value) => Number(value ?? 0).toFixed(2);
 const timestamp = (value) => (value ? new Date(value).toLocaleString() : '—');
 
 const page = usePage();
 const confirmation = ref('');
+const rangeLowRaw = ref(props.bot.range_low ?? '');
+const rangeHighRaw = ref(props.bot.range_high ?? '');
+const displayMoney = (value) => (value === null || value === undefined || value === '' ? '' : formatMoney(value));
 const exitForm = useForm({
     stop_loss_percent: props.bot.stop_loss_percent ?? '',
     take_profit_percent: props.bot.take_profit_percent ?? '',
-    range_low: props.bot.range_low ?? '',
-    range_high: props.bot.range_high ?? '',
+    range_low: displayMoney(rangeLowRaw.value),
+    range_high: displayMoney(rangeHighRaw.value),
 });
-const saveExitGuard = () => exitForm.patch(route('bots.exit-guard.update', props.bot.id), {
-    preserveScroll: true,
-    onSuccess: () => exitForm.defaults({ ...exitForm.data() }),
-});
+const saveExitGuard = () => {
+    const submitted = {
+        stop_loss_percent: exitForm.stop_loss_percent,
+        take_profit_percent: exitForm.take_profit_percent,
+        range_low: submittedMoney(exitForm.range_low, displayMoney(rangeLowRaw.value), rangeLowRaw.value),
+        range_high: submittedMoney(exitForm.range_high, displayMoney(rangeHighRaw.value), rangeHighRaw.value),
+    };
+
+    exitForm.transform(() => submitted).patch(route('bots.exit-guard.update', props.bot.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            rangeLowRaw.value = submitted.range_low;
+            rangeHighRaw.value = submitted.range_high;
+            exitForm.range_low = displayMoney(submitted.range_low);
+            exitForm.range_high = displayMoney(submitted.range_high);
+            exitForm.defaults();
+        },
+    });
+};
 
 watch(
     () => [props.bot.stop_loss_percent, props.bot.take_profit_percent, props.bot.range_low, props.bot.range_high],
     ([stopLoss, takeProfit, rangeLow, rangeHigh]) => {
         if (exitForm.processing || exitForm.isDirty) return;
 
-        exitForm.defaults({
-            stop_loss_percent: stopLoss ?? '',
-            take_profit_percent: takeProfit ?? '',
-            range_low: rangeLow ?? '',
-            range_high: rangeHigh ?? '',
-        });
-        exitForm.reset();
+        rangeLowRaw.value = rangeLow ?? '';
+        rangeHighRaw.value = rangeHigh ?? '';
+
+        exitForm.stop_loss_percent = stopLoss ?? '';
+        exitForm.take_profit_percent = takeProfit ?? '';
+        exitForm.range_low = displayMoney(rangeLow);
+        exitForm.range_high = displayMoney(rangeHigh);
+        exitForm.defaults();
     },
 );
 
@@ -69,7 +88,6 @@ const levelState = (state) => ({
     filled: 'bg-emerald-950 text-emerald-300',
     canceled: 'bg-rose-950 text-rose-200',
 }[state] ?? 'bg-slate-700 text-slate-300');
-const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(value ?? 0).toFixed(2)}`;
 </script>
 
 <template>
@@ -103,11 +121,11 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                     </div>
                     <div class="rounded-lg bg-slate-800 p-4 shadow">
                         <p class="text-xs uppercase text-slate-300">Realized P&amp;L</p>
-                        <p class="mt-1 text-lg font-semibold" :class="Number(pnl.realized) >= 0 ? 'text-emerald-300' : 'text-rose-300'">{{ signedMoney(pnl.realized) }}</p>
+                        <p class="mt-1 text-lg font-semibold" :class="Number(pnl.realized) >= 0 ? 'text-emerald-300' : 'text-rose-300'">{{ formatSignedMoney(pnl.realized) }}</p>
                     </div>
                     <div class="rounded-lg bg-slate-800 p-4 shadow">
                         <p class="text-xs uppercase text-slate-300">Unrealized P&amp;L</p>
-                        <p class="mt-1 text-lg font-semibold" :class="Number(pnl.unrealized) >= 0 ? 'text-emerald-300' : 'text-rose-300'">{{ signedMoney(pnl.unrealized) }}</p>
+                        <p class="mt-1 text-lg font-semibold" :class="Number(pnl.unrealized) >= 0 ? 'text-emerald-300' : 'text-rose-300'">{{ formatSignedMoney(pnl.unrealized) }}</p>
                     </div>
                 </div>
 
@@ -164,13 +182,13 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                     <div class="rounded-lg bg-slate-800 p-6 shadow lg:col-span-2">
                         <div class="flex items-center justify-between">
                             <h3 class="font-semibold text-slate-100">Grid ladder</h3>
-                            <span class="text-sm text-slate-300">Center {{ money(grid?.center_price) }}</span>
+                            <span class="text-sm text-slate-300">Center {{ formatMoney(grid?.center_price) }}</span>
                         </div>
                         <div v-if="!grid" class="mt-4 text-sm text-slate-300">No active grid yet.</div>
                         <div v-else class="mt-4 space-y-2">
                             <div v-for="level in [...grid.levels].reverse()" :key="level.id" class="flex items-center gap-3 rounded border px-3 py-2">
                                 <span class="w-16 text-xs font-medium uppercase" :class="level.side === 'buy' ? 'text-emerald-300' : 'text-rose-300'">{{ level.side }}</span>
-                                <span class="w-24 font-mono text-sm">{{ money(level.price) }}</span>
+                                <span class="w-24 font-mono text-sm">{{ formatMoney(level.price) }}</span>
                                 <span class="rounded px-2 py-0.5 text-xs" :class="levelState(level.state)">{{ level.state }}</span>
                                 <span class="ml-auto text-xs text-slate-300">Level {{ level.sequence }}</span>
                             </div>
@@ -181,10 +199,10 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                         <h3 class="font-semibold text-slate-100">Inventory</h3>
                         <dl class="mt-4 space-y-3 text-sm">
                             <div class="flex justify-between"><dt class="text-slate-300">Base</dt><dd class="font-mono">{{ inventory.base }}</dd></div>
-                            <div class="flex justify-between"><dt class="text-slate-300">Quote</dt><dd class="font-mono">{{ inventory.quote }}</dd></div>
-                            <div class="flex justify-between"><dt class="text-slate-300">Average entry</dt><dd class="font-mono">{{ inventory.average_entry_price }}</dd></div>
-                            <div class="flex justify-between"><dt class="text-slate-300">Reference price</dt><dd class="font-mono">{{ money(inventory.reference_price) }}</dd></div>
-                            <div class="flex justify-between"><dt class="text-slate-300">Fees paid</dt><dd class="font-mono">{{ money(pnl.fees_paid) }}</dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-300">Quote</dt><dd class="font-mono">{{ formatMoney(inventory.quote) }}</dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-300">Average entry</dt><dd class="font-mono">{{ formatMoney(inventory.average_entry_price) }}</dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-300">Reference price</dt><dd class="font-mono">{{ formatMoney(inventory.reference_price) }}</dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-300">Fees paid</dt><dd class="font-mono">{{ formatMoney(pnl.fees_paid) }}</dd></div>
                         </dl>
                     </div>
                 </div>
@@ -200,7 +218,7 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                             <tbody class="divide-y">
                                 <tr v-for="order in openOrders" :key="order.id">
                                     <td class="py-2 capitalize" :class="order.side === 'buy' ? 'text-emerald-300' : 'text-rose-300'">{{ order.side }}</td>
-                                    <td class="font-mono">{{ money(order.price) }}</td>
+                                    <td class="font-mono">{{ formatMoney(order.price) }}</td>
                                     <td class="font-mono">{{ order.quantity }}</td>
                                     <td class="capitalize text-slate-300">{{ order.status }}</td>
                                 </tr>
@@ -218,9 +236,9 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                             <tbody class="divide-y">
                                 <tr v-for="fill in recentFills" :key="fill.id">
                                     <td class="py-2 capitalize" :class="fill.side === 'buy' ? 'text-emerald-300' : 'text-rose-300'">{{ fill.side }}</td>
-                                    <td class="font-mono">{{ money(fill.price) }}</td>
+                                    <td class="font-mono">{{ formatMoney(fill.price) }}</td>
                                     <td class="font-mono">{{ fill.quantity }}</td>
-                                    <td class="font-mono">{{ money(fill.fee) }}</td>
+                                    <td class="font-mono">{{ formatMoney(fill.fee) }}</td>
                                     <td class="text-slate-300">{{ timestamp(fill.filled_at) }}</td>
                                 </tr>
                             </tbody>
@@ -233,7 +251,7 @@ const signedMoney = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(val
                     <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div v-for="limit in riskLimits" :key="limit.scope" class="rounded border p-3 text-sm">
                             <p class="font-medium capitalize">{{ limit.scope }} scope</p>
-                            <p class="text-slate-300">Max position {{ money(limit.max_position_notional) }} · Max orders {{ limit.max_open_orders }} · Daily loss {{ money(limit.daily_loss_limit) }}</p>
+                            <p class="text-slate-300">Max position {{ formatMoney(limit.max_position_notional) }} · Max orders {{ limit.max_open_orders }} · Daily loss {{ formatMoney(limit.daily_loss_limit) }}</p>
                         </div>
                     </div>
                 </div>

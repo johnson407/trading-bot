@@ -1,4 +1,5 @@
 <script setup>
+import { formatMoney } from '@/Support/money.js';
 import { computed } from 'vue';
 import { Line } from 'vue-chartjs';
 import {
@@ -18,9 +19,22 @@ const props = defineProps({
     labels: { type: Array, default: () => [] },
     series: { type: Array, default: () => [] },
     valueLabel: { type: String, default: 'Equity' },
+    format: {
+        type: String,
+        default: 'money',
+        validator: (value) => ['money', 'normalized'].includes(value),
+    },
 });
 
 const colors = ['#60a5fa', '#34d399', '#fbbf24', '#f87171'];
+
+function formatValue(value) {
+    if (value === null || value === undefined) {
+        return '—';
+    }
+
+    return props.format === 'money' ? formatMoney(value) : Number(value).toFixed(4);
+}
 
 const chartData = computed(() => ({
     labels: props.labels,
@@ -47,7 +61,7 @@ const chartOptions = computed(() => ({
         },
         tooltip: {
             callbacks: {
-                label: (context) => `${context.dataset.label}: ${context.parsed.y.toFixed(4)}`,
+                label: (context) => `${context.dataset.label}: ${formatValue(context.parsed.y)}`,
             },
         },
     },
@@ -85,7 +99,7 @@ const chartOptions = computed(() => ({
                     <tbody class="divide-y divide-slate-700">
                         <tr v-for="(label, index) in labels" :key="label + index">
                             <td class="px-3 py-2">{{ label }}</td>
-                            <td v-for="series in series" :key="series.label" class="px-3 py-2 text-right">{{ series.values[index] ?? '—' }}</td>
+                            <td v-for="series in series" :key="series.label" class="px-3 py-2 text-right">{{ formatValue(series.values[index]) }}</td>
                         </tr>
                     </tbody>
                 </table>

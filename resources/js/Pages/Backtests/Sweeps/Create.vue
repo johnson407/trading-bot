@@ -4,6 +4,7 @@ import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
+import { formatMoney } from '@/Support/money.js';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -114,7 +115,7 @@ const submit = () => {
                             </option>
                         </select>
                         <p v-if="selectedBot" class="mt-1 text-xs text-slate-400">
-                            {{ selectedBot.exchange }} · {{ selectedBot.symbol }} · capital {{ selectedBot.capital_allocation }} · fee {{ selectedBot.fee_rate }}
+                            {{ selectedBot.exchange }} · {{ selectedBot.symbol }} · capital {{ formatMoney(selectedBot.capital_allocation) }} · fee {{ selectedBot.fee_rate }}
                         </p>
                         <p v-if="bots.length === 0" class="mt-2 text-sm text-amber-300">
                             Create and configure a grid bot before running a sweep.

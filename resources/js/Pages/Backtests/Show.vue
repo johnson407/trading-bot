@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import EquityChart from '@/Components/EquityChart.vue';
+import { formatMoney, formatSignedMoney } from '@/Support/money.js';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, watch } from 'vue';
 
@@ -123,8 +124,8 @@ function destroy() {
                     </div>
                     <div class="bg-slate-800 p-5 shadow sm:rounded-lg">
                         <p class="text-xs uppercase tracking-wide text-slate-400">Final equity</p>
-                        <p class="mt-2 text-2xl font-semibold text-slate-100">{{ metrics ? number(metrics.final_equity) : '—' }}</p>
-                        <p v-if="metrics" class="mt-1 text-sm" :class="Number(metrics.net_pnl) < 0 ? 'text-red-300' : 'text-green-300'">{{ signed(metrics.net_pnl) }} net</p>
+                        <p class="mt-2 text-2xl font-semibold text-slate-100">{{ metrics ? formatMoney(metrics.final_equity) : '—' }}</p>
+                        <p v-if="metrics" class="mt-1 text-sm" :class="Number(metrics.net_pnl) < 0 ? 'text-red-300' : 'text-green-300'">{{ formatSignedMoney(metrics.net_pnl) }} net</p>
                     </div>
                     <div class="bg-slate-800 p-5 shadow sm:rounded-lg">
                         <p class="text-xs uppercase tracking-wide text-slate-400">Return</p>
@@ -136,7 +137,7 @@ function destroy() {
                     <div class="bg-slate-800 p-5 shadow sm:rounded-lg">
                         <p class="text-xs uppercase tracking-wide text-slate-400">Activity</p>
                         <p class="mt-2 text-2xl font-semibold text-slate-100">{{ metrics?.fill_count ?? 0 }} fills</p>
-                        <p v-if="metrics" class="mt-1 text-sm text-slate-400">Fees {{ number(metrics.fees, 4) }} · {{ metrics.candles_processed }} candles</p>
+                        <p v-if="metrics" class="mt-1 text-sm text-slate-400">Fees {{ formatMoney(metrics.fees) }} · {{ metrics.candles_processed }} candles</p>
                     </div>
                 </div>
 
@@ -144,7 +145,7 @@ function destroy() {
                     <div class="bg-slate-800 p-5 shadow sm:rounded-lg lg:col-span-2">
                         <h3 class="text-base font-semibold text-slate-100">Equity curve</h3>
                         <p class="mb-4 mt-1 text-xs text-slate-400">Sampled at candle close, capped at 1,000 points.</p>
-                        <EquityChart :labels="chartLabels" :series="chartSeries" />
+                        <EquityChart :labels="chartLabels" :series="chartSeries" format="money" />
                     </div>
 
                     <div class="bg-slate-800 p-5 shadow sm:rounded-lg">
@@ -152,12 +153,12 @@ function destroy() {
                         <dl class="mt-3 space-y-2 text-sm">
                             <div class="flex justify-between gap-4"><dt class="text-slate-400">Start</dt><dd class="text-right text-slate-200">{{ timestamp(run.start_at) }}</dd></div>
                             <div class="flex justify-between gap-4"><dt class="text-slate-400">End</dt><dd class="text-right text-slate-200">{{ timestamp(run.end_at) }}</dd></div>
-                            <div class="flex justify-between gap-4"><dt class="text-slate-400">Capital</dt><dd class="text-right text-slate-200">{{ number(run.capital_allocation) }}</dd></div>
+                            <div class="flex justify-between gap-4"><dt class="text-slate-400">Capital</dt><dd class="text-right text-slate-200">{{ formatMoney(run.capital_allocation) }}</dd></div>
                             <div class="flex justify-between gap-4"><dt class="text-slate-400">Fee rate</dt><dd class="text-right text-slate-200">{{ run.fee_rate }}</dd></div>
-                            <div v-if="metrics" class="flex justify-between gap-4"><dt class="text-slate-400">Realized</dt><dd class="text-right text-slate-200">{{ signed(metrics.realized_pnl) }}</dd></div>
-                            <div v-if="metrics" class="flex justify-between gap-4"><dt class="text-slate-400">Unrealized</dt><dd class="text-right text-slate-200">{{ signed(metrics.unrealized_pnl) }}</dd></div>
+                            <div v-if="metrics" class="flex justify-between gap-4"><dt class="text-slate-400">Realized</dt><dd class="text-right text-slate-200">{{ formatSignedMoney(metrics.realized_pnl) }}</dd></div>
+                            <div v-if="metrics" class="flex justify-between gap-4"><dt class="text-slate-400">Unrealized</dt><dd class="text-right text-slate-200">{{ formatSignedMoney(metrics.unrealized_pnl) }}</dd></div>
                             <div v-if="metrics" class="flex justify-between gap-4"><dt class="text-slate-400">Final base</dt><dd class="text-right text-slate-200">{{ number(metrics.final_base_inventory, 6) }}</dd></div>
-                            <div v-if="metrics" class="flex justify-between gap-4"><dt class="text-slate-400">Final quote</dt><dd class="text-right text-slate-200">{{ number(metrics.final_quote_inventory) }}</dd></div>
+                            <div v-if="metrics" class="flex justify-between gap-4"><dt class="text-slate-400">Final quote</dt><dd class="text-right text-slate-200">{{ formatMoney(metrics.final_quote_inventory) }}</dd></div>
                         </dl>
                     </div>
                 </div>
@@ -194,9 +195,9 @@ function destroy() {
                                     <td class="px-5 py-3 text-sm text-slate-300">{{ fill.sequence }}</td>
                                     <td class="px-5 py-3 text-sm text-slate-300">{{ timestamp(fill.filled_at) }}</td>
                                     <td class="px-5 py-3 text-sm capitalize" :class="fill.side === 'buy' ? 'text-green-300' : 'text-red-300'">{{ fill.side }}</td>
-                                    <td class="px-5 py-3 text-right text-sm text-slate-200">{{ number(fill.price, 6) }}</td>
+                                    <td class="px-5 py-3 text-right text-sm text-slate-200">{{ formatMoney(fill.price) }}</td>
                                     <td class="px-5 py-3 text-right text-sm text-slate-200">{{ number(fill.quantity, 8) }}</td>
-                                    <td class="px-5 py-3 text-right text-sm text-slate-300">{{ number(fill.fee, 6) }} {{ fill.fee_currency }}</td>
+                                    <td class="px-5 py-3 text-right text-sm text-slate-300">{{ formatMoney(fill.fee) }} {{ fill.fee_currency }}</td>
                                     <td class="px-5 py-3 text-right text-sm text-slate-300">{{ fill.grid_level_sequence ?? '—' }}</td>
                                 </tr>
                                 <tr v-if="fills.length === 0">

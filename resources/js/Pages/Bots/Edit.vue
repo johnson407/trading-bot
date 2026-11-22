@@ -4,6 +4,7 @@ import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
+import { formatMoney, submittedMoney } from '@/Support/money.js';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -13,9 +14,11 @@ const props = defineProps({
     editable: { type: Boolean, default: false },
 });
 
+const rawCapitalAllocation = props.bot.capital_allocation;
+const displayCapitalAllocation = formatMoney(rawCapitalAllocation);
 const form = useForm({
     name: props.bot.name,
-    capital_allocation: props.bot.capital_allocation,
+    capital_allocation: displayCapitalAllocation,
     fee_rate: props.bot.fee_rate ?? '0',
     center_price: props.configuration.center_price ?? '0',
     level_count: props.configuration.levels_per_side ?? 1,
@@ -37,7 +40,12 @@ const isMartingale = computed(() => props.bot.strategy_key === 'martingale-grid'
 const isDynamic = computed(() => props.bot.strategy_key === 'dynamic-grid');
 const isEditable = computed(() => props.editable);
 
-const submit = () => form.patch(route('bots.update', props.bot.id));
+const submit = () => form
+    .transform((data) => ({
+        ...data,
+        capital_allocation: submittedMoney(form.capital_allocation, displayCapitalAllocation, rawCapitalAllocation),
+    }))
+    .patch(route('bots.update', props.bot.id));
 </script>
 
 <template>
