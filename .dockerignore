@@ -6,5 +6,8 @@ node_modules
 openspec
 public/build
 storage/logs/*
-bootstrap/cache/*
+storage/framework/cache
+storage/framework/sessions
+storage/framework/views
+bootstrap/cache
 vendor

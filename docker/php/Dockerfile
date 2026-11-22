@@ -37,9 +37,9 @@ COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 COPY . .
-RUN composer dump-autoload --optimize \
+RUN mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
+    && composer dump-autoload --optimize \
     && npm run build \
-    && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
 ENTRYPOINT ["entrypoint"]
@@ -66,8 +66,8 @@ COPY . .
 COPY --from=vendor /var/www/html/vendor ./vendor
 COPY --from=assets /var/www/html/public/build ./public/build
 
-RUN composer dump-autoload --optimize --no-dev \
-    && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
+RUN mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
+    && composer dump-autoload --optimize --no-dev \
     && chown -R www-data:www-data storage bootstrap/cache
 
 ENTRYPOINT ["entrypoint"]
