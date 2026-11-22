@@ -1,5 +1,10 @@
 .git
 .env
+.github
+docs
 node_modules
+openspec
+public/build
 storage/logs/*
 bootstrap/cache/*
+vendor

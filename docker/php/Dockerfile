@@ -31,6 +31,7 @@ WORKDIR /var/www/html
 FROM base AS app
 
 COPY composer.json composer.lock ./
+RUN composer install --no-interaction --prefer-dist --no-scripts
 
 COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
@@ -38,6 +39,34 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . .
 RUN composer dump-autoload --optimize \
     && npm run build \
+    && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache
+
+ENTRYPOINT ["entrypoint"]
+CMD ["php-fpm"]
+
+FROM base AS vendor
+
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-interaction --prefer-dist \
+    --optimize-autoloader --no-scripts
+
+FROM base AS assets
+
+COPY package.json package-lock.json* ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+COPY . .
+COPY --from=vendor /var/www/html/vendor ./vendor
+RUN npm run build
+
+FROM base AS production
+
+COPY . .
+COPY --from=vendor /var/www/html/vendor ./vendor
+COPY --from=assets /var/www/html/public/build ./public/build
+
+RUN composer dump-autoload --optimize --no-dev \
     && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 

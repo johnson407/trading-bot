@@ -33,9 +33,12 @@ php artisan schedule:work
 
 ### Docker Compose
 
-In Docker Compose these commands are already wired into the `app`, `horizon`, and
-`scheduler` services. The entrypoint waits for PostgreSQL and Redis, runs
-`migrate --force`, and then starts the service's command.
+In Docker Compose these commands are wired into the entrypoint. Every service
+waits for PostgreSQL and Redis, but only `app` has `RUN_MIGRATIONS=true`, so only
+it runs `migrate --force` and `storage:link`. Horizon and the scheduler start
+after `app` is healthy and never migrate concurrently. The same gate applies to
+the production stack; production additionally refuses to start without a runtime
+`APP_KEY`.
 
 Under the bind-mounted Docker Compose setup, leave `.env` at mode `644`. PHP-FPM,
 Horizon, and the scheduler run as Alpine `www-data` rather than your host user,

@@ -94,6 +94,15 @@ The entrypoint waits for PostgreSQL, generates `APP_KEY` when needed, and runs
 `php artisan migrate --force`. The app, Nginx, PostgreSQL, Redis, Horizon, and
 scheduler services each have health checks.
 
+## Production deployment (QNAP NAS)
+
+Pushes to `main` are tested by GitHub Actions and, when green, published as
+private application and Nginx images in GHCR. A QNAP scheduled task pulls the
+desired image over an outbound connection, waits for all six services to become
+healthy, and rolls back the application images on a health failure. See
+[Production deployment](docs/deployment.md) for first install, registry login,
+pins, holds, rollback, and recovery.
+
 ## Local setup without Docker
 
 ```bash
@@ -292,7 +301,7 @@ app/
   Actions/         Bot controls, credentials, kill switch
   Http/            Controllers, requests, resources
   Models/          Eloquent persistence
-docs/              Bot parameters, strategies, exchanges, risk, runtime, dashboard, security
+docs/              Bot parameters, strategies, exchanges, risk, runtime, dashboard, security, deployment
 openspec/          Change proposals and capability specs
 ```
 
@@ -305,6 +314,7 @@ openspec/          Change proposals and capability specs
 - [Runtime and recovery](docs/runtime.md)
 - [Dashboard flows](docs/dashboard.md)
 - [Security checklist](docs/security.md)
+- [Production deployment](docs/deployment.md)
 
 ## OpenSpec workflow
 

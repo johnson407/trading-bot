@@ -3,12 +3,19 @@ set -e
 
 cd /var/www/html
 
-if [ -z "${APP_KEY:-}" ] && [ ! -f .env ]; then
-    cp .env.example .env
-fi
+if [ "${APP_ENV:-local}" = "production" ]; then
+    if [ -z "${APP_KEY:-}" ] && ! grep -q '^APP_KEY=base64:' .env 2>/dev/null; then
+        echo "ERROR: APP_KEY is required in production; set it in the runtime environment." >&2
+        exit 1
+    fi
+else
+    if [ -z "${APP_KEY:-}" ] && [ ! -f .env ]; then
+        cp .env.example .env
+    fi
 
-if [ -z "${APP_KEY:-}" ] && ! grep -q '^APP_KEY=base64:' .env 2>/dev/null; then
-    php artisan key:generate --force
+    if [ -z "${APP_KEY:-}" ] && ! grep -q '^APP_KEY=base64:' .env 2>/dev/null; then
+        php artisan key:generate --force
+    fi
 fi
 
 mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
@@ -29,8 +36,10 @@ if [ "${DB_CONNECTION:-pgsql}" = "pgsql" ]; then
     done
 fi
 
-php artisan migrate --force --no-interaction
-php artisan storage:link --force 2>/dev/null || true
+if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
+    php artisan migrate --force --no-interaction
+    php artisan storage:link --force 2>/dev/null || true
+fi
 
 if [ "$(id -u)" = "0" ]; then
     if [ "$1" = "php-fpm" ]; then
