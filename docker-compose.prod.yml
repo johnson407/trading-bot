@@ -1,0 +1,109 @@
+services:
+  app:
+    image: ghcr.io/johnson407/trading-bot:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    working_dir: /var/www/html
+    env_file: .env
+    environment:
+      RUN_MIGRATIONS: "true"
+    volumes:
+      - app-storage:/var/www/html/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php artisan about > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  nginx:
+    image: ghcr.io/johnson407/trading-bot-nginx:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:80"
+    volumes:
+      - app-storage:/var/www/html/storage:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/up > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-trading_bot}
+      POSTGRES_USER: ${DB_USERNAME:-trading_bot}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-trading_bot} -d ${DB_DATABASE:-trading_bot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  horizon:
+    image: ghcr.io/johnson407/trading-bot:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: ["php", "artisan", "horizon"]
+    env_file: .env
+    environment:
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - app-storage:/var/www/html/storage
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php artisan horizon:status | grep -q running"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  scheduler:
+    image: ghcr.io/johnson407/trading-bot:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: ["sh", "-c", "php artisan bots:reconcile || true; exec php artisan schedule:work"]
+    env_file: .env
+    environment:
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - app-storage:/var/www/html/storage
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'artisan schedule:work' > /dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  app-storage:
+  postgres-data:
+  redis-data:

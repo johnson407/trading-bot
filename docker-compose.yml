@@ -24,6 +24,7 @@ services:
       QUEUE_CONNECTION: redis
       CACHE_STORE: redis
       TRADING_LIVE_ENABLED: ${TRADING_LIVE_ENABLED:-false}
+      RUN_MIGRATIONS: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -105,6 +106,7 @@ services:
       QUEUE_CONNECTION: redis
       CACHE_STORE: redis
       TRADING_LIVE_ENABLED: ${TRADING_LIVE_ENABLED:-false}
+      RUN_MIGRATIONS: "false"
     depends_on:
       app:
         condition: service_healthy
@@ -140,6 +142,7 @@ services:
       QUEUE_CONNECTION: redis
       CACHE_STORE: redis
       TRADING_LIVE_ENABLED: ${TRADING_LIVE_ENABLED:-false}
+      RUN_MIGRATIONS: "false"
     depends_on:
       app:
         condition: service_healthy
