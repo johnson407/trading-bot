@@ -44,8 +44,12 @@ trait BuildsStrategyConfiguration
         $configuration = [
             'center_price' => Decimal::of((string) $this->input('center_price'))->toString(),
             'levels_per_side' => (int) $this->input('level_count'),
-            'spacing_type' => (string) $this->input('spacing_type'),
-            'spacing_value' => Decimal::of((string) $this->input('spacing_value'))->toString(),
+            // Dynamic grids ignore these two values; keep harmless defaults so
+            // the stored configuration shape stays stable.
+            'spacing_type' => (string) ($this->input('spacing_type') ?? 'arithmetic'),
+            'spacing_value' => $this->filled('spacing_value')
+                ? Decimal::of((string) $this->input('spacing_value'))->toString()
+                : '0',
             'order_quantity' => Decimal::of((string) $this->input('order_quantity'))->toString(),
         ];
 

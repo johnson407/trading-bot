@@ -52,17 +52,40 @@ class RiskLimitService
      */
     public function effectiveForBot(Bot $bot): array
     {
-        $limit = $this->botOverride($bot) ?? RiskLimit::query()
-            ->where('user_id', $bot->user_id)
-            ->where('scope', RiskScope::User->value)
-            ->whereNull('bot_id')
-            ->first();
+        return $this->limitsFrom($this->botOverride($bot) ?? $this->userLimit($bot->user));
+    }
 
+    /**
+     * Resolve effective account limits without creating the user-wide row.
+     *
+     * Previews run before a bot exists and must not mutate risk data.
+     *
+     * @return array{max_position_notional: Decimal, max_open_orders: int, daily_loss_limit: Decimal}
+     */
+    public function effectiveForUser(User $user): array
+    {
+        return $this->limitsFrom($this->userLimit($user));
+    }
+
+    /**
+     * @return array{max_position_notional: Decimal, max_open_orders: int, daily_loss_limit: Decimal}
+     */
+    private function limitsFrom(?RiskLimit $limit): array
+    {
         return [
             'max_position_notional' => Decimal::of($limit->max_position_notional ?? config('risk.defaults.max_position_notional', '1000')),
             'max_open_orders' => (int) ($limit->max_open_orders ?? config('risk.defaults.max_open_orders', 20)),
             'daily_loss_limit' => Decimal::of($limit->daily_loss_limit ?? config('risk.defaults.daily_loss_limit', '100')),
         ];
+    }
+
+    private function userLimit(User $user): ?RiskLimit
+    {
+        return RiskLimit::query()
+            ->where('user_id', $user->id)
+            ->where('scope', RiskScope::User->value)
+            ->whereNull('bot_id')
+            ->first();
     }
 
     /** @return array{bot: RiskLimit, user: RiskLimit} */

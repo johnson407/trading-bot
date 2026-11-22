@@ -22,6 +22,24 @@ class ExchangeClientFactory
         private readonly array $overrides = [],
     ) {}
 
+    /**
+     * Public-data client for an exchange, used before a bot exists.
+     */
+    public function forExchange(string $exchange): ExchangeClient
+    {
+        if (isset($this->overrides[$exchange])) {
+            return $this->overrides[$exchange];
+        }
+
+        if ($this->paper !== null) {
+            return $this->paper;
+        }
+
+        return $this->paperClients[$exchange] ??= new PaperExchangeClient(
+            new CcxtExchangeClient(exchange: $exchange),
+        );
+    }
+
     public function forBot(Bot $bot): ExchangeClient
     {
         if (isset($this->overrides[$bot->exchange])) {

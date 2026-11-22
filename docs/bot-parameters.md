@@ -18,6 +18,40 @@ execution. Parameters come from three layers:
 The flow is: create/edit form -> `StoreBotRequest` / `UpdateBotRequest` ->
 `StrategyConfig.configuration` -> strategy class -> `RiskGuard`.
 
+The form also calls `GridPlanEvaluator` for a live preview through
+`POST /bots/preview`, which returns the ladder, notional totals, and advisories
+without persisting anything. The same evaluator runs inside both requests, so the
+preview and the saved setup cannot disagree.
+
+---
+
+## 0. Quick setup presets
+
+Quick setup needs only name, exchange, symbol, capital allocation, and center
+price. It resolves a preset from `config/bot_presets.php` into concrete advanced
+values:
+
+| Preset | Strategy | Levels per side | Spacing | Character |
+| --- | --- | --- | --- | --- |
+| `balanced` | simple-grid | 6 | 0.4% geometric | Default for ranging markets. |
+| `tight` | simple-grid | 10 | 0.2% geometric | Small moves; uses the full default order limit. |
+| `wide` | simple-grid | 4 | 1% geometric | Fewer, wider levels for larger swings. |
+| `trailing` | trailing-grid | 6 | 0.5% geometric | Re-centers after a 1.5% move. |
+
+Spacing is stored as a fraction (`0.4%` becomes `0.004`). Order quantity is
+derived with bcmath strings:
+
+```
+order_quantity = capital_allocation * utilization / (levels_per_side * center_price)
+```
+
+`utilization` defaults to `0.8`, leaving 20% of the allocation as headroom.
+Presets are symbol-agnostic, so the derived quantity still has to clear the
+exchange minimums for the chosen pair.
+
+The advanced form is the same explicit field set described below. Switching from
+quick to advanced preserves the derived values.
+
 ---
 
 ## 1. Identity and execution fields
@@ -66,8 +100,10 @@ How levels are built (`GeneratesGridLevels`):
 
 - Arithmetic: `center +/- spacing * i`
 - Geometric: `center * (1+spacing)^i` above, `center / (1+spacing)^i` below
-- Prices are sorted and assigned sequence numbers; duplicate and non-positive prices throw
-  `InvalidGridException`.
+- Prices are sorted and assigned sequence numbers; duplicate and non-positive prices are
+  rejected before the bot is saved.
+- A geometric spacing of `1` or more is rejected up front. It does not keep the ladder
+  proportional: buy levels collapse toward zero while sell levels grow without bound.
 
 Hard ceilings from the risk layer (defaults, editable at account level):
 
@@ -78,6 +114,22 @@ Hard ceilings from the risk layer (defaults, editable at account level):
 - Sells are blocked with `risk.insufficient_inventory` until a buy fills and funds them. This is
   normal deferral, not an error - a quote-only bot places buys first.
 - Daily loss limit = 100 quote/day (UTC), enforced per bot and account-wide.
+
+### Before saving: errors versus advisories
+
+The preview (`POST /bots/preview`) and both save requests share one evaluator:
+
+- **Errors stop saving.** These are setups that cannot run: geometric spacing >= 1,
+  non-positive or duplicate level prices, and an order below the exchange minimum
+  amount or notional when market data is available. Missing market data is not an
+  error.
+- **Advisories never stop saving.** These are setups that can run but deserve a
+  look: more orders than `max_open_orders`, buy notional above
+  `max_position_notional`, a center price more than 50% away from the market, and
+  sells that no inventory funds yet. The risk layer still rejects individual
+  orders at tick time, so an advisory is not a promise that every level fills.
+- Risk limits are read without creating a row, so previewing never changes account
+  settings.
 
 ---
 
@@ -135,8 +187,8 @@ cancel open orders not at the new prices, keep matching ones, place missing ones
 ```
 
 Important: dynamic grid never moves the center - unlike trailing, it only changes spacing around
-a fixed center. It always uses arithmetic spacing; the `spacing_type` dropdown is ignored for
-this strategy.
+a fixed center. It always uses arithmetic spacing, so the create and edit forms hide the
+`spacing_type` and `spacing_value` fields for this strategy and do not require them.
 
 ---
 
@@ -169,7 +221,8 @@ These live in `.env`, `config/trading.php`, and `config/risk.php`:
 | `TRADING_LIVE_ENABLED` | `false` | Master gate for all real orders. |
 | `TRADING_DEFAULT_EXCHANGE` | `binance` | Fallback exchange when none supplied. |
 | `TRADING_EXCHANGES` | `binance` | Comma-separated allowlist for the exchange dropdown. |
-| `TRADING_PAPER_FEE_RATE` | `0` | Default paper fee fraction (per-bot `fee_rate` overrides on the bot row). |
+| `TRADING_PAPER_FEE_RATE` | `0` | Default paper fee fraction (prefills the create form and seeds `fee_rate` when the field is omitted). |
+| `TRADING_MARKET_DATA_CACHE_SECONDS` | `60` | How long preview market data is cached per exchange and symbol. |
 | `TRADING_TICK_INTERVAL` | `60` | Copied into each new bot's `tick_interval_seconds`. Dispatcher checks every second; each bot evaluates only when its interval elapsed. |
 | `TRADING_MAX_CONSECUTIVE_FAILURES` | `3` | Failures before the bot is paused. |
 | `TRADING_RECONCILIATION_TOLERANCE` | `0.0001` | Absolute quantity tolerance when comparing local vs exchange balances. |

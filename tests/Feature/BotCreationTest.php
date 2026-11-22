@@ -1,10 +1,15 @@
 <?php
 
+use App\Domain\Exchange\ValueObjects\MarketData;
+use App\Domain\Grid\GridPlanEvaluator;
+use App\Http\Requests\StoreBotRequest;
 use App\Models\Bot;
 use App\Models\ExchangeCredential;
 use App\Models\StrategyConfig;
 use App\Models\User;
+use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
@@ -53,6 +58,61 @@ it('creates a paper bot with strategy configuration and risk limits', function (
 
     $this->assertDatabaseHas('risk_limits', ['user_id' => $user->id, 'bot_id' => null, 'scope' => 'user']);
     $this->assertDatabaseHas('activity_logs', ['bot_id' => $bot->id, 'type' => 'bot.created']);
+});
+
+it('derives quick-setup values from the preset on the server', function () {
+    $user = User::factory()->create();
+    $payload = botPayload([
+        'preset_key' => 'balanced',
+        // Stale client values must not win over the selected preset.
+        'strategy_key' => 'martingale-grid',
+        'level_count' => 1,
+        'spacing_type' => 'arithmetic',
+        'spacing_value' => '1',
+        'order_quantity' => '0.5',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), $payload)
+        ->assertRedirect(route('bots.index'))
+        ->assertSessionHasNoErrors();
+
+    $bot = Bot::where('user_id', $user->id)->firstOrFail();
+
+    expect($bot->strategy_key)->toBe('simple-grid')
+        ->and(StrategyConfig::where('bot_id', $bot->id)->firstOrFail()->configuration)
+        ->toMatchArray([
+            'levels_per_side' => 6,
+            'spacing_type' => 'geometric',
+            'spacing_value' => '0.004',
+            'order_quantity' => '0.0026666666666667',
+        ]);
+});
+
+it('accepts a dynamic grid without the shared spacing fields', function () {
+    $user = User::factory()->create();
+    $payload = botPayload([
+        'strategy_key' => 'dynamic-grid',
+        'min_spacing' => '50',
+        'max_spacing' => '500',
+    ]);
+
+    unset($payload['spacing_type'], $payload['spacing_value']);
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), $payload)
+        ->assertRedirect(route('bots.index'))
+        ->assertSessionHasNoErrors();
+
+    $bot = Bot::where('user_id', $user->id)->firstOrFail();
+
+    expect(StrategyConfig::where('bot_id', $bot->id)->firstOrFail()->configuration)
+        ->toMatchArray([
+            'spacing_type' => 'arithmetic',
+            'spacing_value' => '0',
+            'min_spacing' => '50',
+            'max_spacing' => '500',
+        ]);
 });
 
 it('stores the configured default tick interval for a new bot', function () {
@@ -142,6 +202,79 @@ it('rejects trailing and dynamic strategies without required parameters', functi
         ->assertSessionHasErrors(['min_spacing', 'max_spacing']);
 });
 
+it('defaults the fee rate from config when the field is omitted', function () {
+    config(['trading.paper.fee_rate' => '0.0015']);
+    $user = User::factory()->create();
+    $payload = botPayload();
+    unset($payload['fee_rate']);
+
+    $this->actingAs($user)->post(route('bots.store'), $payload)->assertRedirect(route('bots.index'));
+
+    expect(Bot::where('user_id', $user->id)->firstOrFail()->fee_rate)->toBe('0.00150000');
+});
+
+it('rejects a grid that cannot be constructed', function (array $overrides, string $field) {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), botPayload($overrides))
+        ->assertSessionHasErrors($field);
+
+    expect(Bot::count())->toBe(0)
+        ->and(StrategyConfig::count())->toBe(0);
+})->with([
+    'geometric spacing of one' => [['spacing_type' => 'geometric', 'spacing_value' => '1'], 'spacing_value'],
+    'non-positive level price' => [['center_price' => '100', 'spacing_value' => '100'], 'spacing_value'],
+    'duplicate level prices' => [['spacing_value' => '0.000000000000000001'], 'spacing_value'],
+]);
+
+it('rejects an order below the exchange minimum when market data is cached', function (MarketData $market) {
+    $user = User::factory()->create();
+
+    try {
+        app(MarketDataResolver::class)->prime('binance', $market);
+
+        $this->actingAs($user)
+            ->post(route('bots.store'), botPayload())
+            ->assertSessionHasErrors('order_quantity');
+
+        expect(Bot::count())->toBe(0);
+    } finally {
+        Cache::flush();
+    }
+})->with([
+    'minimum amount' => [MarketData::make('BTC/USDT', '50000', minAmount: '0.01')],
+    'minimum notional' => [MarketData::make('BTC/USDT', '50000', minNotional: '1000')],
+]);
+
+it('creates a bot when the plan only produces advisories', function () {
+    $user = User::factory()->create();
+
+    try {
+        app(MarketDataResolver::class)->prime('binance', MarketData::make('BTC/USDT', '50000'));
+
+        $payload = botPayload([
+            'center_price' => '100000',
+            'level_count' => 12,
+            'order_quantity' => '0.02',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('bots.store'), $payload)
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('bots.index'));
+
+        $request = StoreBotRequest::create(route('bots.store'), 'POST', $payload);
+        $request->setUserResolver(fn () => $user);
+        $plan = app(GridPlanEvaluator::class)->evaluate($request->gridPlanRequest());
+
+        expect(array_map(fn ($problem) => $problem->code, $plan->warnings()))
+            ->toContain('plan.max_open_orders', 'plan.max_position_notional', 'plan.center_price_band', 'plan.unfunded_sells')
+            ->and(Bot::count())->toBe(1);
+    } finally {
+        Cache::flush();
+    }
+});
 
 it('rejects an exchange outside the allowlist', function () {
     config(['trading.exchanges' => ['binance', 'kraken']]);

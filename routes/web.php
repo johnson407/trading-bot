@@ -26,8 +26,10 @@ Route::get('/', function () {
 Route::get('/dashboard', DashboardController::class)->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('bots/market-data', [BotController::class, 'marketData'])->name('bots.market-data')->middleware('throttle:bot-preview');
     Route::resource('bots', BotController::class)->only(['index', 'create', 'show']);
     Route::post('bots', [BotController::class, 'store'])->name('bots.store')->middleware('throttle:bot-control');
+    Route::post('bots/preview', [BotController::class, 'preview'])->name('bots.preview')->middleware('throttle:bot-preview');
     Route::post('bots/{bot}/start', [BotController::class, 'start'])->name('bots.start')->middleware('throttle:bot-control');
     Route::post('bots/{bot}/pause', [BotController::class, 'pause'])->name('bots.pause')->middleware('throttle:bot-control');
     Route::post('bots/{bot}/stop', [BotController::class, 'stop'])->name('bots.stop')->middleware('throttle:bot-control');
