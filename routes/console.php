@@ -13,3 +13,5 @@ Schedule::command('bots:health')->everyThirtySeconds()->withoutOverlapping();
 Schedule::command('bots:sync-orders')->everyTenSeconds()->withoutOverlapping(2);
 Schedule::command('bots:sync-balances')->everyMinute()->withoutOverlapping();
 Schedule::command('backtests:fail-stale')->everyFiveMinutes()->withoutOverlapping();
+
+Schedule::command('alerts:prune')->dailyAt('03:00')->withoutOverlapping();

@@ -2,6 +2,9 @@
 
 use App\Domain\Risk\ValueObjects\LiveStartConfirmation;
 use App\Models\Bot;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(RefreshDatabase::class);
 
 function confirmationBot(): Bot
 {

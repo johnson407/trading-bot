@@ -91,6 +91,20 @@ class ConsecutiveFailureTracker
             severity: RiskSeverity::Critical,
         );
 
+        if ($cancellationFailures > 0) {
+            $this->riskEvents->record(
+                'risk.failure_cancel_failed',
+                'Orders could not be canceled after consecutive exchange failures.',
+                $bot,
+                context: [
+                    'operation' => $operation,
+                    'consecutive_failures' => $failures,
+                    'cancellation_failures' => $cancellationFailures,
+                ],
+                severity: RiskSeverity::Critical,
+            );
+        }
+
         return $failures;
     }
 

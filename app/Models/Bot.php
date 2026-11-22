@@ -38,6 +38,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property-read \App\Models\Grid|null $activeGrid
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ActivityLog> $activityLogs
  * @property-read int|null $activity_logs_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Alert> $alerts
+ * @property-read int|null $alerts_count
  * @property-read \App\Models\ExchangeCredential|null $credential
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Fill> $fills
  * @property-read int|null $fills_count
@@ -202,6 +204,12 @@ class Bot extends Model
     public function backtestRuns(): HasMany
     {
         return $this->hasMany(BacktestRun::class);
+    }
+
+    /** @return HasMany<Alert, $this> */
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(Alert::class);
     }
 
     public function scopeRunning($query)

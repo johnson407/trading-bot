@@ -42,6 +42,23 @@ const showingNavigationDropdown = ref(false);
                                 </NavLink>
 
                                 <NavLink
+                                    :href="route('alerts.index')"
+                                    :active="route().current('alerts.*')"
+                                >
+                                    <span class="inline-flex items-center gap-2">
+                                        Alerts
+                                        <span
+                                            v-if="
+                                                $page.props.auth.unread_alerts > 0
+                                            "
+                                            class="rounded-full bg-red-700 px-2 py-0.5 text-xs font-semibold text-white"
+                                        >
+                                            {{ $page.props.auth.unread_alerts }}
+                                        </span>
+                                    </span>
+                                </NavLink>
+
+                                <NavLink
                                     :href="route('bots.index')"
                                     :active="route().current('bots.*')"
                                 >
@@ -189,6 +206,21 @@ const showingNavigationDropdown = ref(false);
                             :active="route().current('dashboard')"
                         >
                             Dashboard
+                        </ResponsiveNavLink>
+
+                        <ResponsiveNavLink
+                            :href="route('alerts.index')"
+                            :active="route().current('alerts.*')"
+                        >
+                            <span class="inline-flex items-center gap-2">
+                                Alerts
+                                <span
+                                    v-if="$page.props.auth.unread_alerts > 0"
+                                    class="rounded-full bg-red-700 px-2 py-0.5 text-xs font-semibold text-white"
+                                >
+                                    {{ $page.props.auth.unread_alerts }}
+                                </span>
+                            </span>
                         </ResponsiveNavLink>
 
                         <ResponsiveNavLink

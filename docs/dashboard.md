@@ -2,7 +2,7 @@
 
 The dashboard is an authenticated Inertia.js + Vue 3 application. All pages below
 require `auth` and (except profile/auth pages) verified email. Every bot,
-credential, and control action is authorized against the authenticated user.
+credential, alert, and control action is authorized against the authenticated user.
 
 ## Authentication
 
@@ -117,6 +117,23 @@ is intentionally omitted.
 
 Feature test: `tests/Feature/ExchangeCredentialUiTest.php`.
 
+## Alerts — `GET /alerts` (`alerts.index`)
+
+Shows the signed-in user's operational alerts newest first, 50 per page. Each row
+includes severity, title, message, bot link when present, timestamp, and read
+state. An optional bot filter narrows the list to one owned bot; another user's bot
+id is rejected with 404.
+
+- `POST /alerts/{alert}/read` marks one owned alert read.
+- `POST /alerts/read-all` marks all visible unread alerts read and honors the active
+  bot filter.
+- The shared `auth.unread_alerts` count drives the badge in both navigations.
+- Critical incidents are also emailed after commit; warnings stay in-app. See
+  [alerts.md](alerts.md) for the covered incidents and delivery details.
+
+Feature tests: `tests/Feature/AlertInboxTest.php`,
+`tests/Feature/AlertIntegrationTest.php`.
+
 ## Polling and freshness
 
 List and detail pages poll every five seconds, meeting the MVP's five-second
@@ -135,4 +152,5 @@ protection; a failed action never leaves a partial state change visible.
 | Activity | `bots.activity` | `ActivityLogTest` |
 | Kill switch | `kill-switch.create`, `kill-switch.store` | `KillSwitchUiTest` |
 | Credentials | `exchange-credentials.*` | `ExchangeCredentialUiTest` |
+| Alerts | `alerts.index`, `alerts.read`, `alerts.read-all` | `AlertInboxTest` |
 | Authorization | all bot/credential routes | `AuthorizationTest` |

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Risk;
 
+use App\Domain\Alerts\AlertRecorder;
 use App\Domain\Risk\Enums\RiskSeverity;
 use App\Models\Bot;
 use App\Models\RiskEvent;
@@ -10,6 +11,8 @@ use InvalidArgumentException;
 
 class RiskEventRecorder
 {
+    public function __construct(private readonly AlertRecorder $alerts) {}
+
     /**
      * @param  array<string, mixed>  $context
      */
@@ -27,7 +30,7 @@ class RiskEventRecorder
             throw new InvalidArgumentException('A risk event requires a user or a bot with a user.');
         }
 
-        return RiskEvent::create([
+        $event = RiskEvent::create([
             'user_id' => $user->id,
             'bot_id' => $bot?->id,
             'type' => $type,
@@ -36,5 +39,9 @@ class RiskEventRecorder
             'context' => $context,
             'created_at' => now(),
         ]);
+
+        $this->alerts->fromRiskEvent($event);
+
+        return $event;
     }
 }

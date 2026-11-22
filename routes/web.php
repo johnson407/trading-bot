@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AlertController;
 use App\Http\Controllers\BacktestController;
 use App\Http\Controllers\BotController;
 use App\Http\Controllers\DashboardController;
@@ -44,6 +45,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('kill-switch', [KillSwitchController::class, 'create'])->name('kill-switch.create');
     Route::post('kill-switch', [KillSwitchController::class, 'store'])->name('kill-switch.store')->middleware('throttle:kill-switch');
+
+    Route::get('alerts', [AlertController::class, 'index'])->name('alerts.index');
+    Route::post('alerts/read-all', [AlertController::class, 'markAllRead'])->name('alerts.read-all');
+    Route::post('alerts/{alert}/read', [AlertController::class, 'markRead'])->whereNumber('alert')->name('alerts.read');
 
     Route::middleware('throttle:exchange-credentials')->group(function () {
         Route::resource('exchange-credentials', ExchangeCredentialController::class)->except(['show']);

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Activity;
 
+use App\Domain\Alerts\AlertRecorder;
 use App\Models\ActivityLog;
 use App\Models\Bot;
 use App\Models\User;
@@ -9,6 +10,8 @@ use InvalidArgumentException;
 
 class ActivityRecorder
 {
+    public function __construct(private readonly AlertRecorder $alerts) {}
+
     /**
      * Record a user- or bot-attributed activity event.
      *
@@ -28,7 +31,7 @@ class ActivityRecorder
             throw new InvalidArgumentException('An activity event requires a user or a bot with a user.');
         }
 
-        return ActivityLog::create([
+        $activity = ActivityLog::create([
             'user_id' => $user->id,
             'bot_id' => $bot?->id,
             'type' => $type,
@@ -37,5 +40,9 @@ class ActivityRecorder
             'context' => $context,
             'created_at' => now(),
         ]);
+
+        $this->alerts->fromActivity($activity);
+
+        return $activity;
     }
 }
