@@ -202,6 +202,13 @@ Nginx so public uploads work.
    disabled, and the database contained zero users before bootstrap. The UI is
    available at `http://192.168.88.150:8000`.
 
+   End-to-end update verified on 2026-11-22: the green `main` commit
+   `81a91d7da1be02e162013715502073d598c8cb84` was published, the `19:15` cron
+   poll activated `sha-81a91d7da1be02e162013715502073d598c8cb84` at `19:16:44`
+   (within one five-minute interval), all six services were healthy, and `/up`
+   returned `Application up`. The `19:05` and `19:10` polls correctly skipped
+   because the running image had not changed.
+
 7. Create the first account. The production database starts empty; no development
    rows or exchange credentials are copied. Open `/register`, create the account,
    and verify the email. Mail uses the `log` driver by default, so the verification

@@ -53,8 +53,8 @@
 - [x] 9.1 Create `/share/Docker/trading-bot`, copy `docker-compose.prod.yml` and `deploy/qnap/deploy.sh`, mark the script executable, create a mode-600 `.env` with a fresh `APP_KEY`, and log in to GHCR with the read-only token. Verify: `docker compose -f docker-compose.prod.yml config` succeeds and `docker pull` of both images succeeds.
 - [x] 9.2 Run `DRY_RUN=1 ./deploy.sh`, then the first real deploy. Verify: all six services report healthy, `/up` and `/login` respond, and the application logs are clean.
 - [x] 9.3 Create the first application user through registration plus verification or an explicit tinker command. Verify: the user can log in and the production database contains no development rows.
-- [ ] 9.4 Install the five-minute cron entry, restart cron, and confirm `deploy.log` receives output. Verify: a green push to `main` produces a successful Actions run and the NAS activates the new SHA within one polling interval.
-- [ ] 9.5 Configure branch protection on `main` to require the `tests` job. Verify: the repository setting shows the required check and a pull request cannot merge with a failing test.
+- [x] 9.4 Install the five-minute cron entry, restart cron, and confirm `deploy.log` receives output. Verify: a green push to `main` produces a successful Actions run and the NAS activates the new SHA within one polling interval.
+- [ ] 9.5 Configure branch protection on `main` to require the `tests` job. Blocked: the private repository is on the GitHub free plan, where branch protection and rulesets return HTTP 403. Verify: the repository setting shows the required check and a pull request cannot merge with a failing test.
 - [x] 9.6 Record the actual NAS versions, share path, cron command, first-deploy results, and any deviations in `docs/deployment.md`. Verify: the runbook matches the live NAS and no placeholders remain.
 
 ## Workflow follow-up
