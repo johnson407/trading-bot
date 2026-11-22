@@ -2,16 +2,20 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
+import PlanPreview from '@/Components/PlanPreview.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { formatMoney, submittedMoney } from '@/Support/money.js';
+import { strategyMeta } from '@/Support/strategies.js';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import axios from 'axios';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 const props = defineProps({
     bot: { type: Object, required: true },
     configuration: { type: Object, default: () => ({}) },
     editable: { type: Boolean, default: false },
+    preview: { type: Object, default: null },
 });
 
 const rawCapitalAllocation = props.bot.capital_allocation;
@@ -39,6 +43,85 @@ const isTrailing = computed(() => props.bot.strategy_key === 'trailing-grid');
 const isMartingale = computed(() => props.bot.strategy_key === 'martingale-grid');
 const isDynamic = computed(() => props.bot.strategy_key === 'dynamic-grid');
 const isEditable = computed(() => props.editable);
+const selectedStrategy = computed(() => strategyMeta(props.bot.strategy_key));
+
+const preview = ref(props.preview);
+const previewLoading = ref(false);
+const previewError = ref('');
+let previewTimer = null;
+let previewRequest = 0;
+
+function previewPayload() {
+    return {
+        bot_id: props.bot.id,
+        exchange: props.bot.exchange,
+        symbol: props.bot.symbol,
+        strategy_key: props.bot.strategy_key,
+        capital_allocation: submittedMoney(form.capital_allocation, displayCapitalAllocation, rawCapitalAllocation),
+        center_price: form.center_price,
+        level_count: Number(form.level_count),
+        spacing_type: form.spacing_type,
+        spacing_value: form.spacing_value,
+        order_quantity: form.order_quantity,
+        trailing_distance: form.trailing_distance,
+        size_multiplier: form.size_multiplier,
+        max_order_quantity: form.max_order_quantity,
+        max_increases: form.max_increases,
+        min_spacing: form.min_spacing,
+        max_spacing: form.max_spacing,
+        volatility_multiplier: form.volatility_multiplier,
+        recalculation_interval_seconds: form.recalculation_interval_seconds,
+    };
+}
+
+async function fetchPreview() {
+    if (!props.editable) {
+        return;
+    }
+
+    const requestId = ++previewRequest;
+    previewLoading.value = true;
+
+    try {
+        const { data } = await axios.post(route('bots.preview'), previewPayload());
+
+        if (requestId === previewRequest) {
+            preview.value = data;
+            previewError.value = '';
+        }
+    } catch (error) {
+        if (requestId === previewRequest) {
+            previewError.value = error?.response?.data?.message ?? 'Preview is unavailable right now.';
+        }
+    } finally {
+        if (requestId === previewRequest) {
+            previewLoading.value = false;
+        }
+    }
+}
+
+function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(fetchPreview, 250);
+}
+
+watch(
+    () => [
+        form.capital_allocation,
+        form.center_price,
+        form.level_count,
+        form.spacing_type,
+        form.spacing_value,
+        form.order_quantity,
+        form.trailing_distance,
+        form.max_order_quantity,
+        form.min_spacing,
+        form.max_spacing,
+    ],
+    schedulePreview,
+);
+
+onBeforeUnmount(() => clearTimeout(previewTimer));
 
 const submit = () => form
     .transform((data) => ({
@@ -70,7 +153,7 @@ const submit = () => form
                         <div><dt class="text-slate-300">Symbol</dt><dd class="font-mono">{{ bot.symbol }}</dd></div>
                         <div><dt class="text-slate-300">Exchange</dt><dd>{{ bot.exchange }}</dd></div>
                         <div><dt class="text-slate-300">Mode</dt><dd class="capitalize">{{ bot.mode }}</dd></div>
-                        <div><dt class="text-slate-300">Strategy</dt><dd>{{ bot.strategy_key }}</dd></div>
+                        <div><dt class="text-slate-300">Strategy</dt><dd>{{ selectedStrategy.label }}</dd></div>
                     </dl>
                 </div>
 
@@ -110,7 +193,7 @@ const submit = () => form
                             <InputError class="mt-2" :message="form.errors.level_count" />
                         </div>
 
-                        <div>
+                        <div v-if="!isDynamic">
                             <InputLabel for="spacing_type" value="Spacing type" />
                             <select id="spacing_type" v-model="form.spacing_type" class="mt-1 block w-full rounded-md border-slate-500">
                                 <option value="arithmetic">Arithmetic</option>
@@ -119,7 +202,7 @@ const submit = () => form
                             <InputError class="mt-2" :message="form.errors.spacing_type" />
                         </div>
 
-                        <div>
+                        <div v-if="!isDynamic">
                             <InputLabel for="spacing_value" value="Spacing value" />
                             <TextInput id="spacing_value" v-model="form.spacing_value" class="mt-1 block w-full" required />
                             <InputError class="mt-2" :message="form.errors.spacing_value" />
@@ -178,6 +261,16 @@ const submit = () => form
                             </div>
                         </template>
                     </div>
+
+                    <p v-if="previewError" class="rounded-md border border-rose-700 bg-rose-950 p-4 text-sm text-rose-200">
+                    {{ previewError }}
+                </p>
+                <PlanPreview
+                    :plan="preview?.plan"
+                    :limits="preview?.limits"
+                    :market="preview?.market"
+                    :loading="previewLoading"
+                />
 
                     <div class="flex items-center gap-4">
                         <PrimaryButton :disabled="form.processing">Save changes</PrimaryButton>

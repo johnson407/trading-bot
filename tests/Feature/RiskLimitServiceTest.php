@@ -4,6 +4,7 @@ use App\Domain\Risk\Enums\RiskSeverity;
 use App\Domain\Risk\RiskEventRecorder;
 use App\Domain\Risk\RiskLimitService;
 use App\Models\Bot;
+use App\Models\RiskLimit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -26,6 +27,22 @@ it('falls back to the user limits until a bot override is created', function () 
     expect($override->scope->value)->toBe('bot')
         ->and($service->forBot($bot)->is($override))->toBeTrue()
         ->and($service->limitsFor($bot)['bot']->is($override))->toBeTrue();
+});
+
+it('resolves effective user limits without writing a row', function () {
+    $user = User::factory()->create();
+    $service = app(RiskLimitService::class);
+
+    $limits = $service->effectiveForUser($user);
+
+    expect($limits['max_position_notional']->toString())->toBe('1000')
+        ->and($limits['max_open_orders'])->toBe(20)
+        ->and($limits['daily_loss_limit']->toString())->toBe('100')
+        ->and(RiskLimit::count())->toBe(0);
+
+    $service->updateForUser($user, ['max_open_orders' => 7]);
+
+    expect($service->effectiveForUser($user)['max_open_orders'])->toBe(7);
 });
 
 it('updates global and per-bot risk limits', function () {

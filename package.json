@@ -5,7 +5,7 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
-        "test:js": "node --test resources/js/Support/money.test.js"
+        "test:js": "node --test resources/js/Support/*.test.js"
     },
     "devDependencies": {
         "@inertiajs/vue3": "^2.0.0",

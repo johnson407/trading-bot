@@ -1,9 +1,18 @@
 <?php
 
+use App\Actions\StartBot;
+use App\Domain\Bot\BotTickPipeline;
+use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Models\Bot;
+use App\Models\Grid;
+use App\Models\GridLevel;
 use App\Models\StrategyConfig;
 use App\Models\User;
+use App\Services\Exchange\ExchangeClientFactory;
+use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
+use Tests\Fixtures\FakeExchangeClient;
 
 uses(RefreshDatabase::class);
 
@@ -121,8 +130,8 @@ it('rejects an update from another user', function () {
 it('preserves the grid, strategy state, fee and identity when only non-structural fields change', function () {
     $user = User::factory()->create();
     $bot = updatableBot($user);
-    $grid = \App\Models\Grid::factory()->for($bot)->create(['center_price' => '50000']);
-    $level = \App\Models\GridLevel::factory()->for($grid)->create(['sequence' => 1, 'price' => '49900']);
+    $grid = Grid::factory()->for($bot)->create(['center_price' => '50000']);
+    $level = GridLevel::factory()->for($grid)->create(['sequence' => 1, 'price' => '49900']);
 
     $this->actingAs($user)
         ->patch(route('bots.update', $bot), [
@@ -163,7 +172,7 @@ it('resets strategy state and retires the grid when structural parameters change
         'fill_count' => 3,
     ]]])->save();
 
-    $grid = \App\Models\Grid::factory()->for($bot)->create([
+    $grid = Grid::factory()->for($bot)->create([
         'center_price' => '50000',
         'status' => 'active',
     ]);
@@ -189,10 +198,10 @@ it('applies edited structural parameters on the next tick', function () {
         'fill_count' => 3,
     ]]])->save();
 
-    \App\Models\Grid::factory()->for($bot)->create(['center_price' => '50000', 'status' => 'active']);
+    Grid::factory()->for($bot)->create(['center_price' => '50000', 'status' => 'active']);
 
-    $fake = new \Tests\Fixtures\FakeExchangeClient(price: '195');
-    app()->instance(\App\Services\Exchange\ExchangeClientFactory::class, new \App\Services\Exchange\ExchangeClientFactory($fake, $fake));
+    $fake = new FakeExchangeClient(price: '195');
+    app()->instance(ExchangeClientFactory::class, new ExchangeClientFactory($fake, $fake));
 
     $this->actingAs($user)->patch(route('bots.update', $bot), [
         'name' => 'Edited grid',
@@ -205,8 +214,8 @@ it('applies edited structural parameters on the next tick', function () {
         'order_quantity' => '1',
     ])->assertRedirect(route('bots.show', $bot));
 
-    app(\App\Actions\StartBot::class)->handle($bot->fresh());
-    app(\App\Domain\Bot\BotTickPipeline::class)->tick($bot->fresh());
+    app(StartBot::class)->handle($bot->fresh());
+    app(BotTickPipeline::class)->tick($bot->fresh());
 
     $grid = $bot->fresh()->activeGrid;
     $prices = $grid->levels->sortBy('sequence')->pluck('price')->all();
@@ -218,6 +227,47 @@ it('applies edited structural parameters on the next tick', function () {
             '220.0000000000000000',
             '240.0000000000000000',
         ]);
+});
+
+it('rejects an update that cannot be constructed and leaves the bot unchanged', function (array $overrides) {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $config = StrategyConfig::query()->where('bot_id', $bot->id)->firstOrFail();
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload($overrides))
+        ->assertSessionHasErrors('spacing_value');
+
+    expect($bot->fresh()->name)->toBe('Old name')
+        ->and($bot->fresh()->capital_allocation)->toBe('1000.0000000000000000')
+        ->and($config->fresh()->configuration)
+        ->toMatchArray(['center_price' => '50000', 'spacing_value' => '100'])
+        ->and($config->fresh()->state['data']['fill_count'])->toBe(3);
+})->with([
+    'geometric spacing of one' => [['spacing_type' => 'geometric', 'spacing_value' => '1']],
+    'non-positive level price' => [['center_price' => '100', 'spacing_value' => '100']],
+    'duplicate level prices' => [['spacing_value' => '0.000000000000000001']],
+]);
+
+it('rejects an update below the exchange minimum when market data is cached', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+
+    app(MarketDataResolver::class)->prime(
+        'binance',
+        MarketData::make('BTC/USDT', '50000', null, null, 2, 6, '0.000001', '1000'),
+    );
+
+    try {
+        $this->actingAs($user)
+            ->patch(route('bots.update', $bot), updatePayload(['order_quantity' => '0.005']))
+            ->assertSessionHasErrors('order_quantity');
+
+        expect($bot->fresh()->name)->toBe('Old name')
+            ->and($bot->fresh()->capital_allocation)->toBe('1000.0000000000000000');
+    } finally {
+        Cache::flush();
+    }
 });
 
 it('rejects missing strategy fields with validation errors instead of a server error', function (string $strategy, string $field, array $configuration) {

@@ -36,6 +36,12 @@ return [
         'fee_rate' => env('TRADING_PAPER_FEE_RATE', '0'),
     ],
 
+    'market_data' => [
+        // Previews and the "use current price" control share a short cache so
+        // the form does not hammer the exchange on every keystroke.
+        'cache_seconds' => (int) env('TRADING_MARKET_DATA_CACHE_SECONDS', 60),
+    ],
+
     'tick' => [
         'interval_seconds' => (int) env('TRADING_TICK_INTERVAL', 60),
         'stale_after_seconds' => (int) env('TRADING_STALE_TICK_SECONDS', 180),

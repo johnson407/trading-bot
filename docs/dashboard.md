@@ -38,19 +38,44 @@ Feature test: `tests/Feature/BotListTest.php`.
 
 ## Create bot — `GET /bots/create` (`bots.create`) and `POST /bots` (`bots.store`)
 
-The form captures name, exchange (from the `TRADING_EXCHANGES` allowlist), symbol, strategy, mode, capital
-allocation, fee rate, center price, level count, spacing type/value, order
-quantity, and strategy-specific parameters (trailing distance, martingale size
-multiplier/caps, dynamic volatility min/max/multiplier/interval).
+The page has two modes. **Quick setup** asks for name, exchange, symbol, capital,
+and center price, then derives the ladder from a preset. **Advanced** exposes the
+full parameter set: strategy, fee rate, center price, level count, spacing
+type/value, order quantity, and strategy-specific parameters (trailing distance,
+martingale size multiplier/caps, dynamic volatility min/max/multiplier/interval).
+Switching from quick to advanced keeps every derived value, so the bot can be
+fine-tuned without retyping it.
+
+Quick-setup presets are symbol-agnostic: percentage spacing maps to geometric
+spacing, and order quantity is derived from
+`capital x utilization / (levels per side x center price)`. The four presets are
+`balanced`, `tight`, `wide` (simple grid) and `trailing` (trailing grid); they
+stay within the default 20-order and 1000-quote risk limits at a 1000 capital
+allocation. Martingale and dynamic grids remain advanced-only.
+
+The form shows a live ladder preview before saving. It calls
+`POST /bots/preview` (`bots.preview`), which validates the setup and returns
+levels, per-order size, notional totals, effective risk limits, and advisories
+without writing anything. `GET /bots/market-data` (`bots.market-data`) supplies
+the optional current-price button; when the exchange is unreachable the form
+falls back to a manually entered center price.
 
 - Mode defaults to **paper**.
 - Live mode requires a stored exchange credential and the live configuration gate.
-- Invalid symbol, capital, levels, spacing, quantity, fee, strategy, or missing
-  strategy-specific parameters are rejected with field errors.
+- Invalid symbol, capital, levels, spacing, quantity, fee, strategy, missing
+  strategy-specific parameters, unbuildable geometry, and orders below exchange
+  minimums (when market data is available) are rejected with field errors.
+- Advisory conditions never block saving: order count above the open-order cap,
+  buy notional above the position cap, a center price far from the market, and
+  unfunded sells. They are warnings, while risk limits stay enforced per order at
+  tick time.
 - Creation also creates the strategy configuration and user/bot risk limits, and
   records `bot.created`.
+- Dynamic grids do not ask for spacing type or value; spacing comes from the
+  volatility parameters.
 
-Feature test: `tests/Feature/BotCreationTest.php`.
+Feature tests: `tests/Feature/BotCreationTest.php`, `tests/Feature/BotPreviewTest.php`,
+`tests/Feature/MarketDataTest.php`.
 
 ## Bot detail — `GET /bots/{bot}` (`bots.show`)
 
@@ -102,7 +127,9 @@ Feature test: `tests/Feature/BotControlTest.php`.
 
 ## Edit — `GET /bots/{bot}/edit` and `PATCH /bots/{bot}`
 
-Only the owner may edit, and only while the bot is idle or stopped. Editable
+The edit form renders the same ladder preview as creation, evaluated from the
+bot's current risk limits. The preview refreshes as editable fields change. Only the owner may edit, and
+only while the bot is idle or stopped. Editable
 fields are name, capital allocation, fee rate, and strategy parameters. Symbol,
 exchange, mode, and strategy are immutable; submitted values for them are ignored.
 Updates preserve the existing grid, strategy state, and inventory when the

@@ -4,18 +4,19 @@ namespace App\Providers;
 
 use App\Domain\Backtest\Contracts\CandleProvider;
 use App\Domain\Strategy\StrategyRegistry;
+use App\Logging\RedactSecrets;
 use App\Models\BacktestRun;
-use App\Policies\BacktestRunPolicy;
-use App\Services\Backtest\CcxtCandleProvider;
-use App\Services\Exchange\ExchangeClientFactory;
-use App\Strategies\SimpleGridStrategy;
-use App\Strategies\TrailingGridStrategy;
-use App\Strategies\MartingaleGridStrategy;
-use App\Strategies\DynamicGridStrategy;
 use App\Models\Bot;
 use App\Models\ExchangeCredential;
+use App\Policies\BacktestRunPolicy;
 use App\Policies\BotPolicy;
 use App\Policies\ExchangeCredentialPolicy;
+use App\Services\Backtest\CcxtCandleProvider;
+use App\Services\Exchange\ExchangeClientFactory;
+use App\Strategies\DynamicGridStrategy;
+use App\Strategies\MartingaleGridStrategy;
+use App\Strategies\SimpleGridStrategy;
+use App\Strategies\TrailingGridStrategy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -23,6 +24,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Monolog\Logger;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -44,14 +46,17 @@ class AppServiceProvider extends ServiceProvider
         Vite::prefetch(concurrency: 3);
 
         RateLimiter::for('bot-control', fn (Request $request) => Limit::perMinute(30)->by($request->user()?->id ?: $request->ip()));
+        // Preview traffic is a convenience loop and must not consume the quota
+        // that pause/stop rely on.
+        RateLimiter::for('bot-preview', fn (Request $request) => Limit::perMinute(120)->by($request->user()?->id ?: $request->ip()));
         RateLimiter::for('kill-switch', fn (Request $request) => Limit::perMinute(5)->by($request->user()?->id ?: $request->ip()));
         RateLimiter::for('exchange-credentials', fn (Request $request) => Limit::perMinute(10)->by($request->user()?->id ?: $request->ip()));
         RateLimiter::for('backtests', fn (Request $request) => Limit::perMinute(30)->by($request->user()?->id ?: $request->ip()));
 
         $logger = Log::getLogger();
 
-        if ($logger instanceof \Monolog\Logger) {
-            $logger->pushProcessor(new \App\Logging\RedactSecrets);
+        if ($logger instanceof Logger) {
+            $logger->pushProcessor(new RedactSecrets);
         }
 
         Gate::policy(Bot::class, BotPolicy::class);

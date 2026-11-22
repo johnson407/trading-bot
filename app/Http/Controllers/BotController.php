@@ -3,13 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Actions\CreateBot;
-use App\Domain\Activity\ActivityRecorder;
 use App\Actions\PauseBot;
 use App\Actions\StartBot;
 use App\Actions\StopBot;
+use App\Domain\Activity\ActivityRecorder;
 use App\Domain\Bot\CancelBotOrders;
 use App\Domain\Bot\Enums\BotStatus;
+use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Domain\Grid\Enums\GridStatus;
+use App\Domain\Grid\GridPlanEvaluator;
+use App\Domain\Grid\PresetResolver;
+use App\Domain\Grid\ValueObjects\GridPlanRequest;
 use App\Domain\Order\Enums\OrderStatus;
 use App\Domain\Portfolio\InventoryLedger;
 use App\Domain\Portfolio\MarkPrice;
@@ -18,13 +22,16 @@ use App\Domain\Risk\RiskLimitService;
 use App\Domain\Risk\ValueObjects\LiveStartConfirmation;
 use App\Domain\Strategy\StrategyRegistry;
 use App\Domain\Support\Decimal;
+use App\Http\Requests\PreviewBotRequest;
 use App\Http\Requests\StoreBotRequest;
 use App\Http\Requests\UpdateBotRequest;
 use App\Http\Resources\BotSummaryResource;
 use App\Models\ActivityLog;
 use App\Models\Bot;
 use App\Models\RiskEvent;
+use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -56,12 +63,74 @@ class BotController extends Controller
         ]);
     }
 
-    public function create(StrategyRegistry $strategies): Response
+    public function create(StrategyRegistry $strategies, PresetResolver $presets): Response
     {
         return Inertia::render('Bots/Create', [
             'strategies' => collect($strategies->all())->map(fn ($strategy) => ['key' => $strategy->key()])->values(),
             'exchanges' => array_values(config('trading.exchanges', ['binance'])),
+            'presets' => $presets->all(),
+            'feeRate' => (string) config('trading.paper.fee_rate', '0'),
         ]);
+    }
+
+    public function preview(
+        PreviewBotRequest $request,
+        GridPlanEvaluator $evaluator,
+        MarketDataResolver $markets,
+    ): JsonResponse {
+        $plan = $evaluator->evaluate($request->gridPlanRequest());
+        $limits = $request->effectiveLimits();
+        $market = $markets->cached((string) $request->input('exchange'), (string) $request->input('symbol'));
+
+        return response()->json([
+            'plan' => $plan->toArray(),
+            'errors' => array_map(fn ($problem) => $problem->toArray(), $plan->errors()),
+            'warnings' => array_map(fn ($problem) => $problem->toArray(), $plan->warnings()),
+            'limits' => $this->limitsPayload($limits),
+            'market' => $market === null ? null : $this->marketPayload($market),
+            'values' => $request->concreteValues(),
+        ]);
+    }
+
+    public function marketData(Request $request, MarketDataResolver $markets): JsonResponse
+    {
+        $data = $request->validate([
+            'exchange' => ['required', 'string', 'in:'.implode(',', config('trading.exchanges', ['binance']))],
+            'symbol' => ['required', 'string', 'regex:/^[A-Z0-9]{2,12}\/[A-Z0-9]{2,12}$/'],
+        ]);
+
+        $market = $markets->resolve((string) $data['exchange'], (string) $data['symbol']);
+
+        return response()->json([
+            'available' => $market !== null,
+            'market' => $market === null ? null : $this->marketPayload($market),
+        ]);
+    }
+
+    /** @param array<string, mixed> $limits @return array<string, mixed> */
+    private function limitsPayload(array $limits): array
+    {
+        return [
+            'max_position_notional' => $limits['max_position_notional']->toString(),
+            'max_open_orders' => $limits['max_open_orders'],
+            'daily_loss_limit' => $limits['daily_loss_limit']->toString(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function marketPayload(MarketData $market): array
+    {
+        return [
+            'symbol' => $market->symbol,
+            'last' => $market->last->toString(),
+            'bid' => $market->bid?->toString(),
+            'ask' => $market->ask?->toString(),
+            'price_precision' => $market->pricePrecision,
+            'amount_precision' => $market->amountPrecision,
+            'min_amount' => $market->minAmount->toString(),
+            'min_notional' => $market->minNotional->toString(),
+            'timestamp' => $market->timestamp?->format(DATE_ATOM),
+        ];
     }
 
     public function store(StoreBotRequest $request, CreateBot $createBot): RedirectResponse
@@ -150,16 +219,41 @@ class BotController extends Controller
         ]);
     }
 
-    public function edit(Bot $bot): Response
-    {
+    public function edit(
+        Bot $bot,
+        GridPlanEvaluator $evaluator,
+        MarketDataResolver $markets,
+        RiskLimitService $riskLimits,
+    ): Response {
         $this->authorize('view', $bot);
 
         $config = $bot->strategyConfig()->first();
+        $configuration = $config === null ? [] : $config->configuration;
+        $market = $markets->cached($bot->exchange, $bot->symbol);
+        $limits = $riskLimits->effectiveForBot($bot);
+
+        $plan = $configuration === []
+            ? null
+            : $evaluator->evaluate(new GridPlanRequest(
+                strategyKey: $bot->strategy_key,
+                configuration: $configuration,
+                symbol: $bot->symbol,
+                capitalAllocation: $bot->capital_allocation,
+                baseInventory: $bot->base_inventory,
+                marketPrice: $market?->last,
+                limits: $limits,
+                market: $market,
+            ));
 
         return Inertia::render('Bots/Edit', [
             'bot' => BotSummaryResource::make($bot)->resolve(),
-            'configuration' => $config === null ? [] : $config->configuration,
+            'configuration' => $configuration,
             'editable' => in_array($bot->status, [BotStatus::Idle, BotStatus::Stopped], true),
+            'preview' => $plan === null ? null : [
+                'plan' => $plan->toArray(),
+                'limits' => $this->limitsPayload($limits),
+                'market' => $market === null ? null : $this->marketPayload($market),
+            ],
         ]);
     }
 

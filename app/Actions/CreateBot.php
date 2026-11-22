@@ -7,7 +7,6 @@ use App\Domain\Risk\RiskLimitService;
 use App\Models\Bot;
 use App\Models\StrategyConfig;
 use App\Models\User;
-use App\Services\Exchange\ExchangeClientFactory;
 use Illuminate\Support\Facades\DB;
 
 class CreateBot
@@ -42,7 +41,7 @@ class CreateBot
                 'average_entry_price' => '0',
                 'realized_pnl' => '0',
                 'fees_paid' => '0',
-                'fee_rate' => (string) ($data['fee_rate'] ?? '0'),
+                'fee_rate' => (string) ($data['fee_rate'] ?? config('trading.paper.fee_rate', '0')),
                 'tick_interval_seconds' => max(1, (int) config('trading.tick.interval_seconds')),
                 'settings' => [],
             ]);

@@ -2,8 +2,14 @@
 
 namespace App\Http\Requests;
 
+use App\Domain\Exchange\ValueObjects\MarketData;
+use App\Domain\Grid\GridPlanEvaluator;
+use App\Domain\Grid\PresetResolver;
+use App\Domain\Grid\ValueObjects\GridPlanRequest;
+use App\Domain\Risk\RiskLimitService;
 use App\Domain\Strategy\StrategyRegistry;
 use App\Http\Requests\Concerns\BuildsStrategyConfiguration;
+use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -23,6 +29,21 @@ class StoreBotRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        // Quick setup trusts the selected preset, not the derived fields that
+        // happen to be in the browser when the form is submitted. Deriving here
+        // closes the race where a stale preview would otherwise be saved.
+        if ($this->filled('preset_key') && $this->filled('center_price') && $this->filled('capital_allocation')) {
+            try {
+                $this->merge(app(PresetResolver::class)->values(
+                    (string) $this->input('preset_key'),
+                    (string) $this->input('center_price'),
+                    (string) $this->input('capital_allocation'),
+                ));
+            } catch (\Throwable) {
+                // Let normal validation explain the invalid preset or values.
+            }
+        }
+
         $exchange = trim((string) ($this->input('exchange') ?? ''));
 
         if ($exchange === '') {
@@ -39,6 +60,7 @@ class StoreBotRequest extends FormRequest
 
         return [
             'name' => ['required', 'string', 'max:120'],
+            'preset_key' => ['nullable', 'string', Rule::in(app(PresetResolver::class)->keys())],
             'exchange' => ['required', 'string', Rule::in(config('trading.exchanges', ['binance']))],
             'symbol' => ['required', 'string', 'regex:/^[A-Z0-9]{2,12}\/[A-Z0-9]{2,12}$/'],
             'strategy_key' => ['required', 'string', Rule::in($strategies)],
@@ -47,8 +69,10 @@ class StoreBotRequest extends FormRequest
             'fee_rate' => ['nullable', 'numeric', 'min:0', 'max:0.1'],
             'center_price' => ['required', 'regex:/^\d+(\.\d+)?$/', 'gt:0'],
             'level_count' => ['required', 'integer', 'min:1', 'max:50'],
-            'spacing_type' => ['required', Rule::in(['arithmetic', 'geometric'])],
-            'spacing_value' => ['required', 'regex:/^\d+(\.\d+)?$/', 'gt:0'],
+            // Dynamic grids choose their own spacing, so the shared geometry
+            // fields are not required for them and are hidden in the form.
+            'spacing_type' => ['nullable', 'required_unless:strategy_key,dynamic-grid', Rule::in(['arithmetic', 'geometric'])],
+            'spacing_value' => ['nullable', 'required_unless:strategy_key,dynamic-grid', 'regex:/^\d+(\.\d+)?$/', 'gt:0'],
             'order_quantity' => ['required', 'regex:/^\d+(\.\d+)?$/', 'gt:0'],
             'trailing_distance' => ['nullable', 'regex:/^\d+(\.\d+)?$/', 'gt:0'],
             'size_multiplier' => ['nullable', 'numeric', 'gt:1'],
@@ -89,7 +113,37 @@ class StoreBotRequest extends FormRequest
             }
 
             $this->validateStrategyFields($validator, $this->input('strategy_key'));
+
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            $plan = app(GridPlanEvaluator::class)->evaluate($this->gridPlanRequest());
+
+            foreach ($plan->errors() as $problem) {
+                $validator->errors()->add($problem->field ?? 'strategy_key', $problem->message);
+            }
         });
+    }
+
+    public function gridPlanRequest(?MarketData $market = null): GridPlanRequest
+    {
+        $symbol = (string) $this->input('symbol');
+        $exchange = (string) $this->input('exchange');
+
+        $market ??= app(MarketDataResolver::class)->cached($exchange, $symbol);
+
+        return new GridPlanRequest(
+            strategyKey: (string) $this->input('strategy_key'),
+            configuration: $this->strategyConfiguration(),
+            symbol: $symbol,
+            capitalAllocation: (string) $this->input('capital_allocation'),
+            marketPrice: $market?->last,
+            limits: $this->user() !== null
+                ? app(RiskLimitService::class)->effectiveForUser($this->user())
+                : null,
+            market: $market,
+        );
     }
 
     /** @return array<string, mixed> */

@@ -15,6 +15,7 @@ it('renders the edit page with the current configuration for an idle bot', funct
         'name' => 'Editable',
         'symbol' => 'BTC/USDT',
         'exchange' => 'binance',
+        'fee_rate' => '0.0015',
     ]);
 
     StrategyConfig::factory()->for($bot)->create([
@@ -37,9 +38,12 @@ it('renders the edit page with the current configuration for an idle bot', funct
             ->where('bot.id', $bot->id)
             ->where('bot.name', 'Editable')
             ->where('bot.symbol', 'BTC/USDT')
+            ->where('bot.fee_rate', '0.00150000')
             ->where('configuration.center_price', '50000')
             ->where('configuration.levels_per_side', 6)
             ->where('editable', true)
+            ->where('preview.plan.order_count', 12)
+            ->where('preview.limits.max_open_orders', 20)
             ->etc());
 });
 
