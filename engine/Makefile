@@ -2,7 +2,10 @@
 # image. Keep GO_VERSION in sync with the Dockerfile build stage.
 GO_VERSION ?= 1.24
 GO_IMAGE ?= golang:$(GO_VERSION)-alpine
-DOCKER_RUN = docker run --rm -v "$(CURDIR):/src" -w /src -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod $(GO_IMAGE)
+# Mount the repository root, not only engine/: the golden parity tests read the
+# committed fixtures under tests/golden/engine.
+REPO_ROOT := $(abspath $(CURDIR)/..)
+DOCKER_RUN = docker run --rm -v "$(REPO_ROOT):/src" -w /src/engine -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod $(GO_IMAGE)
 
 .PHONY: test fmt vet build tidy
 

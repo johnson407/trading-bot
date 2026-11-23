@@ -4,6 +4,17 @@ These fixtures are a deterministic snapshot of the **current committed PHP
 engine**, captured before the phase-4 Go ports. They are inputs for the Go
 tests in later tasks (4.2–4.8) and are not used by the runtime.
 
+The Go parity tests read these committed files directly from the repository
+root (via `engine/internal/goldenfixture`). Do not copy them into `engine/`:
+the files here remain authoritative. Run the Go suite with the repository root
+mounted, for example:
+
+```bash
+docker run --rm -v "$PWD:/src" -w /src/engine \
+  -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod \
+  golang:1.24-alpine go test ./...
+```
+
 The capture harness calls the production classes directly. It does not
 reimplement, wrap, or change engine behaviour:
 

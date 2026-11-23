@@ -1,13 +1,15 @@
 # Trading engine (Go)
 
 This directory is the Go trading engine for the hybrid layout described in
-`openspec/changes/adopt-hybrid-go-engine/`. **Phase 3 adds the public
-market-data library and its opt-in process hook; there are still:**
+`openspec/changes/adopt-hybrid-go-engine/`. **Phase 4.2/4.3 adds the tick-loop
+semantics and the grid generator/sync port; there are still:**
 
-- no strategies, orders, fills, risk gates, or credential decryption;
+- no strategies, paper fills, orders, risk gates, or credential decryption;
 - no private, signed, or user-data exchange calls and no API keys;
 - **no exchange connection by default** — the Compose service sets no market
-  data endpoints, so the feed stays idle.
+  data endpoints, so the feed stays idle;
+- **no runtime wiring**: the Go tick scheduler and grid sync are libraries only,
+  not started by `main`.
 
 Laravel remains the only trading runtime until the later apply phases land. The
 phase-2 command processor rejects commands it receives (`handler_not_available`)
@@ -17,9 +19,9 @@ The full protocol, ordering, dead-letter, kill-switch, heartbeat, and status
 ownership contract is documented in [`../docs/engine.md`](../docs/engine.md).
 
 PHP golden fixtures for the later phase-4 ports are committed under
-`../tests/golden/engine/` (see `../tests/golden/README.md`).
-They are a snapshot of current PHP behaviour only; this Go build does not read
-or execute them yet.
+`../tests/golden/engine/` (see `../tests/golden/README.md`). They are a snapshot
+of current PHP behaviour only; the Go parity tests read the committed originals
+directly from the repository root and do not vendor a second copy.
 
 ## What it does today
 
@@ -64,6 +66,26 @@ The server listens on `ENGINE_LISTEN_ADDR` (default `:8080`). The Compose
 healthcheck runs `/engine healthcheck`, which performs an in-container
 `GET /healthz`; it never contacts an exchange.
 
+### Tick and grid ports (phase 4.2/4.3)
+
+`internal/tick` ports the PHP `bots:dispatch` due-check (60s default, 1s
+minimum), the per-interval cache guard, the `RunBotTick` unique/overlap policy,
+and `BotHealthMonitor`'s `max(stale, interval + health)` threshold. It also
+provides an in-process scheduler and one-evaluation-per-bot tracker. None of it
+is started by `main`, and it has no database or Redis source yet.
+
+`internal/grid` ports `GridGenerator` (arithmetic, geometric, and dynamic
+ladders plus validation), `GridDerivation`, and the `BotTickPipeline` grid
+create/match/cancel/recenter path. Both packages are proven against the
+committed `tick_loop.json`, `grid_generation.json`, and `grid_sync.json`
+fixtures. The `grid_sync` fixture is end-to-end for the PHP pipeline; phase
+4.2/4.3 asserts its grid and order lifecycle slices, while paper fills and
+strategy decisions remain tasks 4.4-4.8.
+
+`internal/decimal` implements PHP `Decimal` scale-16 bcmath semantics: add/sub
+and multiply truncate at 16 places, divide truncates at 17 then rounds half-up
+to 16, comparisons truncate at 16, and values reject floats.
+
 ## Configuration
 
 All values come from the environment, mirroring the `app` service:
@@ -106,6 +128,10 @@ engine/
   internal/idempotency/       engine:cmd:{id} store (>= 7 day TTL)
   internal/heartbeat/         engine:heartbeat writer and freshness check
   internal/marketdata/        public Binance WS feed, gap/quiet recovery, REST fallback
+  internal/decimal/           PHP Decimal scale-16 bcmath-compatible arithmetic
+  internal/tick/              bots:dispatch due-check, overlap, stale threshold
+  internal/grid/              grid generation, derivation, create/match/recenter
+  internal/goldenfixture/     locates tests/golden/engine for parity tests
   internal/health/            /healthz and /livez handlers
   internal/healthcheck/       in-container Compose probe
   Dockerfile                  multi-stage build, distroless non-root runtime
@@ -124,11 +150,19 @@ make test
 ```
 
 This host (and some apply environments) may not have `make` or a local Go toolchain.
-The Makefile recipe is equivalent to:
+The Makefile mounts the **repository root** (not only `engine/`) so the tests can
+read `tests/golden/engine/*.json`. The equivalent recipes are:
 
 ```bash
-cd engine
-docker run --rm -v "$PWD:/src" -w /src golang:1.24-alpine go test ./...
+# from the repository root
+docker run --rm -v "$PWD:/src" -w /src/engine \
+  -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod \
+  golang:1.24-alpine go test ./...
+
+# from engine/
+docker run --rm -v "$PWD/..:/src" -w /src/engine \
+  -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod \
+  golang:1.24-alpine go test ./...
 ```
 
 Other targets: `make vet`, `make fmt` (lists unformatted files), `make tidy`,
@@ -140,6 +174,12 @@ Binance or any other exchange, need no credentials, and do not require the
 Compose Redis or a live Postgres. The market-data suite covers subscription,
 reconnect with backoff, trade-id gap detection, quiet-period recovery, periodic
 REST fallback, and disconnect → REST snapshot → resumed socket.
+
+The tick and grid parity tests read the committed PHP golden fixtures. They
+cover due-check interval/minimum/paused-stopped skips, the cache guard, job
+uniqueness/overlap policy, stale thresholds, arithmetic/geometric/dynamic grid
+generation, derivation errors, grid creation, level matching, fill-driven sync,
+and trailing recenter.
 
 ## Docker
 

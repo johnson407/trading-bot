@@ -7,11 +7,13 @@ Stream protocol, command/event types, delivery and ordering rules, status
 ownership, and the heartbeat.
 
 > **Current phase:** the Go engine under `engine/` implements the contract,
-> consumer, idempotency, heartbeat, and `/healthz` readiness. It does **not**
-> yet run ticks, strategies, orders, or backtests, and it makes no exchange
-> calls. Laravel is still the trading runtime until the later apply phases.
-> Any command received by this build is rejected with an
-> `engine.command_failed` event and never executed.
+> consumer, idempotency, heartbeat, public market data, `/healthz` readiness,
+> and the phase-4.2/4.3 tick-loop and grid libraries. The tick scheduler and
+> grid sync are **not wired into the process**: this build does **not** run
+> ticks, strategies, orders, or backtests, and it makes no exchange calls.
+> Laravel is still the trading runtime until the later apply phases. Any
+> command received by this build is rejected with an `engine.command_failed`
+> event and never executed.
 
 ## Streams
 
@@ -229,11 +231,25 @@ See [`../tests/golden/README.md`](../tests/golden/README.md) for the fixture
 layout, coverage mapping, determinism rules (fixed clock, fixed paper fee,
 `Decimal` scale 16), and the exact regeneration command.
 
+`internal/tick` and `internal/grid` are pure libraries proven against
+`tick_loop.json`, `grid_generation.json`, and `grid_sync.json`. They are not
+started by `main`; the tick scheduler needs a PostgreSQL bot source and the
+grid sync needs a persistence layer before later phases can wire them in.
+`internal/decimal` matches PHP bcmath at scale 16 (truncating multiply/add,
+17-digit divide rounded half-up to 16) and rejects floats.
+
 ## Local verification
+
+The repository root is mounted so Go tests can read the committed fixtures:
 
 ```bash
 cd engine
-make test        # or: docker run --rm -v "$PWD:/src" -w /src golang:1.24-alpine go test ./...
+make test
+
+# equivalent from the repository root
+docker run --rm -v "$PWD:/src" -w /src/engine \
+  -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod \
+  golang:1.24-alpine go test ./...
 ```
 
 The Go tests use `miniredis`, fake WebSocket servers, and `httptest`. They do
