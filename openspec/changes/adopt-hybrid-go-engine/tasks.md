@@ -2,15 +2,15 @@
 
 ## 0. Guardrails (every phase)
 
-- [ ] 0.1 Do not edit `openspec/changes/add-qnap-ci-deploy/`, `docker-compose.prod.yml`, or the GHCR/CI workflow in this change; verify with a scoped `git status`.
-- [ ] 0.2 Do not read or edit `.env` secrets, do not set `TRADING_LIVE_ENABLED=true`, and do not call authenticated live exchange endpoints; verify apply notes and CI stay paper/testnet-opt-in only.
-- [ ] 0.3 After each phase, run `openspec validate adopt-hybrid-go-engine --strict` until the change is archived. For any Laravel work in that phase, keep `docker compose exec` Pest (README testing env overrides) and PHPStan green. For any Go work in that phase, run the `engine` `make test` target and keep it green. Phase work is not done without those proofs.
+- [x] 0.1 Do not edit `openspec/changes/add-qnap-ci-deploy/`, `docker-compose.prod.yml`, or the GHCR/CI workflow in this change; verify with a scoped `git status`.
+- [x] 0.2 Do not read or edit `.env` secrets, do not set `TRADING_LIVE_ENABLED=true`, and do not call authenticated live exchange endpoints; verify apply notes and CI stay paper/testnet-opt-in only.
+- [x] 0.3 After each phase, run `openspec validate adopt-hybrid-go-engine --strict` until the change is archived. For any Laravel work in that phase, keep `docker compose exec` Pest (README testing env overrides) and PHPStan green. For any Go work in that phase, run the `engine` `make test` target and keep it green. Phase work is not done without those proofs.
 
 ## 1. Go skeleton and local engine service
 
-- [ ] 1.1 Create the Go module under `engine/` with a `main` that serves `GET /healthz` (liveness/readiness without calling an exchange) and writes a documentation-only heartbeat stub; verify `make test` in `engine/` (or the equivalent documented target) passes.
-- [ ] 1.2 Add a multi-stage Dockerfile (non-root, distroless or alpine runtime) and an `engine` service to local `docker-compose.yml` with healthcheck, `depends_on` healthy Postgres and Redis, and the same `APP_KEY` / `DB_*` / `REDIS_*` / `TRADING_LIVE_ENABLED` (default false) environment pattern as `app`; verify `docker compose ps` shows `engine` healthy without placing orders.
-- [ ] 1.3 Add a required `make test` target in `engine/` (for example `go test ./...`) and document it in the README or `engine/README.md`. This target is a required gate for every later Go phase. Record that GHCR/CI will run it only in the later QNAP follow-up (no GHCR edit in this change); verify the command is documented and `make test` exits zero.
+- [x] 1.1 Create the Go module under `engine/` with a `main` that serves `GET /healthz` (liveness/readiness without calling an exchange) and writes a documentation-only heartbeat stub; verify `make test` in `engine/` (or the equivalent documented target) passes.
+- [x] 1.2 Add a multi-stage Dockerfile (non-root, distroless or alpine runtime) and an `engine` service to local `docker-compose.yml` with healthcheck, `depends_on` healthy Postgres and Redis, and the same `APP_KEY` / `DB_*` / `REDIS_*` / `TRADING_LIVE_ENABLED` (default false) environment pattern as `app`; verify `docker compose ps` shows `engine` healthy without placing orders.
+- [x] 1.3 Add a required `make test` target in `engine/` (for example `go test ./...`) and document it in the README or `engine/README.md`. This target is a required gate for every later Go phase. Record that GHCR/CI will run it only in the later QNAP follow-up (no GHCR edit in this change); verify the command is documented and `make test` exits zero.
 
 ## 2. Command/event contract and status ownership
 

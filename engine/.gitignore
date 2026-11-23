@@ -1,0 +1,12 @@
+# Build output
+/bin/
+/engine
+/engine-linux-*
+*.test
+coverage.out
+coverage.html
+
+# Go tooling scratch files
+__debug_bin*
+.idea/
+.vscode/

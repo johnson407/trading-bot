@@ -33,7 +33,7 @@ The MVP is implemented:
 | Exchange | CCXT, Binance by default |
 | Queue and cache | Redis, Laravel Horizon |
 | Database | PostgreSQL 16+ |
-| Local runtime | Docker Compose (app, Nginx, PostgreSQL, Redis, Horizon, scheduler) |
+| Local runtime | Docker Compose (app, Nginx, PostgreSQL, Redis, Horizon, scheduler, Go engine skeleton) |
 
 ## Requirements
 
@@ -91,8 +91,28 @@ docker compose down
 ```
 
 The entrypoint waits for PostgreSQL, generates `APP_KEY` when needed, and runs
-`php artisan migrate --force`. The app, Nginx, PostgreSQL, Redis, Horizon, and
-scheduler services each have health checks.
+`php artisan migrate --force`. The app, Nginx, PostgreSQL, Redis, Horizon,
+scheduler, and Go engine services each have health checks.
+
+## Go engine skeleton
+
+`engine/` is the Go trading engine from the
+`adopt-hybrid-go-engine` change. Phase 1 is a skeleton only: it serves
+`GET /healthz` (readiness: PostgreSQL and Redis reachable) and `GET /livez`
+(liveness), and makes no exchange calls, consumes no commands, and places no
+orders. Laravel remains the trading runtime until the engine phases land.
+
+There is no Go toolchain on the host. Run its tests through Docker:
+
+```bash
+cd engine
+make test
+```
+
+See [engine/README.md](engine/README.md) for endpoints, environment variables,
+the documentation-only heartbeat stub, and the multi-stage image. Adding the
+engine to production Compose, GHCR, and CI is deferred to the follow-up after
+`add-qnap-ci-deploy`.
 
 ## Production deployment (QNAP NAS)
 
@@ -301,6 +321,7 @@ app/
   Actions/         Bot controls, credentials, kill switch
   Http/            Controllers, requests, resources
   Models/          Eloquent persistence
+engine/            Go engine skeleton (health endpoints only in phase 1)
 docs/              Bot parameters, strategies, exchanges, risk, runtime, dashboard, security, deployment
 openspec/          Change proposals and capability specs
 ```
@@ -315,6 +336,7 @@ openspec/          Change proposals and capability specs
 - [Dashboard flows](docs/dashboard.md)
 - [Security checklist](docs/security.md)
 - [Production deployment](docs/deployment.md)
+- [Go engine skeleton](engine/README.md)
 
 ## OpenSpec workflow
 
