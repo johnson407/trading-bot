@@ -14,7 +14,7 @@ The trade-off is real: two languages, two deployable units, and a rewrite of the
 - Binance WebSocket for trading market data, with reconnect, gap detection, and REST fallback. Paper fills keep the current `PaperExchangeClient::qualifyingFills` semantics (evaluated from the market last at tick time).
 - Local `docker-compose.yml` gains an `engine` service. Horizon and the Laravel scheduler are trimmed to leftover management work (alerts, analytics). `bots:health` and `backtests:fail-stale` move to the engine. Production Compose and the CI image build are deferred and noted so they can land after `add-qnap-ci-deploy`. Phase 8 (PHP engine deletion) is not deployable to the QNAP `main` path until that follow-up lands.
 - Port `TRADING_LIVE_ENABLED`, `LiveModeGuard`, `RiskGuard`, `DailyLossMonitor`, the exit guard, `ConsecutiveFailureTracker`, and the exchange allowlist into Go as the single blocking pre-trade implementation. No live-to-paper fallback. Go decrypts Eloquent-`encrypted` credentials (`Crypt::encryptString` format: AES-256-CBC, HMAC-SHA256, not PHP-serialized) with the shared `APP_KEY` (and `previous_keys`) and never logs secrets.
-- Remove the PHP tick pipeline, strategies, order services, sync/reconcile jobs, related scheduler entries, and the PHP backtest engine after golden fixtures are captured and the Go port is proven. `CancelBotOrders` stays for the emergency path. A written cutover plan and operator runbook require a drain and forbid running the PHP and Go engines at the same time.
+- Remove the PHP tick pipeline, strategies, order services, sync/reconcile jobs, related scheduler entries, and the PHP backtest engine after golden fixtures are captured and the Go port is proven. `CancelBotOrders` stays for the emergency path. The PHP engine workers are already stopped; phase 8 is a direct swap that deletes the PHP engine. There is no drain-Horizon or adopt-open-orders-from-PHP transition, and no operator runbook for running both engines.
 
 ## Capabilities
 
@@ -35,12 +35,14 @@ None. Runtime, connectivity, grid, strategy, risk, backtesting, and dashboard be
 ## Impact
 
 - New tree for the Go module and its tests (proposed `engine/`), plus a new Compose service. Laravel application code, jobs, scheduler entries, and the PHP backtest engine are removed in a late apply phase, not in this proposal, except `CancelBotOrders` which is retained.
-- Docs: `README.md`, `docs/runtime.md` (including the cutover runbook), `docs/exchanges.md`, `docs/deployment.md` (note only; no prod Compose edit yet), `docs/backtesting.md`, `docs/risk.md`, `docs/security.md`.
+- Docs: `README.md`, `docs/runtime.md`, `docs/exchanges.md`, `docs/deployment.md` (note only; no prod Compose edit yet), `docs/backtesting.md`, `docs/risk.md`, `docs/security.md`.
 - This change does not modify `openspec/changes/add-qnap-ci-deploy/` or production/CI files. Those must later add the engine image, Compose service, health checks, and `go test` in CI. Until then, a phase-8 SHA must not be deployed to QNAP from `origin/main`.
 - Out of scope for this change: enabling live trading, hitting live exchange endpoints, changing the 5s browser poll to WebSockets, a per-bot tick-interval UI, and finishing QNAP deploy.
 
 ## Confirmed decisions
 
 Johnson confirmed: Go writes the trading tables listed in the design; Laravel owns all migrations; hard cutover with no PHP engine fallback; backtesting moves to Go; this change proceeds ahead of the unfinished QNAP work without editing that change.
+
+Johnson later confirmed he will not use the current PHP engine. Those workers are already stopped, and the remaining swap is direct: delete the PHP engine in phase 8. No drain-Horizon runbook, adopt-open-orders-from-PHP path, or no-overlap operator runbook is required. The kill-switch emergency cancel via `CancelBotOrders`, the live gate, the phase 8 QNAP release gate, and engine restart recovery for the engine's own open orders remain.
 
 After review, Johnson also confirmed: an expired engine heartbeat is a warning only (no automatic pause, cancel, or kill-switch); the kill-switch and live-stop emergency cancel is user-triggered and runs in Laravel via `CancelBotOrders` when the heartbeat is missing or expired or Redis `XADD` fails; `desired_status` is split from runtime `status`, and `last_error` is engine-owned.

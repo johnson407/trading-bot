@@ -4,7 +4,7 @@
 
 See `proposal.md` for motivation. Today a single Laravel app does both management and execution. `routes/console.php` runs `bots:dispatch` every second; `DispatchBotTicks` due-checks `tick_interval_seconds` (default 60) with a Redis cache lock and queues `RunBotTick` on Horizon. `BotTickPipeline` fetches a REST ticker, evaluates daily loss and the exit guard, runs a PHP strategy, syncs the grid, places or simulates orders, and records fills. Paper fills use `PaperExchangeClient::qualifyingFills` (buy when last ≤ limit, sell when last ≥ limit) only at tick time. Live orders go through CCXT and `LiveModeGuard`. Backtests are `RunBacktest` jobs on a dedicated Horizon queue. `bots:health` runs every 30 seconds; `backtests:fail-stale` runs every five minutes. The dashboard polls every five seconds and does not use WebSockets. There is no Go code.
 
-Johnson confirmed Option A, a hard cutover, Go as writer of the trading tables, Laravel as migration owner, and a Go backtest engine. `add-qnap-ci-deploy` is an active change (29/30 tasks) and is not edited here. After review, Johnson also confirmed: an expired heartbeat is a warning only; a user-triggered kill-switch or live stop uses a Laravel emergency cancel when the engine is unavailable; `desired_status` is split from runtime `status`.
+Johnson confirmed Option A, a hard cutover, Go as writer of the trading tables, Laravel as migration owner, and a Go backtest engine. `add-qnap-ci-deploy` is an active change (29/30 tasks) and is not edited here. After review, Johnson also confirmed: an expired heartbeat is a warning only; a user-triggered kill-switch or live stop uses a Laravel emergency cancel when the engine is unavailable; `desired_status` is split from runtime `status`. He later confirmed he will not use the current PHP engine: those workers are already stopped, and phase 8 is a direct swap that deletes the PHP engine (no drain, adopt-from-PHP, or no-overlap transition runbook).
 
 ## Goals / Non-Goals
 
@@ -206,20 +206,18 @@ Each phase ends with the proofs listed in `tasks.md` (typically the `engine` `ma
 5. **Risk:** port each guard (live mode, RiskGuard, daily loss, exit guard, consecutive failures, allowlist) and credential decryption as separate units with tests.
 6. **Backtest port:** move replay, sweeps, and stale-run failure to the engine as separate units; Laravel only enqueues and reads; golden tests against PHP results.
 7. **Laravel wiring:** publish commands one path at a time (start, pause, stop, cancel, kill-switch, backtest), consume events, dashboard heartbeat warning only, trim Horizon/scheduler including `bots:health` and `backtests:fail-stale`. Keep PHP engine until this phase is green, then
-8. **Cutover then remove PHP engine:** follow the cutover plan below. Delete the tick pipeline, PHP strategies, order *placement* and sync/reconcile/dispatch jobs, `RunBotTick` / `PlaceOrder` / `SyncOrders` / `RunBacktest` and `app/Domain/Backtest/Engine`. **Keep** `CancelBotOrders` and the `CancelOrder` path it uses. Docs update, including the operator runbook. Do not merge this phase to the QNAP-deployable `origin/main` until the engine follow-up lands.
+8. **Direct swap then remove PHP engine:** the PHP engine workers are already stopped. Delete the tick pipeline, PHP strategies, order *placement* and sync/reconcile/dispatch jobs, `RunBotTick` / `PlaceOrder` / `SyncOrders` / `RunBacktest` and `app/Domain/Backtest/Engine`. **Keep** `CancelBotOrders` and the `CancelOrder` path it uses. Docs update (no drain/adopt/no-overlap runbook). Do not merge this phase to the QNAP-deployable `origin/main` until the engine follow-up lands.
 9. **Docs and operator notes:** runtime, exchanges, security, README; note the deferred prod/CI work.
 
-### 9. Cutover plan
+### 9. Direct swap
 
-The PHP tick/order/backtest path and the Go engine MUST NOT run against the same bots at the same time. Engine start recovery (reconcile running bots) is necessary but not sufficient for the first cutover.
+The PHP engine workers are already stopped. No Horizon drain, adopt-open-orders-from-PHP path, or no-overlap operator runbook is required. Do not start the PHP tick/order/backtest path again beside the Go engine.
 
-1. Enter a maintenance window. Pause all running bots, or wait until no tick or `PlaceOrder` / `RunBacktest` job is in flight.
-2. Drain Horizon queues used for ticks, orders, and backtests until empty.
-3. Stop scheduling `bots:dispatch`, `bots:health`, `bots:sync-orders`, `bots:sync-balances`, `bots:reconcile`, and `backtests:fail-stale`, and confirm those workers are stopped.
-4. Start the Go engine. It must reconcile `desired_status = running` bots and adopt open orders *before* it evaluates new ticks or places new orders.
-5. Confirm a fresh heartbeat and that paper evaluation and command paths work.
-6. Only then delete the PHP engine (phase 8), keeping `CancelBotOrders`.
-7. Record the steps in `docs/runtime.md` (or a linked cutover runbook) for operators.
+Phase 8 deletes the PHP engine (the tick pipeline, PHP strategies, order *placement* and sync/reconcile/dispatch jobs, `RunBotTick` / `PlaceOrder` / `SyncOrders` / `RunBacktest`, and `app/Domain/Backtest/Engine`) and **keeps** `CancelBotOrders` and the `CancelOrder` path it uses for the user-triggered live kill-switch or stop emergency cancel.
+
+Engine start recovery still applies to the engine's own open orders: on start it resumes bots that should be running, reloads persisted strategy state, and reconciles local open orders with the exchange before new ticks. That is ordinary restart recovery, not a PHP-to-Go adoption step.
+
+The live gate (`TRADING_LIVE_ENABLED`) and the phase 8 QNAP release gate remain: do not merge this phase to the QNAP-deployable `origin/main` until the engine follow-up lands.
 
 ## Risks
 
