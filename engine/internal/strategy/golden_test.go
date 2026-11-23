@@ -168,6 +168,8 @@ func TestGoldenStrategies(t *testing.T) {
 	}{
 		{name: "simple-grid", strategies: strategy.NewSimpleGrid()},
 		{name: "dynamic-grid", strategies: strategy.NewDynamicGrid()},
+		{name: "martingale-grid", strategies: strategy.NewMartingaleGrid()},
+		{name: "trailing-grid", strategies: strategy.NewTrailingGrid()},
 	}
 
 	for _, entry := range strategies {
@@ -237,10 +239,16 @@ func runGoldenCase(t *testing.T, implementation strategy.Strategy, testCase fixt
 		decision, err = implementation.OnTick(input)
 	case "onFill":
 		if testCase.Fill == nil {
-			t.Fatal("fixture onFill case has no fill")
-		}
+			// Configuration-rejection fixtures omit the fill because PHP
+			// throws before the event is read.
+			if testCase.Error == nil {
+				t.Fatal("fixture onFill case has no fill")
+			}
 
-		decision, err = implementation.OnFill(input, buildFill(t, *testCase.Fill))
+			decision, err = implementation.OnFill(input, strategy.FillEvent{})
+		} else {
+			decision, err = implementation.OnFill(input, buildFill(t, *testCase.Fill))
+		}
 	case "onCancel":
 		decision, err = implementation.OnCancel(input, strategy.CancelEvent{
 			ClientOrderID:     "client-1",
@@ -370,6 +378,15 @@ func assertDecision(t *testing.T, got strategy.Decision, want fixtureDecision) {
 
 	if len(got.Events) != len(want.Events) {
 		t.Fatalf("event count = %d, want %d", len(got.Events), len(want.Events))
+	}
+
+	for index, expected := range want.Events {
+		gotJSON := canonicalJSON(t, got.Events[index])
+		wantJSON := canonicalJSON(t, expected)
+
+		if gotJSON != wantJSON {
+			t.Fatalf("event[%d] = %s, want %s", index, gotJSON, wantJSON)
+		}
 	}
 
 	if len(got.CancelClientOrderIDs) != len(want.CancelClientOrderIDs) {

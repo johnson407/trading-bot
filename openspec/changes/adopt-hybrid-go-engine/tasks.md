@@ -33,8 +33,8 @@
 - [x] 4.4 Port `qualifyingFills` paper-fill parity into Go; verify `make test` against the paper-fill fixtures from 4.1, including cross-and-recross-between-ticks.
 - [x] 4.5 Port `SimpleGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
 - [x] 4.6 Port `DynamicGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
-- [ ] 4.7 Port `MartingaleGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
-- [ ] 4.8 Port `TrailingGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
+- [x] 4.7 Port `MartingaleGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
+- [x] 4.8 Port `TrailingGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
 - [ ] 4.9 Keep PHP code in place until phase 8; verify no PHP strategy/tick files are deleted in this phase.
 
 ## 5. Risk, live gates, and credentials in Go

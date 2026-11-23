@@ -92,10 +92,19 @@ func TestGoldenGridSyncCreateMatchFillAndTrailingRecenter(t *testing.T) {
 			},
 		},
 		{
-			name:        "trailing_grid_recenter",
-			strategyKey: "trailing-grid",
-			quantity:    "1",
-			fillSteps:   map[string]bool{},
+			name:         "trailing_grid_recenter",
+			strategyKey:  "trailing-grid",
+			quantity:     "1",
+			strategyImpl: strategy.NewTrailingGrid(),
+			config: map[string]any{
+				"center_price":      "100",
+				"levels_per_side":   2,
+				"spacing_type":      "arithmetic",
+				"spacing_value":     "10",
+				"order_quantity":    "1",
+				"trailing_distance": "10",
+			},
+			fillSteps: map[string]bool{},
 		},
 	}
 
@@ -192,6 +201,8 @@ func TestGoldenGridSyncCreateMatchFillAndTrailingRecenter(t *testing.T) {
 
 						strategyState = tickDecision.State
 
+						assertTickLevelsExact(t, tickDecision.Levels, plans)
+
 						if scenarioConfig.fillSteps[step.Label] {
 							if !result.Matched {
 								t.Fatal("fill-driven tick with unchanged levels must keep the matching grid")
@@ -212,6 +223,30 @@ func TestGoldenGridSyncCreateMatchFillAndTrailingRecenter(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+// assertTickLevelsExact proves the ported strategy computes exactly the grid
+// levels the fixture records for the step, including trailing recenters.
+func assertTickLevelsExact(t *testing.T, actual []strategy.GridLevelPlan, expected []grid.Level) {
+	t.Helper()
+
+	if len(actual) != len(expected) {
+		t.Fatalf("strategy tick level count = %d, want %d", len(actual), len(expected))
+	}
+
+	for index, want := range expected {
+		got := actual[index]
+
+		if got.Sequence != want.Sequence ||
+			got.Price.String() != want.Price.String() ||
+			string(got.Side) != string(want.Side) {
+			t.Fatalf("strategy tick level[%d] = {%d %s %s}, want {%d %s %s}",
+				index,
+				got.Sequence, got.Price, got.Side,
+				want.Sequence, want.Price, want.Side,
+			)
+		}
 	}
 }
 

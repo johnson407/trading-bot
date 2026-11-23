@@ -1,12 +1,12 @@
 # Trading engine (Go)
 
 This directory is the Go trading engine for the hybrid layout described in
-`openspec/changes/adopt-hybrid-go-engine/`. **Phase 4.2/4.3/4.4/4.5/4.6 adds
+`openspec/changes/adopt-hybrid-go-engine/`. **Phase 4.2/4.3/4.4/4.5/4.6/4.7/4.8 adds
 the tick-loop semantics, the grid generator/sync port, paper-fill selection,
-and the simple-grid and dynamic-grid strategies; there are still:**
+and the simple-grid, dynamic-grid, martingale-grid, and trailing-grid
+strategies; there are still:**
 
 - no order placement, risk gates, or credential decryption;
-- no Martingale or trailing-grid strategies yet (tasks 4.7–4.8);
 - no private, signed, or user-data exchange calls and no API keys;
 - **no exchange connection by default** — the Compose service sets no market
   data endpoints, so the feed stays idle;
@@ -68,7 +68,7 @@ The server listens on `ENGINE_LISTEN_ADDR` (default `:8080`). The Compose
 healthcheck runs `/engine healthcheck`, which performs an in-container
 `GET /healthz`; it never contacts an exchange.
 
-### Tick, grid, paper-fill, and strategy ports (phase 4.2–4.6)
+### Tick, grid, paper-fill, and strategy ports (phase 4.2–4.8)
 
 `internal/tick` ports the PHP `bots:dispatch` due-check (60s default, 1s
 minimum), the per-interval cache guard, the `RunBotTick` unique/overlap policy,
@@ -101,28 +101,30 @@ crosses and returns before the next tick does not fill an order. The package is
 proven against the committed `paper_fills.json` fixture, including the
 cross-and-recross-between-ticks scenario. Nothing places or persists orders yet.
 
-### Strategies (phase 4.5/4.6)
+### Strategies (phase 4.5–4.8)
 
 `internal/strategy` ports the pure PHP strategy value objects and
-`SimpleGridStrategy` / `DynamicGridStrategy`: initialize, tick, fill, cancel,
-`shouldStop`, and `getGridLevels`. It also ports the shared
-`GeneratesGridLevels` ladder, stable-price sort, duplicate detection, and
-disarmed-level re-arm behaviour. Strategies stay pure: they receive an `Input`
-and return a `Decision`; they never read the database, an exchange, or PHP
-state.
+`SimpleGridStrategy` / `DynamicGridStrategy` / `MartingaleGridStrategy` /
+`TrailingGridStrategy`: initialize, tick, fill, cancel, `shouldStop`, and
+`getGridLevels`. It also ports the shared `GeneratesGridLevels` ladder,
+stable-price sort, duplicate detection, and disarmed-level re-arm behaviour.
+Strategies stay pure: they receive an `Input` and return a `Decision`; they
+never read the database, an exchange, or PHP state.
 
-Both strategies are proven against every case in the committed
-`strategies.json` fixture (`simple-grid` and `dynamic-grid`), including
-arithmetic and geometric ladders, order suppression at open levels, adjacent
-opposite orders after a fill, fill/pair re-arming on the next tick, dynamic
-volatility spacing, interval suppression, recalculation with order cancels and
-re-orders, cancel bookkeeping, and the recorded validation errors. The
-`grid_sync.json` simple-grid scenario now also models the paper fill and
-strategy re-arm, so its fill steps assert the exact orders and grid level
-states instead of only the grid structure.
+All four strategies are proven against every case in the committed
+`strategies.json` fixture (`simple-grid`, `dynamic-grid`, `martingale-grid`, and
+`trailing-grid`), including arithmetic and geometric ladders, order suppression
+at open levels, adjacent opposite orders after a fill, fill/pair re-arming on
+the next tick, dynamic volatility spacing, interval suppression, recalculation
+with order cancels and re-orders, martingale size growth with the max-quantity
+and max-increases caps, trailing recenter beyond the configured distance with
+outside-order cancellation, cancel bookkeeping, and the recorded validation
+errors. The `grid_sync.json` simple-grid and trailing-grid scenarios also model
+the paper fill/re-arm and recenter path, so their steps assert the exact orders
+and grid level states instead of only the grid structure.
 
-Martingale and trailing-grid remain tasks 4.7–4.8; nothing here is wired into
-`main`, placed, persisted, or connected to an exchange.
+Nothing here is wired into `main`, dispatched as a tick, placed, persisted, or
+connected to an exchange.
 
 ## Configuration
 
@@ -170,7 +172,7 @@ engine/
   internal/tick/              bots:dispatch due-check, overlap, stale threshold
   internal/grid/              grid generation, derivation, create/match/recenter
   internal/paperfill/         qualifyingFills paper-fill selection
-  internal/strategy/          simple-grid and dynamic-grid pure strategy ports
+  internal/strategy/          pure simple/dynamic/martingale/trailing strategy ports
   internal/goldenfixture/     locates tests/golden/engine for parity tests
   internal/health/            /healthz and /livez handlers
   internal/healthcheck/       in-container Compose probe
@@ -221,9 +223,10 @@ cache guard, job uniqueness/overlap policy, stale thresholds,
 arithmetic/geometric/dynamic grid generation, derivation errors, grid creation,
 level matching, fill-driven sync, trailing recenter, paper-fill crossing and
 ordering, partial quantities, fees, skipped filled/canceled orders,
-tick-time cross-and-recross for both sides, and every simple-grid/dynamic-grid
-strategy case (including the exact decimal state, levels, order intents,
-cancels, and validation errors).
+tick-time cross-and-recross for both sides, and every simple-grid,
+dynamic-grid, martingale-grid, and trailing-grid strategy case (including the
+exact decimal state, levels, order intents, cancels, cap events, trailing
+recenters, and validation errors).
 
 ## Docker
 

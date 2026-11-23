@@ -1,7 +1,8 @@
 // Package strategy ports the pure PHP strategy value objects and the
-// SimpleGridStrategy / DynamicGridStrategy decision logic. Strategies never
-// touch a database, an exchange, or the PHP runtime: they receive an immutable
-// Input and return a Decision.
+// SimpleGridStrategy / DynamicGridStrategy / MartingaleGridStrategy /
+// TrailingGridStrategy decision logic. Strategies never touch a database, an
+// exchange, or the PHP runtime: they receive an immutable Input and return a
+// Decision.
 package strategy
 
 import (
