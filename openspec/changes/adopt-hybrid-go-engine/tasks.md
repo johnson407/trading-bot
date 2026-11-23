@@ -22,8 +22,8 @@
 
 ## 3. Market data
 
-- [ ] 3.1 Implement Binance public WebSocket subscription for running-bot symbols, reconnect with backoff, gap or quiet-period detection, and REST ticker fallback; verify `make test` against a fake socket/server, with no live credentials.
-- [ ] 3.2 Record degraded (REST fallback) state in logs/events without secrets; verify a test that a disconnect followed by a REST snapshot allows the feed to resume.
+- [x] 3.1 Implement Binance public WebSocket subscription for running-bot symbols, reconnect with backoff, gap or quiet-period detection, and REST ticker fallback; verify `make test` against a fake socket/server, with no live credentials.
+- [x] 3.2 Record degraded (REST fallback) state in logs/events without secrets; verify a test that a disconnect followed by a REST snapshot allows the feed to resume.
 
 ## 4. Golden fixtures, then paper engine and strategies
 

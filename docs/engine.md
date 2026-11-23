@@ -203,6 +203,20 @@ added.** If a future requirement needs durable, queryable command history
 independent of Redis retention, a Laravel-owned receipt migration can be added
 then; the engine never runs migrations.
 
+## Market data (phase 3)
+
+`engine/internal/marketdata` implements the public Binance feed from design §5
+without credentials: `<symbol>@trade` plus `<symbol>@bookTicker` streams,
+exponential reconnect backoff, trade-id gap and quiet-period detection, a
+public REST `24hr` ticker snapshot for recovery, and periodic REST tickers while
+the socket cannot connect. A degraded feed emits `marketdata.degraded` (with a
+secret-free reason) and recovery emits `marketdata.recovered`.
+
+The feed is **idle unless** `ENGINE_MARKET_DATA_WS_URL` and
+`ENGINE_MARKET_DATA_REST_URL` are both set and `ENGINE_MARKET_DATA_SYMBOLS` is
+non-empty. Local Compose sets none of them, so the engine opens no exchange
+connection. Phase 4 will supply running-bot symbols to `marketdata.Feed.Run`.
+
 ## Local verification
 
 ```bash
@@ -210,6 +224,7 @@ cd engine
 make test        # or: docker run --rm -v "$PWD:/src" -w /src golang:1.24-alpine go test ./...
 ```
 
-The Go tests use `miniredis` and fakes. They do not call an exchange and do not
-require the Compose Redis or a live Postgres. See `engine/README.md` for the
-current process layout and configuration.
+The Go tests use `miniredis`, fake WebSocket servers, and `httptest`. They do
+not call an exchange, need no credentials, and do not require the Compose Redis
+or a live Postgres. See `engine/README.md` for the current process layout and
+configuration.

@@ -3,6 +3,7 @@ package config_test
 import (
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/johnson407/trading-bot/engine/internal/config"
 )
@@ -105,6 +106,121 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		"address": {"ENGINE_LISTEN_ADDR": "8080"},
 		"bool":    {"TRADING_LIVE_ENABLED": "maybe"},
 		"redisDB": {"REDIS_DB": "-1"},
+	}
+
+	for name, env := range cases {
+		if _, err := load(env); err == nil {
+			t.Errorf("%s: Load(%v) error = nil, want error", name, env)
+		}
+	}
+}
+
+func TestLoadMarketDataDefaultsToIdle(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := load(map[string]string{})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.MarketData.Configured() {
+		t.Error("MarketData.Configured() = true, want idle by default")
+	}
+
+	if cfg.MarketData.WSURL != "" || cfg.MarketData.RESTURL != "" {
+		t.Errorf("MarketData URLs = %q/%q, want empty", cfg.MarketData.WSURL, cfg.MarketData.RESTURL)
+	}
+
+	if len(cfg.MarketData.Symbols) != 0 {
+		t.Errorf("MarketData.Symbols = %v, want empty", cfg.MarketData.Symbols)
+	}
+
+	if cfg.MarketData.QuietAfter != 30*time.Second {
+		t.Errorf("QuietAfter = %s, want 30s", cfg.MarketData.QuietAfter)
+	}
+
+	if cfg.MarketData.RESTPollInterval != 5*time.Second {
+		t.Errorf("RESTPollInterval = %s, want 5s", cfg.MarketData.RESTPollInterval)
+	}
+}
+
+func TestLoadReadsMarketDataEnvironment(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := load(map[string]string{
+		"ENGINE_MARKET_DATA_WS_URL":             "wss://stream.example.test:9443/ws",
+		"ENGINE_MARKET_DATA_REST_URL":           "https://api.example.test",
+		"ENGINE_MARKET_DATA_SYMBOLS":            " btcusdt, ETHUSDT ,btcusdt,",
+		"ENGINE_MARKET_DATA_QUIET_AFTER":        "45s",
+		"ENGINE_MARKET_DATA_REST_POLL_INTERVAL": "3s",
+		"ENGINE_MARKET_DATA_RECONNECT_MIN":      "250ms",
+		"ENGINE_MARKET_DATA_RECONNECT_MAX":      "20s",
+		"ENGINE_MARKET_DATA_REQUEST_TIMEOUT":    "4s",
+	})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if !cfg.MarketData.Configured() {
+		t.Error("MarketData.Configured() = false, want true")
+	}
+
+	if cfg.MarketData.QuietAfter != 45*time.Second {
+		t.Errorf("QuietAfter = %s, want 45s", cfg.MarketData.QuietAfter)
+	}
+
+	if cfg.MarketData.ReconnectMin != 250*time.Millisecond || cfg.MarketData.ReconnectMax != 20*time.Second {
+		t.Errorf("ReconnectMin/Max = %s/%s, want 250ms/20s", cfg.MarketData.ReconnectMin, cfg.MarketData.ReconnectMax)
+	}
+
+	joined := ""
+	for _, symbol := range cfg.MarketData.Symbols {
+		joined += symbol + ","
+	}
+
+	if joined != "BTCUSDT,ETHUSDT," {
+		t.Errorf("Symbols = %v, want normalized unique BTCUSDT/ETHUSDT", cfg.MarketData.Symbols)
+	}
+}
+
+func TestLoadRejectsUnpairedMarketDataURLs(t *testing.T) {
+	t.Parallel()
+
+	if _, err := load(map[string]string{
+		"ENGINE_MARKET_DATA_WS_URL": "wss://stream.example.test/ws",
+	}); err == nil {
+		t.Error("Load() error = nil, want a paired-URL error")
+	}
+
+	if _, err := load(map[string]string{
+		"ENGINE_MARKET_DATA_REST_URL": "https://api.example.test",
+	}); err == nil {
+		t.Error("Load() error = nil, want a paired-URL error")
+	}
+}
+
+func TestLoadRejectsInvalidMarketDataValues(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]map[string]string{
+		"ws scheme": {
+			"ENGINE_MARKET_DATA_WS_URL":   "https://stream.example.test/ws",
+			"ENGINE_MARKET_DATA_REST_URL": "https://api.example.test",
+		},
+		"rest scheme": {
+			"ENGINE_MARKET_DATA_WS_URL":   "wss://stream.example.test/ws",
+			"ENGINE_MARKET_DATA_REST_URL": "wss://api.example.test",
+		},
+		"duration": {
+			"ENGINE_MARKET_DATA_QUIET_AFTER": "soon",
+		},
+		"negative duration": {
+			"ENGINE_MARKET_DATA_RECONNECT_MIN": "-1s",
+		},
+		"backoff order": {
+			"ENGINE_MARKET_DATA_RECONNECT_MIN": "20s",
+			"ENGINE_MARKET_DATA_RECONNECT_MAX": "1s",
+		},
 	}
 
 	for name, env := range cases {

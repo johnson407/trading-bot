@@ -1,6 +1,6 @@
-// Command engine is the trading engine process. Phase 1 is a skeleton: it
-// serves liveness/readiness endpoints only. It does not consume commands,
-// subscribe to market data, touch credentials, or place orders.
+// Command engine is the trading engine process. Phase 3 adds the public
+// market-data feed hook; it does not consume trading commands, run strategies,
+// touch credentials, or place orders.
 package main
 
 import (
@@ -23,6 +23,7 @@ import (
 	"github.com/johnson407/trading-bot/engine/internal/healthcheck"
 	"github.com/johnson407/trading-bot/engine/internal/heartbeat"
 	"github.com/johnson407/trading-bot/engine/internal/idempotency"
+	"github.com/johnson407/trading-bot/engine/internal/marketdata"
 	"github.com/johnson407/trading-bot/engine/internal/protocol"
 )
 
@@ -55,7 +56,7 @@ func run() error {
 		"addr", cfg.Addr,
 		"app_env", cfg.AppEnv,
 		"live_trading_enabled", cfg.LiveTrading,
-		"trading_paths", "none (phase 2 contract only)",
+		"trading_paths", "none (phase 3 market data only)",
 	)
 
 	if cfg.LiveTrading {
@@ -100,6 +101,38 @@ func run() error {
 			logger.Error("command consumer stopped", "error_type", fmt.Sprintf("%T", err))
 		}
 	}()
+
+	// Phase 3 market-data hook. It stays idle unless an operator sets both
+	// public endpoints and a symbol list; the shipped Compose service sets
+	// none of them, so the engine opens no exchange connection. The future
+	// tick loop will pass the running bots' symbols here.
+	marketFeed := marketdata.New(
+		marketdata.Config{
+			WSURL:            cfg.MarketData.WSURL,
+			RESTURL:          cfg.MarketData.RESTURL,
+			QuietAfter:       cfg.MarketData.QuietAfter,
+			RESTPollInterval: cfg.MarketData.RESTPollInterval,
+			ReconnectMin:     cfg.MarketData.ReconnectMin,
+			ReconnectMax:     cfg.MarketData.ReconnectMax,
+			RequestTimeout:   cfg.MarketData.RequestTimeout,
+		},
+		logger,
+		nil,
+	)
+
+	switch {
+	case !cfg.MarketData.Configured():
+		logger.Info("market data idle: public endpoints are not configured; no exchange connection will be opened")
+	case len(cfg.MarketData.Symbols) == 0:
+		logger.Info("market data idle: ENGINE_MARKET_DATA_SYMBOLS is empty; no exchange connection will be opened")
+	default:
+		logger.Info("market data enabled for explicit symbols", "symbols", len(cfg.MarketData.Symbols))
+		go func() {
+			if err := marketFeed.Run(engineContext, cfg.MarketData.Symbols); err != nil {
+				logger.Error("market data feed stopped", "error_type", fmt.Sprintf("%T", err))
+			}
+		}()
+	}
 
 	checks := []health.Check{
 		{Name: "postgres", Ping: pool.Ping},
