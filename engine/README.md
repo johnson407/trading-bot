@@ -1,12 +1,10 @@
 # Trading engine (Go)
 
 This directory is the Go trading engine for the hybrid layout described in
-`openspec/changes/adopt-hybrid-go-engine/`. **Phase 4.2/4.3/4.4/4.5/4.6/4.7/4.8 adds
-the tick-loop semantics, the grid generator/sync port, paper-fill selection,
-and the simple-grid, dynamic-grid, martingale-grid, and trailing-grid
-strategies; there are still:**
+`openspec/changes/adopt-hybrid-go-engine/`. **Phase 5 adds the blocking risk
+gates and in-memory credential decryption as libraries; there are still:**
 
-- no order placement, risk gates, or credential decryption;
+- no order placement and no runtime wiring of the risk gates;
 - no private, signed, or user-data exchange calls and no API keys;
 - **no exchange connection by default** — the Compose service sets no market
   data endpoints, so the feed stays idle;
@@ -126,6 +124,47 @@ and grid level states instead of only the grid structure.
 Nothing here is wired into `main`, dispatched as a tick, placed, persisted, or
 connected to an exchange.
 
+### Risk gates and credential decryption (phase 5.1–5.7)
+
+`internal/risk` ports the blocking PHP risk gates as an in-memory library. It
+never opens an exchange connection, never signs a request, and never places an
+order.
+
+- `LiveModeGuard` enforces `TRADING_LIVE_ENABLED`, which defaults to `false`,
+  before any private call. A live start also requires the exact
+  `<bot name> on <exchange>` confirmation and enough free quote balance. A
+  rejected start stays idle; a live bot whose gate closes mid-run is paused and
+  its open orders are canceled, never converted to paper.
+- `RiskGuard` blocks non-positive orders, sells above uncommitted inventory
+  (without a risk event), projected position notional above the limit, and
+  orders above the open-order cap.
+- `DailyLossMonitor` pauses and cancels on per-bot and account-wide loss,
+  keeping a bot-scope baseline in the engine-owned
+  `settings.daily_loss_baseline` key and the account baseline on the user
+  `risk_limits` row. It never resumes a paused bot.
+- `ExitGuardMonitor` implements stop-loss, take-profit, and range exits with
+  stop-loss → take-profit → range precedence. It pauses and cancels but never
+  market-flattens, and a second evaluation of a paused bot is a no-op.
+- `ConsecutiveFailureTracker` pauses at the configured threshold, cancels open
+  orders, and keeps a stopped bot stopped while still reporting the failure.
+- `ExchangeAllowlist` ports `TRADING_EXCHANGES` creation validation and adds
+  the missing Go start/placement blocks, so a directly inserted non-allowlisted
+  exchange cannot start or place. The committed fixture's
+  `direct_insert_current_php` cases document the current-PHP gap only.
+
+`internal/credentials` decrypts Eloquent `encrypted` / `Crypt::encryptString`
+payloads in memory: AES-256-CBC, `base64:` 32-byte keys, HMAC-SHA256 over
+`iv.value`, the JSON `iv` / `value` / `mac` / `tag` layout, no PHP
+unserialization, and Laravel's current-then-previous key order. It never reads
+`.env` or `APP_KEY` itself, never logs a key, payload, or plaintext, and
+exports `Redact` / `SafeError` for diagnostics. The golden test uses the
+committed stub ciphertext fixture, not `Crypt::encrypt()` and not an
+environment value.
+
+All risk and credential packages are proven against `risk.json` and
+`credentials_ciphertext.json`. They are not wired into the Compose tick or
+order dispatch, and `/healthz` is unchanged.
+
 ## Configuration
 
 All values come from the environment, mirroring the `app` service:
@@ -139,7 +178,9 @@ All values come from the environment, mirroring the `app` service:
 | `DB_SSLMODE` | `disable` | Local Compose Postgres has no TLS |
 | `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1` / `6379` | Compose sets `redis` / `6379` |
 | `REDIS_PASSWORD` / `REDIS_DB` | empty / `0` | Optional |
-| `TRADING_LIVE_ENABLED` | `false` | Read and logged only; there are no trading paths yet |
+| `TRADING_LIVE_ENABLED` | `false` | Live gate enforced by `internal/risk`; false keeps live bots paused |
+| `TRADING_EXCHANGES` | `binance` | Comma-separated, case-sensitive exchange allowlist |
+| `TRADING_DEFAULT_EXCHANGE` | `binance` | Used when bot creation submits a blank exchange |
 | `ENGINE_MARKET_DATA_WS_URL` | empty | Full public WebSocket endpoint, e.g. `wss://stream.binance.com:9443/ws`. Empty means market data stays idle |
 | `ENGINE_MARKET_DATA_REST_URL` | empty | Public REST base URL, e.g. `https://api.binance.com`. Empty means market data stays idle |
 | `ENGINE_MARKET_DATA_SYMBOLS` | empty | Comma-separated opt-in symbol list; empty also keeps the feed idle |
@@ -153,9 +194,10 @@ error. Leaving both empty is the default and keeps `marketdata.Run` idle, so
 the engine process opens **no** exchange connection. Local Compose does not set
 any `ENGINE_MARKET_DATA_*` variable.
 
-`APP_KEY` is passed by Compose for later credential work but is **not read,
-used, or logged** in phase 2. No secret is baked into the image or written to
-disk.
+`APP_KEY` is passed by Compose but the engine process does **not** read it.
+The `credentials` library takes a key argument from its caller, and the golden
+tests use only the committed stub key. No secret is baked into the image or
+written to disk.
 
 ## Layout
 
@@ -173,6 +215,8 @@ engine/
   internal/grid/              grid generation, derivation, create/match/recenter
   internal/paperfill/         qualifyingFills paper-fill selection
   internal/strategy/          pure simple/dynamic/martingale/trailing strategy ports
+  internal/risk/              live gate, risk/loss/exit/failure gates, exchange allowlist
+  internal/credentials/       AES-256-CBC Crypt::encryptString-compatible decryption
   internal/goldenfixture/     locates tests/golden/engine for parity tests
   internal/health/            /healthz and /livez handlers
   internal/healthcheck/       in-container Compose probe
@@ -216,6 +260,14 @@ Binance or any other exchange, need no credentials, and do not require the
 Compose Redis or a live Postgres. The market-data suite covers subscription,
 reconnect with backoff, trade-id gap detection, quiet-period recovery, periodic
 REST fallback, and disconnect → REST snapshot → resumed socket.
+
+The risk parity tests read `risk.json` and `credentials_ciphertext.json` and
+cover every committed live-start and closed-gate tick, position/open-order/
+inventory reservation, per-bot and account-wide daily loss (including
+baseline reset, isolation, unrealized marks, and no auto-resume), every exit
+rule and monitor path (including cancel failure and paused no-op), the
+consecutive-failure sequences, allowlist creation validation, and decrypting
+the stub ciphertexts with current and previous keys plus redaction.
 
 The tick, grid, paper-fill, and strategy parity tests read the committed PHP
 golden fixtures. They cover due-check interval/minimum/paused-stopped skips, the

@@ -39,13 +39,13 @@
 
 ## 5. Risk, live gates, and credentials in Go
 
-- [ ] 5.1 Port `LiveModeGuard` (env gate; start requires sufficient free quote; no live-to-paper fallback) and enforce `TRADING_LIVE_ENABLED` default false inside the engine before any private call; verify `make test` that a live bot is paused, not converted to paper, when the gate is off, and that a start with insufficient quote is rejected.
-- [ ] 5.2 Port `RiskGuard` (position and open-order caps, inventory reservation) as blocking checks; verify `make test` for each reject/defer path.
-- [ ] 5.3 Port `DailyLossMonitor` (per-bot and account-wide pause and cancel, baseline in engine-owned settings keys); verify `make test` for pause, cancel, reset, and baseline-isolation paths.
-- [ ] 5.4 Port the protective exit guard (pause and cancel, no market flatten, no auto-resume); verify `make test` for stop-loss, take-profit, range, precedence, and cancel-failure paths.
-- [ ] 5.5 Port `ConsecutiveFailureTracker`; verify `make test` for the pause/cancel and failure-threshold paths.
-- [ ] 5.6 Port the `TRADING_EXCHANGES` allowlist as a blocking check; verify `make test` that a non-allowed exchange cannot start or place.
-- [ ] 5.7 Implement in-memory decryption compatible with Eloquent `encrypted` / `Crypt::encryptString` (AES-256-CBC, `base64:` `APP_KEY`, HMAC-SHA256 MAC, JSON `iv`/`value`/`mac`/`tag`, not PHP-serialized, `previous_keys` tried as Laravel would), with redaction in logs; verify `make test` using a *stub* value generated with `Crypt::encryptString` (or the model cast), never `Crypt::encrypt()`, and never a value from `.env`.
+- [x] 5.1 Port `LiveModeGuard` (env gate; start requires sufficient free quote; no live-to-paper fallback) and enforce `TRADING_LIVE_ENABLED` default false inside the engine before any private call; verify `make test` that a live bot is paused, not converted to paper, when the gate is off, and that a start with insufficient quote is rejected.
+- [x] 5.2 Port `RiskGuard` (position and open-order caps, inventory reservation) as blocking checks; verify `make test` for each reject/defer path.
+- [x] 5.3 Port `DailyLossMonitor` (per-bot and account-wide pause and cancel, baseline in engine-owned settings keys); verify `make test` for pause, cancel, reset, and baseline-isolation paths.
+- [x] 5.4 Port the protective exit guard (pause and cancel, no market flatten, no auto-resume); verify `make test` for stop-loss, take-profit, range, precedence, and cancel-failure paths.
+- [x] 5.5 Port `ConsecutiveFailureTracker`; verify `make test` for the pause/cancel and failure-threshold paths.
+- [x] 5.6 Port the `TRADING_EXCHANGES` allowlist as a blocking check; verify `make test` that a non-allowed exchange cannot start or place.
+- [x] 5.7 Implement in-memory decryption compatible with Eloquent `encrypted` / `Crypt::encryptString` (AES-256-CBC, `base64:` `APP_KEY`, HMAC-SHA256 MAC, JSON `iv`/`value`/`mac`/`tag`, not PHP-serialized, `previous_keys` tried as Laravel would), with redaction in logs; verify `make test` using a *stub* value generated with `Crypt::encryptString` (or the model cast), never `Crypt::encrypt()`, and never a value from `.env`.
 
 ## 6. Backtest port
 

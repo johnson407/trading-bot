@@ -37,6 +37,41 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.LiveTrading {
 		t.Error("LiveTrading = true, want false by default")
 	}
+
+	if len(cfg.TradingExchanges) != 1 || cfg.TradingExchanges[0] != "binance" {
+		t.Errorf("TradingExchanges = %v, want [binance]", cfg.TradingExchanges)
+	}
+
+	if cfg.TradingDefaultExchange != "binance" {
+		t.Errorf("TradingDefaultExchange = %q, want binance", cfg.TradingDefaultExchange)
+	}
+}
+
+func TestLoadReadsExchangeAllowlist(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := load(map[string]string{
+		"TRADING_EXCHANGES":        " binance, kraken ,,coinbase ",
+		"TRADING_DEFAULT_EXCHANGE": "kraken",
+	})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	want := []string{"binance", "kraken", "coinbase"}
+	if len(cfg.TradingExchanges) != len(want) {
+		t.Fatalf("TradingExchanges = %v, want %v", cfg.TradingExchanges, want)
+	}
+
+	for index, exchange := range want {
+		if cfg.TradingExchanges[index] != exchange {
+			t.Fatalf("TradingExchanges[%d] = %q, want %q", index, cfg.TradingExchanges[index], exchange)
+		}
+	}
+
+	if cfg.TradingDefaultExchange != "kraken" {
+		t.Fatalf("TradingDefaultExchange = %q, want kraken", cfg.TradingDefaultExchange)
+	}
 }
 
 func TestLoadReadsComposeEnvironment(t *testing.T) {

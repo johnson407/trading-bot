@@ -77,12 +77,14 @@ func (m MarketData) Configured() bool {
 
 // Config is the full engine configuration.
 type Config struct {
-	Addr        string
-	AppEnv      string
-	Database    Database
-	Redis       Redis
-	LiveTrading bool
-	MarketData  MarketData
+	Addr                   string
+	AppEnv                 string
+	Database               Database
+	Redis                  Redis
+	LiveTrading            bool
+	TradingExchanges       []string
+	TradingDefaultExchange string
+	MarketData             MarketData
 }
 
 // Load reads configuration from the supplied environment lookup (usually
@@ -105,6 +107,8 @@ func Load(getenv func(string) string) (Config, error) {
 			Port:     6379,
 			Password: getenv("REDIS_PASSWORD"),
 		},
+		TradingExchanges:       splitList(envOr(getenv, "TRADING_EXCHANGES", "binance")),
+		TradingDefaultExchange: envOr(getenv, "TRADING_DEFAULT_EXCHANGE", "binance"),
 		MarketData: MarketData{
 			WSURL:   strings.TrimSpace(getenv("ENGINE_MARKET_DATA_WS_URL")),
 			RESTURL: strings.TrimSpace(getenv("ENGINE_MARKET_DATA_REST_URL")),
@@ -249,6 +253,25 @@ func validateEndpoint(key, value string, schemes ...string) error {
 	}
 
 	return fmt.Errorf("%s %q must use one of the schemes: %s", key, value, strings.Join(schemes, ", "))
+}
+
+// splitList parses a comma-separated config list, preserving case and order
+// and dropping blank entries, matching Laravel's array_filter(array_map('trim',
+// explode(',', ...))) for TRADING_EXCHANGES.
+func splitList(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+
+		result = append(result, trimmed)
+	}
+
+	return result
 }
 
 // splitSymbols parses a comma-separated symbol list, trimming blanks and

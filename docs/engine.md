@@ -240,6 +240,29 @@ before later phases can wire them in.
 `internal/decimal` matches PHP bcmath at scale 16 (truncating multiply/add,
 17-digit divide rounded half-up to 16) and rejects floats.
 
+## Risk gates and credential decryption (phase 5)
+
+`internal/risk` ports the current PHP blocking guards without wiring them into
+tick or order dispatch:
+
+- live gate and start checks (`TRADING_LIVE_ENABLED` defaults false, exact
+  confirmation, free quote balance, no live-to-paper fallback);
+- position notional, open-order, and sell-inventory reservation checks;
+- per-bot and account-wide daily loss pause/cancel with engine-owned baselines;
+- protective stop-loss, take-profit, and range exits (pause/cancel only, no
+  market flatten, no automatic resume);
+- consecutive exchange failure threshold pause/cancel;
+- `TRADING_EXCHANGES` creation validation plus Go start/placement blocks.
+
+These packages are proven against every case in `tests/golden/engine/risk.json`,
+including the fixture's `direct_insert_current_php` cases that document the
+PHP-only gap. `internal/credentials` implements the same AES-256-CBC payload as
+Eloquent `encrypted` / `Crypt::encryptString` (HMAC-SHA256 MAC, JSON
+`iv`/`value`/`mac`/`tag`, no PHP serialization, current then previous keys) and
+is proven against the committed stub ciphertexts in
+`tests/golden/engine/credentials_ciphertext.json`. It never reads `APP_KEY` or
+`.env`; callers supply the key, and `Redact` / `SafeError` keep it out of logs.
+
 ## Local verification
 
 The repository root is mounted so Go tests can read the committed fixtures:
