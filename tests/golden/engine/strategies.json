@@ -1,0 +1,3698 @@
+{
+    "format": "php-golden-engine/1",
+    "clock": "2026-11-23T00:00:00+00:00",
+    "decimal_scale": 16,
+    "fee_rate": "0.001",
+    "description": "Strategy inputs and decisions from the four current PHP strategy implementations.",
+    "strategies": {
+        "simple-grid": {
+            "cases": [
+                {
+                    "label": "initialize_arithmetic",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "80",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "110",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "120",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "initialize_geometric",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "geometric",
+                                "spacing_value": "0.1",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "geometric",
+                                "spacing_value": "0.1",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "82.6446280991735537",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "90.9090909090909091",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "110",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "121",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_tick_new_input_initializes_and_orders",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "80",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "110",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "120",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "buy",
+                                "price": "80",
+                                "quantity": "1",
+                                "grid_level_sequence": 1,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "buy",
+                                "price": "90",
+                                "quantity": "1",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "1",
+                                "grid_level_sequence": 3,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "120",
+                                "quantity": "1",
+                                "grid_level_sequence": 4,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_tick_skips_level_with_open_order",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": [
+                                {
+                                    "client_order_id": "existing",
+                                    "side": "buy",
+                                    "price": "90",
+                                    "quantity": "1",
+                                    "grid_level_sequence": 2
+                                }
+                            ]
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "80",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "110",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "120",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "buy",
+                                "price": "80",
+                                "quantity": "1",
+                                "grid_level_sequence": 1,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "1",
+                                "grid_level_sequence": 3,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "120",
+                                "quantity": "1",
+                                "grid_level_sequence": 4,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_fill_buy_places_adjacent_sell",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "fill": {
+                        "exchange_fill_id": "fill-buy-90",
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.1",
+                        "client_order_id": "client-2",
+                        "grid_level_sequence": 2
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": "buy",
+                                "fill_count": 1,
+                                "last_fill_price": "90",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "80",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "110",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "120",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "1",
+                                "grid_level_sequence": 3,
+                                "reason": "strategy.opposite"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_fill_sell_uses_adjacent_level_side",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "fill": {
+                        "exchange_fill_id": "fill-sell-110",
+                        "side": "sell",
+                        "price": "110",
+                        "quantity": "1",
+                        "fee": "0.1",
+                        "client_order_id": "client-3",
+                        "grid_level_sequence": 3
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": "sell",
+                                "fill_count": 1,
+                                "last_fill_price": "110",
+                                "disarmed_levels": {
+                                    "110": {
+                                        "side": "sell",
+                                        "pair": "90"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "80",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "110",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "120",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "buy",
+                                "price": "90",
+                                "quantity": "1",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.opposite"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_fill_buy_then_sell_rearms_level",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": "sell",
+                                "fill_count": 2,
+                                "last_fill_price": "110",
+                                "disarmed_levels": {
+                                    "110": {
+                                        "side": "sell",
+                                        "pair": "90"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": "sell",
+                                "fill_count": 2,
+                                "last_fill_price": "110",
+                                "disarmed_levels": {
+                                    "110": {
+                                        "side": "sell",
+                                        "pair": "90"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "80",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "110",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "120",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "buy",
+                                "price": "80",
+                                "quantity": "1",
+                                "grid_level_sequence": 1,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "buy",
+                                "price": "90",
+                                "quantity": "1",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "120",
+                                "quantity": "1",
+                                "grid_level_sequence": 4,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_cancel_records_client_order_id",
+                    "operation": "onCancel",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0,
+                                "last_canceled_client_order_id": "client-1"
+                            }
+                        },
+                        "levels": [],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "initialize_existing_state_is_idle",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "get_grid_levels_from_state",
+                    "operation": "getGridLevels",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "levels": [
+                        {
+                            "sequence": 1,
+                            "price": "80",
+                            "side": "buy"
+                        },
+                        {
+                            "sequence": 2,
+                            "price": "90",
+                            "side": "buy"
+                        },
+                        {
+                            "sequence": 3,
+                            "price": "110",
+                            "side": "sell"
+                        },
+                        {
+                            "sequence": 4,
+                            "price": "120",
+                            "side": "sell"
+                        }
+                    ]
+                },
+                {
+                    "label": "reject_dynamic_spacing",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "dynamic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "error": {
+                        "exception": "InvalidStrategyConfigurationException",
+                        "message": "Invalid configuration for strategy [simple-grid]: simple-grid supports arithmetic or geometric spacing"
+                    }
+                },
+                {
+                    "label": "reject_duplicate_levels",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "0.000000000000000001",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "error": {
+                        "exception": "InvalidStrategyConfigurationException",
+                        "message": "Invalid configuration for strategy [simple-grid]: duplicate grid level price [100]"
+                    }
+                },
+                {
+                    "label": "should_stop_false",
+                    "operation": "shouldStop",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "simple-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "stop": false
+                }
+            ]
+        },
+        "dynamic-grid": {
+            "cases": [
+                {
+                    "label": "initialize_volatility_spacing",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [
+                                "100",
+                                "110"
+                            ],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "9.52380952380952",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90.47619047619048",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "109.52380952380952",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "initialize_without_history_uses_initial_spacing",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "1",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "99",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "101",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_tick_before_interval_is_unchanged",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [
+                                "100",
+                                "150"
+                            ],
+                            "timestamp": "2026-11-23T00:00:30+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "9.52380952380952",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "9.52380952380952",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90.47619047619048",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "109.52380952380952",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_tick_recalculates_cancels_outside_and_reorders",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [
+                                "100",
+                                "150"
+                            ],
+                            "timestamp": "2026-11-23T00:02:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": [
+                                {
+                                    "client_order_id": "outside",
+                                    "side": "buy",
+                                    "price": "80",
+                                    "quantity": "1",
+                                    "grid_level_sequence": 1
+                                },
+                                {
+                                    "client_order_id": "inside",
+                                    "side": "buy",
+                                    "price": "101",
+                                    "quantity": "1",
+                                    "grid_level_sequence": 2
+                                }
+                            ]
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "9.52380952380952",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "20",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:02:00+00:00",
+                                "recalculation_count": 1,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "80",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "120",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "sell",
+                                "price": "120",
+                                "quantity": "1",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": [
+                            "inside"
+                        ]
+                    }
+                },
+                {
+                    "label": "on_fill_buy_places_adjacent_sell",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [
+                                "100",
+                                "110"
+                            ],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "9.52380952380952",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "fill": {
+                        "exchange_fill_id": "fill-buy-80",
+                        "side": "buy",
+                        "price": "80",
+                        "quantity": "1",
+                        "fee": "0.08",
+                        "client_order_id": "client-1",
+                        "grid_level_sequence": 1
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "9.52380952380952",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 1,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "80": {
+                                        "side": "buy",
+                                        "pair": "109.52380952380952"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90.47619047619048",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "109.52380952380952",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "sell",
+                                "price": "109.52380952380952",
+                                "quantity": "1",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.opposite"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "get_grid_levels_from_state",
+                    "operation": "getGridLevels",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "9.52380952380952",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "levels": [
+                        {
+                            "sequence": 1,
+                            "price": "90.47619047619048",
+                            "side": "buy"
+                        },
+                        {
+                            "sequence": 2,
+                            "price": "109.52380952380952",
+                            "side": "sell"
+                        }
+                    ]
+                },
+                {
+                    "label": "on_cancel_records_client_order_id",
+                    "operation": "onCancel",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "9.52380952380952",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "9.52380952380952",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0,
+                                "last_canceled_client_order_id": "client-1"
+                            }
+                        },
+                        "levels": [],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "reject_zero_min_spacing",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [
+                                "100",
+                                "110"
+                            ],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "error": {
+                        "exception": "InvalidStrategyConfigurationException",
+                        "message": "Invalid configuration for strategy [dynamic-grid]: min_spacing must be positive"
+                    }
+                },
+                {
+                    "label": "reject_max_below_min",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [
+                                "100",
+                                "110"
+                            ],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "0.1",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "error": {
+                        "exception": "InvalidStrategyConfigurationException",
+                        "message": "Invalid configuration for strategy [dynamic-grid]: max_spacing must be at least min_spacing"
+                    }
+                },
+                {
+                    "label": "should_stop_false",
+                    "operation": "shouldStop",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "9.52380952380952",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "stop": false
+                }
+            ]
+        },
+        "martingale-grid": {
+            "cases": [
+                {
+                    "label": "initialize_base_quantity",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "10",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "1",
+                                "increase_count": 0,
+                                "cap_reached": false,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_tick_new_input_orders_base_quantity",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "10",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "1",
+                                "increase_count": 0,
+                                "cap_reached": false,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "buy",
+                                "price": "90",
+                                "quantity": "1",
+                                "grid_level_sequence": 1,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "1",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_fill_first_increase",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "10",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "1",
+                                "increase_count": 0,
+                                "cap_reached": false,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "fill": {
+                        "exchange_fill_id": "fill-1",
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "client_order_id": "client-1",
+                        "grid_level_sequence": 1
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "2",
+                                "increase_count": 1,
+                                "cap_reached": false,
+                                "fill_count": 1,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "2",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.opposite"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_fill_second_increase",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "10",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "2",
+                                "increase_count": 1,
+                                "cap_reached": false,
+                                "fill_count": 1,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "fill": {
+                        "exchange_fill_id": "fill-2",
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "2",
+                        "fee": "0.18",
+                        "client_order_id": "client-2",
+                        "grid_level_sequence": 1
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "4",
+                                "increase_count": 2,
+                                "cap_reached": false,
+                                "fill_count": 2,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "4",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.opposite"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_fill_caps_at_max_quantity",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "3",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "2",
+                                "increase_count": 1,
+                                "cap_reached": false,
+                                "fill_count": 1,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "fill": {
+                        "exchange_fill_id": "fill-3",
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "2",
+                        "fee": "0.18",
+                        "client_order_id": "client-3",
+                        "grid_level_sequence": 1
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "3",
+                                "increase_count": 2,
+                                "cap_reached": true,
+                                "fill_count": 2,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "3",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.opposite"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [
+                            {
+                                "type": "martingale.cap_reached",
+                                "message": "Martingale size cap reached",
+                                "context": {
+                                    "quantity": "3",
+                                    "increase_count": 2,
+                                    "max_order_quantity": "3",
+                                    "max_increases": 10
+                                }
+                            }
+                        ],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_fill_second_reaches_max_increases",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "100",
+                                "max_increases": 2
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "2",
+                                "increase_count": 1,
+                                "cap_reached": false,
+                                "fill_count": 1,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "fill": {
+                        "exchange_fill_id": "fill-2",
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "2",
+                        "fee": "0.18",
+                        "client_order_id": "client-2",
+                        "grid_level_sequence": 1
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "4",
+                                "increase_count": 2,
+                                "cap_reached": true,
+                                "fill_count": 2,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "4",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.opposite"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [
+                            {
+                                "type": "martingale.cap_reached",
+                                "message": "Martingale size cap reached",
+                                "context": {
+                                    "quantity": "4",
+                                    "increase_count": 2,
+                                    "max_order_quantity": "100",
+                                    "max_increases": 2
+                                }
+                            }
+                        ],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_fill_after_cap_stays_at_cap",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "100",
+                                "max_increases": 2
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "4",
+                                "increase_count": 2,
+                                "cap_reached": true,
+                                "fill_count": 2,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "fill": {
+                        "exchange_fill_id": "fill-4",
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "4",
+                        "fee": "0.36",
+                        "client_order_id": "client-4",
+                        "grid_level_sequence": 1
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "4",
+                                "increase_count": 2,
+                                "cap_reached": true,
+                                "fill_count": 3,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "4",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.opposite"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_tick_uses_increased_quantity",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "10",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "4",
+                                "increase_count": 2,
+                                "cap_reached": false,
+                                "fill_count": 2,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "4",
+                                "increase_count": 2,
+                                "cap_reached": false,
+                                "fill_count": 2,
+                                "last_fill_side": "buy",
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "4",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "get_grid_levels_from_state",
+                    "operation": "getGridLevels",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "10",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "1",
+                                "increase_count": 0,
+                                "cap_reached": false,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "levels": [
+                        {
+                            "sequence": 1,
+                            "price": "90",
+                            "side": "buy"
+                        },
+                        {
+                            "sequence": 2,
+                            "price": "110",
+                            "side": "sell"
+                        }
+                    ]
+                },
+                {
+                    "label": "on_cancel_records_client_order_id",
+                    "operation": "onCancel",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "10",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "1",
+                                "increase_count": 0,
+                                "cap_reached": false,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "1",
+                                "increase_count": 0,
+                                "cap_reached": false,
+                                "fill_count": 0,
+                                "last_canceled_client_order_id": "client-1"
+                            }
+                        },
+                        "levels": [],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "reject_multiplier_of_one",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "1",
+                                "max_order_quantity": "10",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "1",
+                                "increase_count": 0,
+                                "cap_reached": false,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "error": {
+                        "exception": "InvalidStrategyConfigurationException",
+                        "message": "Invalid configuration for strategy [martingale-grid]: size_multiplier must be greater than 1"
+                    }
+                },
+                {
+                    "label": "reject_max_below_base",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "0.5",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "1",
+                                "increase_count": 0,
+                                "cap_reached": false,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "error": {
+                        "exception": "InvalidStrategyConfigurationException",
+                        "message": "Invalid configuration for strategy [martingale-grid]: max_order_quantity must be at least base_order_quantity"
+                    }
+                },
+                {
+                    "label": "should_stop_false",
+                    "operation": "shouldStop",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "martingale-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "base_order_quantity": "1",
+                                "size_multiplier": "2",
+                                "max_order_quantity": "10",
+                                "max_increases": 10
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "current_quantity": "1",
+                                "increase_count": 0,
+                                "cap_reached": false,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "stop": false
+                }
+            ]
+        },
+        "trailing-grid": {
+            "cases": [
+                {
+                    "label": "initialize_center_and_distance",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "trailing-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1",
+                                "trailing_distance": "10"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "80",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "110",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "120",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_tick_inside_distance_keeps_center",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "105",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "trailing-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1",
+                                "trailing_distance": "10"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "80",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "110",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "120",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "buy",
+                                "price": "80",
+                                "quantity": "1",
+                                "grid_level_sequence": 1,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "buy",
+                                "price": "90",
+                                "quantity": "1",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "1",
+                                "grid_level_sequence": 3,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "120",
+                                "quantity": "1",
+                                "grid_level_sequence": 4,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_tick_recenters_beyond_distance",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "111",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "trailing-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1",
+                                "trailing_distance": "10"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "111",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 1,
+                                "last_fill_side": null,
+                                "fill_count": 0,
+                                "last_recenter_price": "111"
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "91",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "101",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "121",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "131",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "buy",
+                                "price": "91",
+                                "quantity": "1",
+                                "grid_level_sequence": 1,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "buy",
+                                "price": "101",
+                                "quantity": "1",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "121",
+                                "quantity": "1",
+                                "grid_level_sequence": 3,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "131",
+                                "quantity": "1",
+                                "grid_level_sequence": 4,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "on_tick_recenter_cancels_outside_orders",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "111",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": [
+                                {
+                                    "client_order_id": "old-outside",
+                                    "side": "buy",
+                                    "price": "80",
+                                    "quantity": "1",
+                                    "grid_level_sequence": 1
+                                },
+                                {
+                                    "client_order_id": "still-inside",
+                                    "side": "buy",
+                                    "price": "101",
+                                    "quantity": "1",
+                                    "grid_level_sequence": 2
+                                }
+                            ]
+                        },
+                        "config": {
+                            "key": "trailing-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1",
+                                "trailing_distance": "10"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "111",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 1,
+                                "last_fill_side": null,
+                                "fill_count": 0,
+                                "last_recenter_price": "111"
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "91",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "101",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "121",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "131",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "buy",
+                                "price": "91",
+                                "quantity": "1",
+                                "grid_level_sequence": 1,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "121",
+                                "quantity": "1",
+                                "grid_level_sequence": 3,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "131",
+                                "quantity": "1",
+                                "grid_level_sequence": 4,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": [
+                            "old-outside"
+                        ]
+                    }
+                },
+                {
+                    "label": "on_fill_buy_places_adjacent_sell",
+                    "operation": "onFill",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "trailing-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1",
+                                "trailing_distance": "10"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "fill": {
+                        "exchange_fill_id": "fill-buy-90",
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "client_order_id": "client-1",
+                        "grid_level_sequence": 2
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": "buy",
+                                "fill_count": 1,
+                                "disarmed_levels": {
+                                    "90": {
+                                        "side": "buy",
+                                        "pair": "110"
+                                    }
+                                }
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "80",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 3,
+                                "price": "110",
+                                "side": "sell"
+                            },
+                            {
+                                "sequence": 4,
+                                "price": "120",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "1",
+                                "grid_level_sequence": 3,
+                                "reason": "strategy.opposite"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "get_grid_levels_from_state",
+                    "operation": "getGridLevels",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "trailing-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1",
+                                "trailing_distance": "10"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "levels": [
+                        {
+                            "sequence": 1,
+                            "price": "80",
+                            "side": "buy"
+                        },
+                        {
+                            "sequence": 2,
+                            "price": "90",
+                            "side": "buy"
+                        },
+                        {
+                            "sequence": 3,
+                            "price": "110",
+                            "side": "sell"
+                        },
+                        {
+                            "sequence": 4,
+                            "price": "120",
+                            "side": "sell"
+                        }
+                    ]
+                },
+                {
+                    "label": "on_cancel_records_client_order_id",
+                    "operation": "onCancel",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "trailing-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1",
+                                "trailing_distance": "10"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": null,
+                                "fill_count": 0,
+                                "last_canceled_client_order_id": "client-1"
+                            }
+                        },
+                        "levels": [],
+                        "orders": [],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "reject_zero_trailing_distance",
+                    "operation": "initialize",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "trailing-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1",
+                                "trailing_distance": "0"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": []
+                        }
+                    },
+                    "error": {
+                        "exception": "InvalidStrategyConfigurationException",
+                        "message": "Invalid configuration for strategy [trailing-grid]: trailing_distance must be positive"
+                    }
+                },
+                {
+                    "label": "should_stop_false",
+                    "operation": "shouldStop",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [],
+                            "timestamp": "2026-11-23T00:00:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "trailing-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 2,
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "order_quantity": "1",
+                                "trailing_distance": "10"
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "10",
+                                "levels_per_side": 2,
+                                "trailing_distance": "10",
+                                "recenter_count": 0,
+                                "last_fill_side": null,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "stop": false
+                }
+            ]
+        }
+    }
+}

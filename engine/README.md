@@ -16,6 +16,11 @@ and never applies a trading effect.
 The full protocol, ordering, dead-letter, kill-switch, heartbeat, and status
 ownership contract is documented in [`../docs/engine.md`](../docs/engine.md).
 
+PHP golden fixtures for the later phase-4 ports are committed under
+`../tests/golden/engine/` (see `../tests/golden/README.md`).
+They are a snapshot of current PHP behaviour only; this Go build does not read
+or execute them yet.
+
 ## What it does today
 
 | Route | Purpose |

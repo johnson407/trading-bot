@@ -1,0 +1,291 @@
+{
+    "format": "php-golden-engine/1",
+    "clock": "2026-11-23T00:00:00+00:00",
+    "decimal_scale": 16,
+    "fee_rate": "0.001",
+    "description": "GridGenerator ladders and GridDerivation decimal helpers from the current PHP implementation.",
+    "generator": [
+        {
+            "label": "arithmetic_center_100_spacing_10_per_side_2",
+            "center_price": "100",
+            "spacing_type": "arithmetic",
+            "spacing_value": "10",
+            "levels_per_side": 2,
+            "levels": [
+                {
+                    "sequence": 1,
+                    "price": "80",
+                    "side": "buy"
+                },
+                {
+                    "sequence": 2,
+                    "price": "90",
+                    "side": "buy"
+                },
+                {
+                    "sequence": 3,
+                    "price": "110",
+                    "side": "sell"
+                },
+                {
+                    "sequence": 4,
+                    "price": "120",
+                    "side": "sell"
+                }
+            ]
+        },
+        {
+            "label": "geometric_center_100_spacing_0_1_per_side_2",
+            "center_price": "100",
+            "spacing_type": "geometric",
+            "spacing_value": "0.1",
+            "levels_per_side": 2,
+            "levels": [
+                {
+                    "sequence": 1,
+                    "price": "82.6446280991735537",
+                    "side": "buy"
+                },
+                {
+                    "sequence": 2,
+                    "price": "90.9090909090909091",
+                    "side": "buy"
+                },
+                {
+                    "sequence": 3,
+                    "price": "110",
+                    "side": "sell"
+                },
+                {
+                    "sequence": 4,
+                    "price": "121",
+                    "side": "sell"
+                }
+            ]
+        },
+        {
+            "label": "dynamic_uses_arithmetic_ladder",
+            "center_price": "100",
+            "spacing_type": "dynamic",
+            "spacing_value": "7.5",
+            "levels_per_side": 1,
+            "levels": [
+                {
+                    "sequence": 1,
+                    "price": "92.5",
+                    "side": "buy"
+                },
+                {
+                    "sequence": 2,
+                    "price": "107.5",
+                    "side": "sell"
+                }
+            ]
+        },
+        {
+            "label": "arithmetic_single_level_per_side",
+            "center_price": "100",
+            "spacing_type": "arithmetic",
+            "spacing_value": "10",
+            "levels_per_side": 1,
+            "levels": [
+                {
+                    "sequence": 1,
+                    "price": "90",
+                    "side": "buy"
+                },
+                {
+                    "sequence": 2,
+                    "price": "110",
+                    "side": "sell"
+                }
+            ]
+        },
+        {
+            "label": "reject_zero_center",
+            "center_price": "0",
+            "spacing_type": "arithmetic",
+            "spacing_value": "10",
+            "levels_per_side": 1,
+            "error": {
+                "exception": "InvalidGridException",
+                "message": "Invalid grid: center price must be positive"
+            }
+        },
+        {
+            "label": "reject_negative_center",
+            "center_price": "-100",
+            "spacing_type": "arithmetic",
+            "spacing_value": "10",
+            "levels_per_side": 1,
+            "error": {
+                "exception": "InvalidGridException",
+                "message": "Invalid grid: center price must be positive"
+            }
+        },
+        {
+            "label": "reject_zero_spacing",
+            "center_price": "100",
+            "spacing_type": "arithmetic",
+            "spacing_value": "0",
+            "levels_per_side": 1,
+            "error": {
+                "exception": "InvalidGridException",
+                "message": "Invalid grid: spacing must be positive"
+            }
+        },
+        {
+            "label": "reject_zero_levels",
+            "center_price": "100",
+            "spacing_type": "arithmetic",
+            "spacing_value": "10",
+            "levels_per_side": 0,
+            "error": {
+                "exception": "InvalidGridException",
+                "message": "Invalid grid: levels per side must be at least 1"
+            }
+        },
+        {
+            "label": "reject_geometric_spacing_one",
+            "center_price": "100",
+            "spacing_type": "geometric",
+            "spacing_value": "1",
+            "levels_per_side": 1,
+            "error": {
+                "exception": "InvalidGridException",
+                "message": "Invalid grid: geometric spacing must be less than 1"
+            }
+        },
+        {
+            "label": "reject_level_below_zero",
+            "center_price": "5",
+            "spacing_type": "arithmetic",
+            "spacing_value": "10",
+            "levels_per_side": 1,
+            "error": {
+                "exception": "InvalidGridException",
+                "message": "Invalid grid: generated levels must have positive prices"
+            }
+        },
+        {
+            "label": "reject_duplicate_prices",
+            "center_price": "1",
+            "spacing_type": "arithmetic",
+            "spacing_value": "0.00000000000000001",
+            "levels_per_side": 1,
+            "error": {
+                "exception": "InvalidGridException",
+                "message": "Invalid grid: duplicate level price [1.0000000000000000]"
+            }
+        }
+    ],
+    "derivation": [
+        {
+            "label": "percent_0_4_to_fraction",
+            "arguments": {
+                "percent": "0.4"
+            },
+            "result": "0.004"
+        },
+        {
+            "label": "percent_1_to_fraction",
+            "arguments": {
+                "percent": "1"
+            },
+            "result": "0.01"
+        },
+        {
+            "label": "percent_0_05_to_fraction",
+            "arguments": {
+                "percent": "0.05"
+            },
+            "result": "0.0005"
+        },
+        {
+            "label": "percent_2_5_to_fraction",
+            "arguments": {
+                "percent": "2.5"
+            },
+            "result": "0.025"
+        },
+        {
+            "label": "order_quantity_1000_0_8_6_50000",
+            "arguments": {
+                "capital": "1000",
+                "utilization": "0.8",
+                "levels_per_side": 6,
+                "center_price": "50000"
+            },
+            "result": "0.0026666666666667"
+        },
+        {
+            "label": "order_quantity_1000_0_5_4_250",
+            "arguments": {
+                "capital": "1000",
+                "utilization": "0.5",
+                "levels_per_side": 4,
+                "center_price": "250"
+            },
+            "result": "0.5"
+        },
+        {
+            "label": "reject_zero_percent",
+            "arguments": {
+                "percent": "0"
+            },
+            "error": {
+                "exception": "InvalidArgumentException",
+                "message": "Spacing percent must be positive."
+            }
+        },
+        {
+            "label": "reject_float_percent",
+            "arguments": {
+                "percent": 0.4
+            },
+            "error": {
+                "exception": "InvalidArgumentException",
+                "message": "Only decimal strings and integers are allowed."
+            }
+        },
+        {
+            "label": "reject_zero_levels",
+            "arguments": {
+                "capital": "1000",
+                "utilization": "0.8",
+                "levels_per_side": 0,
+                "center_price": "50000"
+            },
+            "error": {
+                "exception": "InvalidArgumentException",
+                "message": "Levels per side must be at least 1."
+            }
+        },
+        {
+            "label": "reject_zero_center",
+            "arguments": {
+                "capital": "1000",
+                "utilization": "0.8",
+                "levels_per_side": 6,
+                "center_price": "0"
+            },
+            "error": {
+                "exception": "InvalidArgumentException",
+                "message": "Center price must be positive."
+            }
+        },
+        {
+            "label": "reject_float_capital",
+            "arguments": {
+                "capital": 1000.0,
+                "utilization": "0.8",
+                "levels_per_side": 6,
+                "center_price": "50000"
+            },
+            "error": {
+                "exception": "InvalidArgumentException",
+                "message": "Only decimal strings and integers are allowed."
+            }
+        }
+    ]
+}

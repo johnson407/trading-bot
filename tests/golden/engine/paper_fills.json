@@ -1,0 +1,705 @@
+{
+    "format": "php-golden-engine/1",
+    "clock": "2026-11-23T00:00:00+00:00",
+    "decimal_scale": 16,
+    "fee_rate": "0.001",
+    "description": "PaperExchangeClient::qualifyingFills and BotTickPipeline tick-time paper fills, including cross-and-recross between ticks.",
+    "qualifying_fills": {
+        "cases": [
+            {
+                "label": "buy_crossed_at_or_below_limit",
+                "market_last": "95",
+                "fee_rate": "0.001",
+                "orders": [
+                    {
+                        "client_order_id": "buy-100",
+                        "side": "buy",
+                        "price": "100.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    }
+                ],
+                "fills": [
+                    {
+                        "client_order_id": "buy-100",
+                        "side": "buy",
+                        "price": "100",
+                        "quantity": "1",
+                        "fee": "0.1",
+                        "fee_currency": "USDT"
+                    }
+                ]
+            },
+            {
+                "label": "buy_not_crossed_above_limit",
+                "market_last": "101",
+                "fee_rate": "0.001",
+                "orders": [
+                    {
+                        "client_order_id": "buy-100",
+                        "side": "buy",
+                        "price": "100.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    }
+                ],
+                "fills": []
+            },
+            {
+                "label": "sell_crossed_at_or_above_limit",
+                "market_last": "105",
+                "fee_rate": "0.001",
+                "orders": [
+                    {
+                        "client_order_id": "sell-100",
+                        "side": "sell",
+                        "price": "100.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    }
+                ],
+                "fills": [
+                    {
+                        "client_order_id": "sell-100",
+                        "side": "sell",
+                        "price": "100",
+                        "quantity": "1",
+                        "fee": "0.1",
+                        "fee_currency": "USDT"
+                    }
+                ]
+            },
+            {
+                "label": "sell_not_crossed_below_limit",
+                "market_last": "99",
+                "fee_rate": "0.001",
+                "orders": [
+                    {
+                        "client_order_id": "sell-100",
+                        "side": "sell",
+                        "price": "100.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    }
+                ],
+                "fills": []
+            },
+            {
+                "label": "closest_to_market_first",
+                "market_last": "75",
+                "fee_rate": "0.001",
+                "orders": [
+                    {
+                        "client_order_id": "buy-90",
+                        "side": "buy",
+                        "price": "90.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    },
+                    {
+                        "client_order_id": "buy-80",
+                        "side": "buy",
+                        "price": "80.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    }
+                ],
+                "fills": [
+                    {
+                        "client_order_id": "buy-80",
+                        "side": "buy",
+                        "price": "80",
+                        "quantity": "1",
+                        "fee": "0.08",
+                        "fee_currency": "USDT"
+                    },
+                    {
+                        "client_order_id": "buy-90",
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT"
+                    }
+                ]
+            },
+            {
+                "label": "distance_tie_breaks_on_lower_price",
+                "market_last": "100",
+                "fee_rate": "0.001",
+                "orders": [
+                    {
+                        "client_order_id": "buy-105",
+                        "side": "buy",
+                        "price": "105.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    },
+                    {
+                        "client_order_id": "sell-95",
+                        "side": "sell",
+                        "price": "95.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    }
+                ],
+                "fills": [
+                    {
+                        "client_order_id": "sell-95",
+                        "side": "sell",
+                        "price": "95",
+                        "quantity": "1",
+                        "fee": "0.095",
+                        "fee_currency": "USDT"
+                    },
+                    {
+                        "client_order_id": "buy-105",
+                        "side": "buy",
+                        "price": "105",
+                        "quantity": "1",
+                        "fee": "0.105",
+                        "fee_currency": "USDT"
+                    }
+                ]
+            },
+            {
+                "label": "partial_remaining_quantity",
+                "market_last": "90",
+                "fee_rate": "0.001",
+                "orders": [
+                    {
+                        "client_order_id": "buy-100-partial",
+                        "side": "buy",
+                        "price": "100.0000000000000000",
+                        "quantity": "2.0000000000000000",
+                        "filled_quantity": "0.5000000000000000",
+                        "status": "partially_filled"
+                    }
+                ],
+                "fills": [
+                    {
+                        "client_order_id": "buy-100-partial",
+                        "side": "buy",
+                        "price": "100",
+                        "quantity": "1.5",
+                        "fee": "0.15",
+                        "fee_currency": "USDT"
+                    }
+                ]
+            },
+            {
+                "label": "filled_and_canceled_orders_are_skipped",
+                "market_last": "90",
+                "fee_rate": "0.001",
+                "orders": [
+                    {
+                        "client_order_id": "filled",
+                        "side": "buy",
+                        "price": "100.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "1.0000000000000000",
+                        "status": "filled"
+                    },
+                    {
+                        "client_order_id": "canceled",
+                        "side": "buy",
+                        "price": "100.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "canceled"
+                    },
+                    {
+                        "client_order_id": "open",
+                        "side": "buy",
+                        "price": "100.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    }
+                ],
+                "fills": [
+                    {
+                        "client_order_id": "open",
+                        "side": "buy",
+                        "price": "100",
+                        "quantity": "1",
+                        "fee": "0.1",
+                        "fee_currency": "USDT"
+                    }
+                ]
+            },
+            {
+                "label": "recross_seen_only_at_tick_time_91",
+                "market_last": "91",
+                "fee_rate": "0.001",
+                "orders": [
+                    {
+                        "client_order_id": "buy-90",
+                        "side": "buy",
+                        "price": "90.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    }
+                ],
+                "fills": []
+            },
+            {
+                "label": "tick_time_89_fills",
+                "market_last": "89",
+                "fee_rate": "0.001",
+                "orders": [
+                    {
+                        "client_order_id": "buy-90",
+                        "side": "buy",
+                        "price": "90.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open"
+                    }
+                ],
+                "fills": [
+                    {
+                        "client_order_id": "buy-90",
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT"
+                    }
+                ]
+            }
+        ]
+    },
+    "tick_pipeline_cross_and_recross": {
+        "intra_tick_prints": {
+            "before_91": [
+                "89"
+            ],
+            "before_109": [
+                "111"
+            ]
+        },
+        "steps": [
+            {
+                "label": "initial_tick_95",
+                "market_price": "95",
+                "result": {
+                    "status": "ok",
+                    "market_price": "95",
+                    "orders_placed": 2,
+                    "fills": 0,
+                    "orders_rejected": 0,
+                    "errors": []
+                },
+                "bot": {
+                    "status": "running",
+                    "base_inventory": "2.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "last_error": null,
+                    "settings": {
+                        "recent_prices": [
+                            "95"
+                        ],
+                        "mark_price": "95",
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "grids": [
+                    {
+                        "center_price": "100.0000000000000000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "20.0000000000000000",
+                        "level_count": 2,
+                        "status": "active",
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90.0000000000000000",
+                                "side": "buy",
+                                "state": "open"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110.0000000000000000",
+                                "side": "sell",
+                                "state": "open"
+                            }
+                        ]
+                    }
+                ],
+                "orders": [
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 1,
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "90.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    },
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 2,
+                        "side": "sell",
+                        "type": "limit",
+                        "price": "110.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    }
+                ]
+            },
+            {
+                "label": "recross_returns_before_tick_91",
+                "market_price": "91",
+                "result": {
+                    "status": "ok",
+                    "market_price": "91",
+                    "orders_placed": 0,
+                    "fills": 0,
+                    "orders_rejected": 0,
+                    "errors": []
+                },
+                "bot": {
+                    "status": "running",
+                    "base_inventory": "2.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "last_error": null,
+                    "settings": {
+                        "recent_prices": [
+                            "95",
+                            "91"
+                        ],
+                        "mark_price": "91",
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "grids": [
+                    {
+                        "center_price": "100.0000000000000000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "20.0000000000000000",
+                        "level_count": 2,
+                        "status": "active",
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90.0000000000000000",
+                                "side": "buy",
+                                "state": "open"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110.0000000000000000",
+                                "side": "sell",
+                                "state": "open"
+                            }
+                        ]
+                    }
+                ],
+                "orders": [
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 1,
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "90.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    },
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 2,
+                        "side": "sell",
+                        "type": "limit",
+                        "price": "110.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    }
+                ]
+            },
+            {
+                "label": "tick_observes_89_and_fills_buy",
+                "market_price": "89",
+                "result": {
+                    "status": "ok",
+                    "market_price": "89",
+                    "orders_placed": 0,
+                    "fills": 1,
+                    "orders_rejected": 0,
+                    "errors": []
+                },
+                "bot": {
+                    "status": "running",
+                    "base_inventory": "3.0000000000000000",
+                    "quote_inventory": "909.9100000000000000",
+                    "average_entry_price": "30.0000000000000000",
+                    "realized_pnl": "-0.0900000000000000",
+                    "fees_paid": "0.0900000000000000",
+                    "last_error": null,
+                    "settings": {
+                        "recent_prices": [
+                            "95",
+                            "91",
+                            "89"
+                        ],
+                        "mark_price": "89",
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "grids": [
+                    {
+                        "center_price": "100.0000000000000000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "20.0000000000000000",
+                        "level_count": 2,
+                        "status": "active",
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90.0000000000000000",
+                                "side": "buy",
+                                "state": "filled"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110.0000000000000000",
+                                "side": "sell",
+                                "state": "open"
+                            }
+                        ]
+                    }
+                ],
+                "orders": [
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 1,
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "90.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "1.0000000000000000",
+                        "status": "filled",
+                        "mode": "paper"
+                    },
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 2,
+                        "side": "sell",
+                        "type": "limit",
+                        "price": "110.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    }
+                ]
+            },
+            {
+                "label": "recross_returns_before_tick_109",
+                "market_price": "109",
+                "result": {
+                    "status": "ok",
+                    "market_price": "109",
+                    "orders_placed": 0,
+                    "fills": 0,
+                    "orders_rejected": 0,
+                    "errors": []
+                },
+                "bot": {
+                    "status": "running",
+                    "base_inventory": "3.0000000000000000",
+                    "quote_inventory": "909.9100000000000000",
+                    "average_entry_price": "30.0000000000000000",
+                    "realized_pnl": "-0.0900000000000000",
+                    "fees_paid": "0.0900000000000000",
+                    "last_error": null,
+                    "settings": {
+                        "recent_prices": [
+                            "95",
+                            "91",
+                            "89",
+                            "109"
+                        ],
+                        "mark_price": "109",
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "grids": [
+                    {
+                        "center_price": "100.0000000000000000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "20.0000000000000000",
+                        "level_count": 2,
+                        "status": "active",
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90.0000000000000000",
+                                "side": "buy",
+                                "state": "filled"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110.0000000000000000",
+                                "side": "sell",
+                                "state": "open"
+                            }
+                        ]
+                    }
+                ],
+                "orders": [
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 1,
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "90.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "1.0000000000000000",
+                        "status": "filled",
+                        "mode": "paper"
+                    },
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 2,
+                        "side": "sell",
+                        "type": "limit",
+                        "price": "110.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    }
+                ]
+            },
+            {
+                "label": "tick_observes_111_and_fills_sell",
+                "market_price": "111",
+                "result": {
+                    "status": "ok",
+                    "market_price": "111",
+                    "orders_placed": 0,
+                    "fills": 1,
+                    "orders_rejected": 0,
+                    "errors": []
+                },
+                "bot": {
+                    "status": "running",
+                    "base_inventory": "2.0000000000000000",
+                    "quote_inventory": "1019.8000000000000000",
+                    "average_entry_price": "30.0000000000000000",
+                    "realized_pnl": "79.8000000000000000",
+                    "fees_paid": "0.2000000000000000",
+                    "last_error": null,
+                    "settings": {
+                        "recent_prices": [
+                            "95",
+                            "91",
+                            "89",
+                            "109",
+                            "111"
+                        ],
+                        "mark_price": "111",
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "grids": [
+                    {
+                        "center_price": "100.0000000000000000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "20.0000000000000000",
+                        "level_count": 2,
+                        "status": "active",
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90.0000000000000000",
+                                "side": "buy",
+                                "state": "open"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110.0000000000000000",
+                                "side": "sell",
+                                "state": "filled"
+                            }
+                        ]
+                    }
+                ],
+                "orders": [
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 1,
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "90.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "1.0000000000000000",
+                        "status": "filled",
+                        "mode": "paper"
+                    },
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 2,
+                        "side": "sell",
+                        "type": "limit",
+                        "price": "110.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "1.0000000000000000",
+                        "status": "filled",
+                        "mode": "paper"
+                    },
+                    {
+                        "grid": 1,
+                        "grid_level_sequence": 1,
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "90.0000000000000000",
+                        "quantity": "1.0000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    }
+                ]
+            }
+        ]
+    }
+}

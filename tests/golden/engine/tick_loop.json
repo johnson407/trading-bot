@@ -1,0 +1,175 @@
+{
+    "format": "php-golden-engine/1",
+    "clock": "2026-11-23T00:00:00+00:00",
+    "decimal_scale": 16,
+    "fee_rate": "0.001",
+    "description": "Current bots:dispatch due-check, dispatch cache guard, RunBotTick uniqueness/overlap, and BotHealthMonitor stale threshold.",
+    "dispatch_due_check": {
+        "cases": [
+            {
+                "label": "default_60_fresh",
+                "status": "running",
+                "tick_interval_seconds": 60,
+                "last_tick_age_seconds": null,
+                "dispatched": 1,
+                "exit_code": 0
+            },
+            {
+                "label": "default_60_exactly_due",
+                "status": "running",
+                "tick_interval_seconds": 60,
+                "last_tick_age_seconds": 60,
+                "dispatched": 1,
+                "exit_code": 0
+            },
+            {
+                "label": "default_60_not_due",
+                "status": "running",
+                "tick_interval_seconds": 60,
+                "last_tick_age_seconds": 59,
+                "dispatched": 0,
+                "exit_code": 0
+            },
+            {
+                "label": "minimum_1_same_second",
+                "status": "running",
+                "tick_interval_seconds": 1,
+                "last_tick_age_seconds": 0,
+                "dispatched": 0,
+                "exit_code": 0
+            },
+            {
+                "label": "minimum_1_after_one_second",
+                "status": "running",
+                "tick_interval_seconds": 1,
+                "last_tick_age_seconds": 1,
+                "dispatched": 1,
+                "exit_code": 0
+            },
+            {
+                "label": "interval_0_is_clamped_to_1_same_second",
+                "status": "running",
+                "tick_interval_seconds": 0,
+                "last_tick_age_seconds": 0,
+                "dispatched": 0,
+                "exit_code": 0
+            },
+            {
+                "label": "interval_0_is_clamped_to_1_after_one_second",
+                "status": "running",
+                "tick_interval_seconds": 0,
+                "last_tick_age_seconds": 1,
+                "dispatched": 1,
+                "exit_code": 0
+            },
+            {
+                "label": "paused_skipped",
+                "status": "paused",
+                "tick_interval_seconds": 60,
+                "last_tick_age_seconds": null,
+                "dispatched": 0,
+                "exit_code": 0
+            },
+            {
+                "label": "stopped_skipped",
+                "status": "stopped",
+                "tick_interval_seconds": 60,
+                "last_tick_age_seconds": null,
+                "dispatched": 0,
+                "exit_code": 0
+            }
+        ]
+    },
+    "dispatch_cache_guard": {
+        "first_dispatch": 1,
+        "second_dispatch_inside_interval": 1,
+        "after_cache_forget": 2
+    },
+    "run_bot_tick_job": {
+        "tries": 1,
+        "unique_for": 10,
+        "unique_id": "bot-tick:42",
+        "overlap": {
+            "middleware": "Illuminate\\Queue\\Middleware\\WithoutOverlapping",
+            "key": "bot-tick:42",
+            "expire_after_seconds": 30,
+            "release_after_seconds": 0
+        }
+    },
+    "health": {
+        "cases": [
+            {
+                "label": "default_60_healthy_at_179s",
+                "tick_interval_seconds": 60,
+                "stale_after_seconds": 180,
+                "health_interval_seconds": 30,
+                "age_seconds": 179,
+                "paused_count": 0,
+                "paused": false
+            },
+            {
+                "label": "default_60_stale_at_181s",
+                "tick_interval_seconds": 60,
+                "stale_after_seconds": 180,
+                "health_interval_seconds": 30,
+                "age_seconds": 181,
+                "paused_count": 1,
+                "paused": true
+            },
+            {
+                "label": "interval_300_healthy_at_329s",
+                "tick_interval_seconds": 300,
+                "stale_after_seconds": 180,
+                "health_interval_seconds": 30,
+                "age_seconds": 329,
+                "paused_count": 0,
+                "paused": false
+            },
+            {
+                "label": "interval_300_stale_at_331s",
+                "tick_interval_seconds": 300,
+                "stale_after_seconds": 180,
+                "health_interval_seconds": 30,
+                "age_seconds": 331,
+                "paused_count": 1,
+                "paused": true
+            },
+            {
+                "label": "interval_0_threshold_is_31s_healthy_at_30s",
+                "tick_interval_seconds": 0,
+                "stale_after_seconds": 10,
+                "health_interval_seconds": 30,
+                "age_seconds": 30,
+                "paused_count": 0,
+                "paused": false
+            },
+            {
+                "label": "interval_0_threshold_is_31s_stale_at_32s",
+                "tick_interval_seconds": 0,
+                "stale_after_seconds": 10,
+                "health_interval_seconds": 30,
+                "age_seconds": 32,
+                "paused_count": 1,
+                "paused": true
+            },
+            {
+                "label": "last_successful_tick_takes_precedence",
+                "tick_interval_seconds": 60,
+                "stale_after_seconds": 180,
+                "health_interval_seconds": 30,
+                "age_seconds": 10,
+                "paused_count": 0,
+                "paused": false
+            },
+            {
+                "label": "created_at_is_the_fallback",
+                "tick_interval_seconds": 60,
+                "stale_after_seconds": 180,
+                "health_interval_seconds": 30,
+                "age_seconds": 181,
+                "paused_count": 1,
+                "paused": true
+            }
+        ]
+    }
+}

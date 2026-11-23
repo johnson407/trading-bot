@@ -217,6 +217,18 @@ The feed is **idle unless** `ENGINE_MARKET_DATA_WS_URL` and
 non-empty. Local Compose sets none of them, so the engine opens no exchange
 connection. Phase 4 will supply running-bot symbols to `marketdata.Feed.Run`.
 
+## PHP golden engine fixtures (phase 4 capture)
+
+Before any PHP engine code is removed, task 4.1 captures deterministic golden
+fixtures from the current PHP tick pipeline, grid sync, paper fills, and the
+four strategies. They live in `tests/golden/engine/` and are verified by
+`tests/Feature/GoldenEngineFixturesTest.php`. Later phase-4 tasks consume them
+for Go parity tests; the fixtures do not change runtime behaviour.
+
+See [`../tests/golden/README.md`](../tests/golden/README.md) for the fixture
+layout, coverage mapping, determinism rules (fixed clock, fixed paper fee,
+`Decimal` scale 16), and the exact regeneration command.
+
 ## Local verification
 
 ```bash

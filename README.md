@@ -294,6 +294,12 @@ docker compose exec -u www-data \
 
 The full suite uses the PostgreSQL `trading_bot_test` database. The opt-in testnet suite only runs when `CCXT_TESTNET=1` and Binance testnet credentials are provided.
 
+PHP engine golden fixtures for the later Go ports live in
+[`tests/golden/engine/`](tests/golden/engine/) and are verified by
+`GoldenEngineFixturesTest`. See
+[`tests/golden/README.md`](tests/golden/README.md) for the capture command and
+coverage.
+
 ## Runtime operations
 
 ```bash

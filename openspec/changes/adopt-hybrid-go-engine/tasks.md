@@ -27,7 +27,7 @@
 
 ## 4. Golden fixtures, then paper engine and strategies
 
-- [ ] 4.1 **Before deleting any PHP engine code**, capture golden fixtures from the current tick pipeline and the four strategies (and paper fill cases, including cross-and-recross-between-ticks); verify the fixture files are committed and the capture method is documented.
+- [x] 4.1 **Before deleting any PHP engine code**, capture golden fixtures from the current tick pipeline and the four strategies (and paper fill cases, including cross-and-recross-between-ticks); verify the fixture files are committed and the capture method is documented.
 - [ ] 4.2 Port the tick loop (60s default, min 1s, one in-flight evaluation, stale `max(180, interval + health interval)`) into Go; verify `make test` against the interval, overlap, and stale fixtures from 4.1.
 - [ ] 4.3 Port grid generation and grid sync into Go; verify `make test` against the grid fixtures from 4.1.
 - [ ] 4.4 Port `qualifyingFills` paper-fill parity into Go; verify `make test` against the paper-fill fixtures from 4.1, including cross-and-recross-between-ticks.
