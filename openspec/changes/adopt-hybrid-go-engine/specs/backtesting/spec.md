@@ -52,7 +52,7 @@ The Go engine SHALL replay the snapshotted strategy through the same lifecycle u
 
 ### Requirement: Run lifecycle and failure reporting
 
-The system SHALL expose pending, running, completed, and failed run states, SHALL record progress while running, SHALL prevent a duplicate command or job from executing the same run twice, and SHALL report a failed run with a concise non-secret error. The engine SHALL write status, progress, metrics, and backtest fills; Laravel SHALL display them.
+The system SHALL expose pending, running, completed, and failed run states, record progress, and ignore a duplicate command for the same run. A failed run SHALL have a concise non-secret error. The engine SHALL write status, metrics, and fills, and SHALL fail a run whose worker disappears or exceeds the timeout. Laravel SHALL display results and SHALL NOT schedule `backtests:fail-stale` after cutover.
 
 #### Scenario: Successful run transitions
 
@@ -68,6 +68,11 @@ The system SHALL expose pending, running, completed, and failed run states, SHAL
 
 - **WHEN** candle retrieval or simulation raises an error
 - **THEN** the run is marked failed with a concise message and the error is logged
+
+#### Scenario: Stale run is failed by the engine
+
+- **WHEN** a backtest run's worker disappears or exceeds the documented timeout
+- **THEN** the engine marks that run failed with a concise message
 
 ### Requirement: Backtest dashboard
 

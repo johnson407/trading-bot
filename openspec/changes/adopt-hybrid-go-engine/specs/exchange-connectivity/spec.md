@@ -52,7 +52,7 @@ Paper mode SHALL simulate a limit order fill when the market price reaches or cr
 
 ### Requirement: Credential protection
 
-Exchange credentials SHALL be encrypted at rest by Laravel, SHALL never be included in logs, events, or rendered back to the user after saving, and SHALL be supplied to the exchange client only at runtime. The Go engine SHALL decrypt Laravel-encrypted credentials in memory using the process `APP_KEY`, SHALL NOT persist a decrypted copy, and SHALL NOT log `APP_KEY`, API keys, secrets, or signatures.
+Exchange credentials SHALL be encrypted at rest by Laravel using the Eloquent `encrypted` cast (`Crypt::encryptString`: AES-256-CBC, HMAC-SHA256, JSON `iv`, `value`, `mac`, `tag`, base64; values are not PHP-serialized). The engine SHALL decrypt in memory with `APP_KEY` (optional `base64:` prefix) and `previous_keys` as Laravel does, SHALL NOT persist a decrypted copy, and SHALL NOT log `APP_KEY`, API keys, secrets, or signatures.
 
 #### Scenario: Store credentials
 
@@ -68,6 +68,11 @@ Exchange credentials SHALL be encrypted at rest by Laravel, SHALL never be inclu
 
 - **WHEN** a live bot needs a private exchange client
 - **THEN** the engine decrypts the stored payload in memory and does not write the secret to disk, events, or logs
+
+#### Scenario: Decrypt matches Laravel encryptString
+
+- **WHEN** the engine decrypts a stub value produced by Laravel `Crypt::encryptString`
+- **THEN** it recovers the original plaintext and does not require PHP serialized payload wrapping
 
 ### Requirement: Historical market data access
 

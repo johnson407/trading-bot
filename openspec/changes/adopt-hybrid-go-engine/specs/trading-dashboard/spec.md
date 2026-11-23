@@ -4,7 +4,7 @@
 
 ### Requirement: Bot controls
 
-The dashboard SHALL allow a bot's owner to start, pause, and stop the bot, and SHALL show the outcome of those actions. Start, pause, and stop SHALL record the desired status in Postgres and publish the corresponding engine command. The dashboard SHALL continue to refresh by polling at most every five seconds and SHALL NOT require a browser WebSocket. Starting or resuming a live bot SHALL require explicit confirmation before the command is sent.
+The dashboard SHALL allow a bot's owner to start, pause, and stop the bot, and SHALL show the outcome of those actions. Start, pause, and stop SHALL record `desired_status` in Postgres and publish the corresponding engine command. The dashboard SHALL continue to refresh by polling at most every five seconds and SHALL NOT require a browser WebSocket. Starting or resuming a live bot SHALL require explicit confirmation before the command is sent.
 
 #### Scenario: Pause from the dashboard
 
@@ -23,7 +23,7 @@ The dashboard SHALL allow a bot's owner to start, pause, and stop the bot, and S
 
 ### Requirement: Dashboard overview
 
-The dashboard SHALL present an overview rather than a placeholder. It SHALL show the user's bots by state, aggregate realized and unrealized profit and loss, and recent activity, and SHALL refresh within five seconds. It SHALL also show whether the trading engine heartbeat is currently available.
+The dashboard SHALL present an overview rather than a placeholder. It SHALL show the user's bots by state, aggregate realized and unrealized profit and loss, and recent activity, and SHALL refresh within five seconds. It SHALL also show whether the trading engine heartbeat is currently available, as a warning only when it is missing or expired.
 
 #### Scenario: Open the dashboard
 
@@ -38,11 +38,11 @@ The dashboard SHALL present an overview rather than a placeholder. It SHALL show
 #### Scenario: Engine availability is visible
 
 - **WHEN** the engine heartbeat is missing or expired
-- **THEN** the dashboard shows the engine as unavailable
+- **THEN** the dashboard shows the engine as unavailable as a warning and does not automatically pause bots or cancel orders
 
 ### Requirement: Kill-switch access
 
-The dashboard SHALL expose the account-wide kill-switch and SHALL require explicit confirmation before activating it. Activation SHALL mark the user's bots paused in Postgres and publish a `kill_switch` command so the engine can cancel open orders without waiting for the next tick.
+The dashboard SHALL expose the account-wide kill-switch and SHALL require explicit confirmation before activating it. Activation SHALL write `desired_status` paused and publish a `kill_switch` command. If the engine heartbeat is missing or expired or publish fails, Laravel SHALL also cancel open live orders in that same action.
 
 #### Scenario: Activate from the dashboard
 

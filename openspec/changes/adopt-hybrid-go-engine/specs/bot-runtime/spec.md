@@ -4,7 +4,7 @@
 
 ### Requirement: Go trading engine process
 
-A dedicated Go engine process SHALL evaluate running bots, subscribe to market data, place and synchronize orders, enforce runtime risk checks, reconcile on start, and execute backtests. Laravel SHALL NOT evaluate ticks, place or cancel trading orders, or replay backtests after the engine cutover. A single engine instance SHALL be the active consumer of engine commands in this version.
+A dedicated Go engine process SHALL evaluate running bots, consume market data, place and sync orders, enforce runtime risk, reconcile on start, and run backtests. After cutover Laravel SHALL NOT evaluate ticks, place or sync orders, or replay backtests. Laravel MAY cancel open live orders only during a user-triggered kill-switch or stop when the heartbeat is missing or expired or command publish fails. v1 has one active command consumer.
 
 #### Scenario: Engine evaluates a running bot
 
@@ -14,11 +14,16 @@ A dedicated Go engine process SHALL evaluate running bots, subscribe to market d
 #### Scenario: Laravel does not place trading orders
 
 - **WHEN** the engine cutover is complete
-- **THEN** Laravel HTTP workers and Horizon do not place, cancel, or synchronize trading orders on the exchange
+- **THEN** Laravel HTTP workers and Horizon do not place, cancel, or synchronize trading orders on the exchange, except for the user-triggered live kill-switch or stop emergency cancel when the engine is unavailable or command publish fails
+
+#### Scenario: Laravel emergency cancel on live kill-switch or stop
+
+- **WHEN** a user activates the kill-switch or stops a live bot and the engine heartbeat is missing or expired, or command publish fails
+- **THEN** Laravel cancels the affected live bots' open orders in the same action via `CancelBotOrders`
 
 ### Requirement: Engine heartbeat
 
-The engine SHALL refresh a Redis heartbeat key at least every five seconds with a time-to-live of ten seconds, including a UTC timestamp and a count of running bots, and SHALL exclude secrets. Laravel health and the dashboard SHALL treat a missing or expired heartbeat as an engine outage and surface that state. The heartbeat SHALL NOT be implemented by calling an exchange.
+The engine SHALL refresh a Redis heartbeat key at least every five seconds with a time-to-live of ten seconds, including a UTC timestamp and a count of running bots, and SHALL exclude secrets. Laravel health and the dashboard SHALL treat a missing or expired heartbeat as an outage and show a warning only. A missing or expired heartbeat SHALL NOT automatically pause bots, cancel orders, or activate the kill-switch.
 
 #### Scenario: Heartbeat is visible while the engine is up
 
@@ -30,9 +35,14 @@ The engine SHALL refresh a Redis heartbeat key at least every five seconds with 
 - **WHEN** the heartbeat key is missing or expired
 - **THEN** the dashboard or health view shows the engine as unavailable
 
+#### Scenario: Expired heartbeat does not pause or cancel
+
+- **WHEN** the engine heartbeat is missing or expired and the user has not activated the kill-switch or stop
+- **THEN** Laravel does not pause bots, cancel orders, or activate the kill-switch, and only shows the engine as unavailable
+
 ### Requirement: Command and event streams
 
-User-initiated start, pause, stop, order cancellation, kill-switch, and backtest requests SHALL be written to a versioned Redis Stream (`engine.commands`) with a unique idempotency key. The engine SHALL consume that stream, ignore a command whose idempotency key was already completed, and SHALL NOT execute a message whose schema version is higher than it supports. The engine SHALL publish versioned events on `engine.events`. Payloads SHALL NOT include credentials, `APP_KEY`, or signatures.
+User start, pause, stop, cancel, kill-switch, and backtest requests SHALL be published on versioned stream `engine.commands` with an idempotency key. Consumption SHALL be at-least-once: `XACK` after durable effects, pending entries auto-claimed on start, and poison messages dead-lettered after limited retries. Commands for the same bot SHALL be applied in stream order. Unsupported schema versions SHALL not execute. Event payloads SHALL NOT include credentials, `APP_KEY`, or signatures.
 
 #### Scenario: Command is applied once
 
@@ -48,6 +58,54 @@ User-initiated start, pause, stop, order cancellation, kill-switch, and backtest
 
 - **WHEN** a user starts a bot
 - **THEN** Laravel records the desired status in Postgres and publishes a `bot.start` command for the engine
+
+#### Scenario: Pending entries are reclaimed
+
+- **WHEN** the engine starts and a command is still pending in the consumer group
+- **THEN** the engine claims it and either applies it or, if its idempotency key is already completed, acknowledges it with no second effect
+
+#### Scenario: Poison command is dead-lettered
+
+- **WHEN** a command fails processing more than the documented retry limit
+- **THEN** the engine writes it to the dead-letter stream, records a failure event without secrets, and acknowledges the original so the group is not blocked
+
+#### Scenario: Per-bot commands are applied in order
+
+- **WHEN** two commands for the same bot are published in sequence
+- **THEN** the engine applies them in stream order and does not apply the later command first
+
+### Requirement: Bot status ownership
+
+Laravel SHALL own `desired_status` and SHALL write it on user start, pause, stop, and kill-switch actions. The engine SHALL own runtime `status` and `last_error`. After the ownership migration Laravel SHALL NOT write `status` or `last_error`. The engine SHALL NOT set `status` to running when `desired_status` is paused or stopped, and SHALL treat `desired_status` as authoritative user intent.
+
+#### Scenario: Laravel writes only desired status
+
+- **WHEN** a user starts, pauses, stops, or activates the kill-switch
+- **THEN** Laravel updates `desired_status` and does not write `status` or `last_error`
+
+#### Scenario: Engine writes runtime status and last_error
+
+- **WHEN** the engine pauses a bot for stale, risk, or a live-gate failure
+- **THEN** it updates `status` and `last_error` and does not change `desired_status`
+
+#### Scenario: Engine does not resume against a user pause
+
+- **WHEN** `desired_status` is paused or stopped
+- **THEN** the engine does not set `status` to running and does not place new orders
+
+### Requirement: Activity and settings ownership
+
+After cutover, `activity_logs` SHALL be insert-only with the disjoint Laravel and engine type lists in the design. The engine SHALL NOT insert Laravel-listed types. Engine-owned `bots.settings` keys `mark_price`, `recent_prices`, and `daily_loss_baseline` SHALL be written only by the engine. Laravel may initialize `settings` to an empty object on create and SHALL merge later updates without overwriting those keys.
+
+#### Scenario: Laravel bot update preserves engine settings
+
+- **WHEN** Laravel updates a bot after the engine has stored mark or daily-loss keys in `settings`
+- **THEN** those engine-owned keys are still present and unchanged
+
+#### Scenario: Engine does not write Laravel activity types
+
+- **WHEN** the engine records a runtime pause, fill, or cancel
+- **THEN** it inserts only an engine-listed activity type and does not insert `bot.paused`, `bot.started`, or `bot.stopped`
 
 ## MODIFIED Requirements
 
@@ -110,7 +168,7 @@ On engine start the system SHALL resume bots that were running, reload their per
 
 ### Requirement: Scheduled maintenance
 
-The engine SHALL run health checks, order synchronization, and balance synchronization for running bots. Health checks SHALL detect bots whose last successful tick is older than the effective stale threshold: the greater of the configured threshold (default 180 seconds) and the bot's interval plus the health-check interval. Balance sync SHALL refresh a live bot's balances unless the account is shared, with a shared-account skip recorded at most once per bot per UTC day.
+The engine SHALL run health checks, order sync, balance sync, and stale-backtest failure. Health checks SHALL pause a bot whose last successful tick is older than the effective stale threshold (the greater of the default 180 seconds and the bot interval plus the health-check interval). Balance sync SHALL refresh a live bot unless the account is shared, with a skip at most once per bot per UTC day. Laravel SHALL NOT schedule `bots:health` or `backtests:fail-stale` after cutover.
 
 #### Scenario: Stale bot detected
 
@@ -141,6 +199,11 @@ The engine SHALL run health checks, order synchronization, and balance synchroni
 
 - **WHEN** a live tick takes longer than 15 seconds but less than the effective stale threshold
 - **THEN** the bot is not paused by the health check
+
+#### Scenario: Stale backtest is failed by the engine
+
+- **WHEN** a backtest run's worker disappears or exceeds the documented timeout
+- **THEN** the engine marks that run failed with a concise message
 
 ### Requirement: Execution capacity
 

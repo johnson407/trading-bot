@@ -28,7 +28,7 @@ Each bot SHALL enforce a configured daily loss limit, and the account SHALL supp
 
 ### Requirement: Kill-switch
 
-The system SHALL provide an account-wide kill-switch that cancels all open orders for all of the user's bots and pauses those bots. Laravel SHALL mark those bots paused in Postgres and publish a `kill_switch` command. The engine SHALL execute the cancellations without waiting for the next scheduled tick. If the command stream is unavailable, the engine SHALL still honor the paused rows on its next status refresh, at least once per second.
+The system SHALL provide an account-wide kill-switch that cancels the user's open orders and pauses those bots. Laravel SHALL write `desired_status` paused and publish `kill_switch`. The engine SHALL cancel without waiting for a tick and honor paused desired status at least once per second if the stream is down. If publish fails or the heartbeat is missing or expired, Laravel SHALL cancel live open orders in the same action via `CancelBotOrders` and SHALL NOT write `status` or `last_error`.
 
 #### Scenario: Activate the kill-switch
 
@@ -44,6 +44,11 @@ The system SHALL provide an account-wide kill-switch that cancels all open order
 
 - **WHEN** a user activates the kill-switch in the middle of a bot's tick interval
 - **THEN** the engine begins cancellation immediately rather than waiting for the next tick
+
+#### Scenario: Kill-switch cancels live orders when the engine is unavailable
+
+- **WHEN** a user activates the kill-switch and the engine heartbeat is missing or expired, or publishing the command fails
+- **THEN** Laravel still marks the bots' desired status paused and, in the same action, cancels open orders on that user's live bots, recording per-order failures without stopping the rest of the work
 
 ### Requirement: Live-mode safeguards
 
