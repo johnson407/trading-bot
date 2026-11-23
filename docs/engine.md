@@ -8,9 +8,10 @@ ownership, and the heartbeat.
 
 > **Current phase:** the Go engine under `engine/` implements the contract,
 > consumer, idempotency, heartbeat, public market data, `/healthz` readiness,
-> and the phase-4.2/4.3 tick-loop and grid libraries. The tick scheduler and
-> grid sync are **not wired into the process**: this build does **not** run
-> ticks, strategies, orders, or backtests, and it makes no exchange calls.
+> and the phase-4.2/4.3/4.4 tick-loop, grid, and paper-fill libraries. The tick
+> scheduler, grid sync, and paper-fill selection are **not wired into the
+> process**: this build does **not** run ticks, strategies, orders, or
+> backtests, and it makes no exchange calls.
 > Laravel is still the trading runtime until the later apply phases. Any
 > command received by this build is rejected with an `engine.command_failed`
 > event and never executed.
@@ -231,10 +232,11 @@ See [`../tests/golden/README.md`](../tests/golden/README.md) for the fixture
 layout, coverage mapping, determinism rules (fixed clock, fixed paper fee,
 `Decimal` scale 16), and the exact regeneration command.
 
-`internal/tick` and `internal/grid` are pure libraries proven against
-`tick_loop.json`, `grid_generation.json`, and `grid_sync.json`. They are not
-started by `main`; the tick scheduler needs a PostgreSQL bot source and the
-grid sync needs a persistence layer before later phases can wire them in.
+`internal/tick`, `internal/grid`, and `internal/paperfill` are pure libraries
+proven against `tick_loop.json`, `grid_generation.json`, `grid_sync.json`, and
+`paper_fills.json`. They are not started by `main`; the tick scheduler needs a
+PostgreSQL bot source and the grid sync and paper fills need a persistence layer
+before later phases can wire them in.
 `internal/decimal` matches PHP bcmath at scale 16 (truncating multiply/add,
 17-digit divide rounded half-up to 16) and rejects floats.
 

@@ -54,9 +54,10 @@ type syncScenarioConfig struct {
 	strategyKey string
 	quantity    string
 	// fillSteps are steps where the PHP pipeline also applies paper fills and
-	// strategy placement. Phase 4.2/4.3 only owns grid sync, so these steps
-	// assert the grid structure stays matched; fills and strategy orders are
-	// covered by tasks 4.4-4.8.
+	// strategy placement. This test still owns grid sync only: paperfill proves
+	// fill selection (task 4.4), while the strategy re-arm order that appears
+	// after a fill is task 4.5. These steps therefore assert the grid structure
+	// stays matched.
 	fillSteps map[string]bool
 }
 

@@ -1,10 +1,11 @@
 # Trading engine (Go)
 
 This directory is the Go trading engine for the hybrid layout described in
-`openspec/changes/adopt-hybrid-go-engine/`. **Phase 4.2/4.3 adds the tick-loop
-semantics and the grid generator/sync port; there are still:**
+`openspec/changes/adopt-hybrid-go-engine/`. **Phase 4.2/4.3/4.4 adds the
+tick-loop semantics, the grid generator/sync port, and paper-fill selection;
+there are still:**
 
-- no strategies, paper fills, orders, risk gates, or credential decryption;
+- no strategies, orders, risk gates, or credential decryption;
 - no private, signed, or user-data exchange calls and no API keys;
 - **no exchange connection by default** — the Compose service sets no market
   data endpoints, so the feed stays idle;
@@ -66,7 +67,7 @@ The server listens on `ENGINE_LISTEN_ADDR` (default `:8080`). The Compose
 healthcheck runs `/engine healthcheck`, which performs an in-container
 `GET /healthz`; it never contacts an exchange.
 
-### Tick and grid ports (phase 4.2/4.3)
+### Tick, grid, and paper-fill ports (phase 4.2/4.3/4.4)
 
 `internal/tick` ports the PHP `bots:dispatch` due-check (60s default, 1s
 minimum), the per-interval cache guard, the `RunBotTick` unique/overlap policy,
@@ -76,7 +77,7 @@ is started by `main`, and it has no database or Redis source yet.
 
 `internal/grid` ports `GridGenerator` (arithmetic, geometric, and dynamic
 ladders plus validation), `GridDerivation`, and the `BotTickPipeline` grid
-create/match/cancel/recenter path. Both packages are proven against the
+create/match/cancel/recenter path. These packages are proven against the
 committed `tick_loop.json`, `grid_generation.json`, and `grid_sync.json`
 fixtures. The `grid_sync` fixture is end-to-end for the PHP pipeline; phase
 4.2/4.3 asserts its grid and order lifecycle slices, while paper fills and
@@ -85,6 +86,18 @@ strategy decisions remain tasks 4.4-4.8.
 `internal/decimal` implements PHP `Decimal` scale-16 bcmath semantics: add/sub
 and multiply truncate at 16 places, divide truncates at 17 then rounds half-up
 to 16, comparisons truncate at 16, and values reject floats.
+
+### Paper fills (phase 4.4)
+
+`internal/paperfill` ports `PaperExchangeClient::qualifyingFills`: open and
+partially filled limit orders fill when the tick's observed last price crosses
+their limit (buy at or below, sell at or above). Fills are ordered
+closest-to-market first, ties break on the lower price, quantities are the
+remaining amount, and the fee is `price * quantity * fee_rate`. It is a pure
+library and only sees the price observed by a tick, so an intra-tick print that
+crosses and returns before the next tick does not fill an order. The package is
+proven against the committed `paper_fills.json` fixture, including the
+cross-and-recross-between-ticks scenario. Nothing places or persists orders yet.
 
 ## Configuration
 
@@ -131,6 +144,7 @@ engine/
   internal/decimal/           PHP Decimal scale-16 bcmath-compatible arithmetic
   internal/tick/              bots:dispatch due-check, overlap, stale threshold
   internal/grid/              grid generation, derivation, create/match/recenter
+  internal/paperfill/         qualifyingFills paper-fill selection
   internal/goldenfixture/     locates tests/golden/engine for parity tests
   internal/health/            /healthz and /livez handlers
   internal/healthcheck/       in-container Compose probe
@@ -175,11 +189,13 @@ Compose Redis or a live Postgres. The market-data suite covers subscription,
 reconnect with backoff, trade-id gap detection, quiet-period recovery, periodic
 REST fallback, and disconnect → REST snapshot → resumed socket.
 
-The tick and grid parity tests read the committed PHP golden fixtures. They
-cover due-check interval/minimum/paused-stopped skips, the cache guard, job
-uniqueness/overlap policy, stale thresholds, arithmetic/geometric/dynamic grid
-generation, derivation errors, grid creation, level matching, fill-driven sync,
-and trailing recenter.
+The tick, grid, and paper-fill parity tests read the committed PHP golden
+fixtures. They cover due-check interval/minimum/paused-stopped skips, the cache
+guard, job uniqueness/overlap policy, stale thresholds,
+arithmetic/geometric/dynamic grid generation, derivation errors, grid creation,
+level matching, fill-driven sync, trailing recenter, paper-fill crossing and
+ordering, partial quantities, fees, skipped filled/canceled orders, and
+tick-time cross-and-recross for both sides.
 
 ## Docker
 
