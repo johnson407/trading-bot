@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\Support\GoldenEngineFixtures;
+use Tests\Support\GoldenRiskFixtures;
 
 uses(RefreshDatabase::class);
 
@@ -22,7 +23,11 @@ it('matches the committed PHP golden engine fixtures', function () {
         $capture->write($fixtures);
     }
 
-    $expectedFiles = GoldenEngineFixtures::FILES;
+    $expectedFiles = array_merge(
+        GoldenEngineFixtures::FILES,
+        GoldenRiskFixtures::FILES,
+        [GoldenRiskFixtures::CIPHERTEXT_FILE],
+    );
     sort($expectedFiles);
 
     $actualFiles = array_map(

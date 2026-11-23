@@ -32,6 +32,13 @@ The harness lives in `tests/Support/GoldenEngineFixtures.php`; the verification
 test is `tests/Feature/GoldenEngineFixturesTest.php`
 (`it matches the committed PHP golden engine fixtures`).
 
+The phase-5 risk harness lives in `tests/Support/GoldenRiskFixtures.php`; its
+verification test is `tests/Feature/GoldenRiskFixturesTest.php`. It calls the
+production `StartBot`/`LiveModeGuard`, `RiskGuard`, `DailyLossMonitor`,
+`ExitRules`/`ExitGuardMonitor`, `ConsecutiveFailureTracker`, and the
+`StoreBotRequest` allowlist validation directly. No PHP engine behaviour is
+changed for these fixtures.
+
 ## Files
 
 | File | Covers | Later task |
@@ -41,6 +48,8 @@ test is `tests/Feature/GoldenEngineFixturesTest.php`
 | `tests/golden/engine/grid_sync.json` | `BotTickPipeline` grid creation, level matching, fill-driven sync, and trailing recenter (old grid stopped, orders canceled, new grid/orders) | 4.3 |
 | `tests/golden/engine/paper_fills.json` | `qualifyingFills` buy/sell crossing, closest-first, tie-break, partial remaining quantity, fees; tick-time cross-and-recross for both sides | 4.4 |
 | `tests/golden/engine/strategies.json` | Initialize, on-tick, on-fill, on-cancel, `getGridLevels`, `shouldStop`, and validation errors for all four strategies | 4.5–4.8 |
+| `tests/golden/engine/risk.json` | `LiveModeGuard` gate/confirmation/balance and no live-to-paper fallback; `RiskGuard` position/open-order/inventory paths; `DailyLossMonitor` per-bot/account pause, cancel, reset, baseline isolation, and no auto-resume; protective exit rules/precedence/cancel failure; `ConsecutiveFailureTracker` threshold/reset/cancel failure; `TRADING_EXCHANGES` creation validation plus the current-PHP runtime gap | 5.1–5.6 |
+| `tests/golden/engine/credentials_ciphertext.json` | `Crypt::encryptString` payload shape (AES-256-CBC, base64 JSON `iv/value/mac/tag`, not PHP-serialized) and previous-key rotation for in-memory decryption. Contains a hardcoded **test-only** key and fake plaintexts, never `.env` or `APP_KEY` | 5.7 |
 
 ## Determinism
 
@@ -58,6 +67,21 @@ test is `tests/Feature/GoldenEngineFixturesTest.php`
   quantity, and status.
 - The files are pretty-printed JSON with unescaped slashes and a trailing
   newline. Regenerating them must produce no diff.
+
+`risk.json` uses a fresh user/bot per case, deterministic `client_order_id`
+values, and a fixed clock. Database order IDs are stripped from event contexts,
+bot IDs in exception messages are normalized to `{bot_id}`, and tick durations
+are not recorded. The current-PHP allowlist gap is captured explicitly:
+creation validation rejects a non-allowlisted exchange, while a directly
+inserted row can still start and place in current PHP. Go task 5.6 adds the
+runtime blocking check.
+
+`credentials_ciphertext.json` is generated once with `Crypt::encryptString`
+using the hardcoded test-only key in `GoldenRiskFixtures`; it is not derived
+from `.env` or `APP_KEY`. IVs are random, so regenerating the file intentionally
+produces different bytes. The test verifies decryption, payload shape, the
+absence of the PHP serialization prefix, and previous-key rotation instead of
+byte-for-byte equality. Do not regenerate it on every capture.
 
 `grid_sync.json` seeds paper bots with `base_inventory = 2` so current
 `RiskGuard` can place both buy and sell orders. The recorded inventory, fees,
@@ -100,8 +124,24 @@ docker compose exec -u www-data \
 git diff --exit-code -- tests/golden/engine
 ```
 
-Without `GOLDEN_CAPTURE=1` the same Pest test only verifies that the committed
-files match current PHP output. It never writes fixtures.
+The risk fixtures use the same command with the risk filter:
+
+```bash
+docker compose exec -u www-data \
+  -e APP_ENV=testing -e DB_DATABASE=trading_bot_test \
+  -e CACHE_STORE=array -e QUEUE_CONNECTION=sync \
+  -e SESSION_DRIVER=array -e CONCURRENCY_DRIVER=sync \
+  -e GOLDEN_CAPTURE=1 \
+  app php artisan test --filter=GoldenRiskFixturesTest
+
+git diff --exit-code -- tests/golden/engine/risk.json
+```
+
+`GOLDEN_CAPTURE=1` rewrites `risk.json` but only creates
+`credentials_ciphertext.json` when it is missing, so the committed ciphertext
+stays stable. To intentionally regenerate the credential stub, delete it and
+rerun with `GOLDEN_CAPTURE=1` (or use `GOLDEN_CAPTURE_CIPHERTEXT=1`).
+Without `GOLDEN_CAPTURE=1` the tests only verify the committed files.
 
 ## Safety
 
