@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-11-23
+goal: "Adopt a hybrid architecture: Laravel remains the UI and management plane;
+  a Go engine owns WebSocket market data, grid and order logic, the tick loop,
+  risk enforcement, and backtesting, with a hard cutover and no PHP engine
+  fallback."
