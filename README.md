@@ -321,8 +321,8 @@ app/
   Actions/         Bot controls, credentials, kill switch
   Http/            Controllers, requests, resources
   Models/          Eloquent persistence
-engine/            Go engine skeleton (health endpoints only in phase 1)
-docs/              Bot parameters, strategies, exchanges, risk, runtime, dashboard, security, deployment
+engine/            Go engine (contract consumer, heartbeat, health endpoints)
+docs/              Bot parameters, strategies, exchanges, risk, runtime, engine, dashboard, security, deployment
 openspec/          Change proposals and capability specs
 ```
 
@@ -333,6 +333,7 @@ openspec/          Change proposals and capability specs
 - [Exchanges and live trading](docs/exchanges.md)
 - [Risk controls](docs/risk.md)
 - [Runtime and recovery](docs/runtime.md)
+- [Go engine contract](docs/engine.md)
 - [Dashboard flows](docs/dashboard.md)
 - [Security checklist](docs/security.md)
 - [Production deployment](docs/deployment.md)

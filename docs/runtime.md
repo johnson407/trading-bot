@@ -1,5 +1,10 @@
 # Runtime Runbook
 
+> The hybrid Go engine contract (Redis Stream commands/events, heartbeat,
+> `desired_status` ownership) is documented in [engine.md](engine.md). In this
+> phase Laravel still owns the tick/order runtime; the Go service implements the
+> contract and health only.
+
 ## Components
 
 | Process | Command | Purpose |

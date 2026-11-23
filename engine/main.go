@@ -18,8 +18,12 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/johnson407/trading-bot/engine/internal/config"
+	"github.com/johnson407/trading-bot/engine/internal/consumer"
 	"github.com/johnson407/trading-bot/engine/internal/health"
 	"github.com/johnson407/trading-bot/engine/internal/healthcheck"
+	"github.com/johnson407/trading-bot/engine/internal/heartbeat"
+	"github.com/johnson407/trading-bot/engine/internal/idempotency"
+	"github.com/johnson407/trading-bot/engine/internal/protocol"
 )
 
 func main() {
@@ -45,11 +49,13 @@ func run() error {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
+
 	logger.Info("starting trading engine",
 		"addr", cfg.Addr,
 		"app_env", cfg.AppEnv,
 		"live_trading_enabled", cfg.LiveTrading,
-		"trading_paths", "none (phase 1 skeleton)",
+		"trading_paths", "none (phase 2 contract only)",
 	)
 
 	if cfg.LiveTrading {
@@ -69,10 +75,39 @@ func run() error {
 	})
 	defer func() { _ = redisClient.Close() }()
 
+	engineContext, stopEngine := context.WithCancel(context.Background())
+	defer stopEngine()
+
+	heartbeatWriter := heartbeat.NewStub(redisHeartbeatSetter{client: redisClient})
+
+	// Write once before serving so readiness does not race the first refresh.
+	if err := heartbeatWriter.Write(engineContext, 0); err != nil {
+		logger.Warn("initial heartbeat write failed", "error_type", fmt.Sprintf("%T", err))
+	}
+
+	go heartbeatWriter.Run(engineContext, heartbeat.RefreshInterval, func() int { return 0 })
+
+	commandConsumer := consumer.New(
+		redisClient,
+		contractProcessor{logger: logger},
+		idempotency.New(redisClient),
+		logger,
+		consumer.DefaultConfig(),
+	)
+
+	go func() {
+		if err := commandConsumer.Run(engineContext); err != nil {
+			logger.Error("command consumer stopped", "error_type", fmt.Sprintf("%T", err))
+		}
+	}()
+
 	checks := []health.Check{
 		{Name: "postgres", Ping: pool.Ping},
 		{Name: "redis", Ping: func(ctx context.Context) error {
 			return redisClient.Ping(ctx).Err()
+		}},
+		{Name: "heartbeat", Ping: func(ctx context.Context) error {
+			return heartbeat.CheckFresh(ctx, redisHeartbeatReader{client: redisClient}, time.Now())
 		}},
 	}
 
@@ -129,4 +164,39 @@ func runHealthcheck() error {
 	client := &http.Client{Timeout: 4 * time.Second}
 
 	return healthcheck.Run(ctx, probeURL, client)
+}
+
+// redisHeartbeatSetter adapts go-redis to heartbeat.Setter.
+type redisHeartbeatSetter struct {
+	client *goredis.Client
+}
+
+func (s redisHeartbeatSetter) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	return s.client.Set(ctx, key, value, ttl).Err()
+}
+
+// redisHeartbeatReader adapts go-redis to heartbeat.Reader.
+type redisHeartbeatReader struct {
+	client *goredis.Client
+}
+
+func (r redisHeartbeatReader) Get(ctx context.Context, key string) ([]byte, error) {
+	return r.client.Get(ctx, key).Bytes()
+}
+
+// contractProcessor is the phase-2 command processor. It validates and
+// acknowledges the contract but has no trading handlers yet, so it rejects
+// every command definitively instead of pretending to apply it. Phase 4/7
+// replace this with the real bot/order/backtest handlers.
+type contractProcessor struct {
+	logger *slog.Logger
+}
+
+func (p contractProcessor) Process(_ context.Context, command protocol.Envelope) error {
+	p.logger.Info("command received but no trading handler exists in this build",
+		"command_id", command.ID,
+		"type", command.Type,
+	)
+
+	return consumer.Rejection{Reason: "handler_not_available"}
 }

@@ -1,26 +1,42 @@
 # Trading engine (Go)
 
 This directory is the Go trading engine for the hybrid layout described in
-`openspec/changes/adopt-hybrid-go-engine/`. **Phase 1 is a skeleton only:**
+`openspec/changes/adopt-hybrid-go-engine/`. **Phase 2 implements the command
+contract, at-least-once consumer, idempotency, and heartbeat only:**
 
-- no command/event stream consumer,
 - no market-data WebSocket,
 - no strategies, orders, fills, risk gates, or credential decryption,
 - **no exchange calls of any kind**, live or testnet, and no public ticker fetches.
 
-Laravel remains the only trading runtime until the later apply phases land.
+Laravel remains the only trading runtime until the later apply phases land. The
+phase-2 command processor rejects commands it receives (`handler_not_available`)
+and never applies a trading effect.
+
+The full protocol, ordering, dead-letter, kill-switch, heartbeat, and status
+ownership contract is documented in [`../docs/engine.md`](../docs/engine.md).
 
 ## What it does today
 
 | Route | Purpose |
 | --- | --- |
-| `GET /healthz` | Readiness. `200` only when PostgreSQL and Redis answer a ping; `503` otherwise. Response lists dependency names and `ok` / `unavailable` only, never the underlying error. |
+| `GET /healthz` | Readiness. `200` only when PostgreSQL and Redis answer a ping and `engine:heartbeat` is fresh; `503` otherwise. Response lists dependency names and `ok` / `unavailable` only, never the underlying error. |
 | `GET /livez` | Liveness. Always `200` while the process is up; it never touches a dependency, so a database outage cannot restart the engine. |
+
+On start the process:
+
+1. writes `engine:heartbeat` (JSON `ts`, `revision`, `running_bots`) and
+   refreshes it every five seconds with a ten-second TTL;
+2. ensures the `engine.commands` consumer group, auto-claims pending entries
+   idle for at least 30 seconds, and consumes the stream with at-least-once
+   delivery;
+3. stores `engine:cmd:{id}` after durable effects (or a definitive rejection)
+   and only then sends `XACK`;
+4. dead-letters an entry to `engine.commands.dlq` after five failed attempts and
+   acknowledges the original so the group is not blocked.
 
 The server listens on `ENGINE_LISTEN_ADDR` (default `:8080`). The Compose
 healthcheck runs `/engine healthcheck`, which performs an in-container
-`GET /healthz`; it never contacts an exchange. Start-up only configures a lazy
-Postgres pool and a Redis client. Nothing connects, consumes, or trades.
+`GET /healthz`; it never contacts an exchange.
 
 ## Configuration
 
@@ -35,29 +51,24 @@ All values come from the environment, mirroring the `app` service:
 | `DB_SSLMODE` | `disable` | Local Compose Postgres has no TLS |
 | `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1` / `6379` | Compose sets `redis` / `6379` |
 | `REDIS_PASSWORD` / `REDIS_DB` | empty / `0` | Optional |
-| `TRADING_LIVE_ENABLED` | `false` | Read and logged only in phase 1; there are no trading paths yet |
+| `TRADING_LIVE_ENABLED` | `false` | Read and logged only; there are no trading paths yet |
 
 `APP_KEY` is passed by Compose for later credential work but is **not read,
-used, or logged** in phase 1. No secret is baked into the image or written to
+used, or logged** in phase 2. No secret is baked into the image or written to
 disk.
-
-## Heartbeat stub
-
-`internal/heartbeat` contains the documentation-only heartbeat helper from the
-change design: it SETs `engine:heartbeat` with a UTC RFC 3339 JSON payload and a
-10-second TTL, and carries no secrets. **It is not wired into the server or any
-loop.** Wiring it into the engine tick loop, and treating an expired key as a
-dashboard warning only, belongs to a later phase.
 
 ## Layout
 
 ```text
 engine/
-  main.go                     process entrypoint and `healthcheck` subcommand
+  main.go                     process entrypoint, consumer/heartbeat wiring, `healthcheck`
   internal/config/            environment parsing and Postgres DSN
+  internal/protocol/          v1 envelope, stream names, command/event types
+  internal/consumer/          at-least-once group consumer, PEL reclaim, DLQ
+  internal/idempotency/       engine:cmd:{id} store (>= 7 day TTL)
+  internal/heartbeat/         engine:heartbeat writer and freshness check
   internal/health/            /healthz and /livez handlers
   internal/healthcheck/       in-container Compose probe
-  internal/heartbeat/         documentation-only heartbeat stub
   Dockerfile                  multi-stage build, distroless non-root runtime
   Makefile                    all targets run Go through Docker
 ```
@@ -84,8 +95,9 @@ docker run --rm -v "$PWD:/src" -w /src golang:1.24-alpine go test ./...
 Other targets: `make vet`, `make fmt` (lists unformatted files), `make tidy`,
 and `make build` (builds the `trading-bot-engine` image).
 
-Tests use fake dependencies; they do not need a live Postgres, Redis, or
-network access to an exchange.
+Consumer, idempotency, protocol, and heartbeat tests use `miniredis` or fakes.
+They do not need a live Postgres, the Compose Redis, or network access to an
+exchange.
 
 ## Docker
 
@@ -96,8 +108,8 @@ depends on healthy Postgres and Redis, and sets the same `APP_KEY` / `DB_*` /
 `REDIS_*` / `TRADING_LIVE_ENABLED` (default `false`) environment as `app`. It
 does not publish a host port.
 
-Phase 1 deliberately does **not** edit `docker-compose.prod.yml` or `.github/`.
-Adding the engine to GHCR, the QNAP Compose service/health/rollback flow, and a
-CI `go test` step is deferred to the follow-up change after
+This change deliberately does **not** edit `docker-compose.prod.yml` or
+`.github/`. Adding the engine to GHCR, the QNAP Compose service/health/rollback
+flow, and a CI `go test` step is deferred to the follow-up change after
 `add-qnap-ci-deploy`. Until that follow-up ships, `make test` here is the
 required local gate for Go changes.

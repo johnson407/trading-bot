@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string $strategy_key
  * @property BotMode $mode
  * @property BotStatus $status
+ * @property BotStatus $desired_status
  * @property numeric $capital_allocation
  * @property numeric $base_inventory
  * @property numeric $quote_inventory
@@ -103,6 +104,7 @@ class Bot extends Model
         'strategy_key',
         'mode',
         'status',
+        'desired_status',
         'capital_allocation',
         'base_inventory',
         'quote_inventory',
@@ -127,6 +129,7 @@ class Bot extends Model
         return [
             'mode' => BotMode::class,
             'status' => BotStatus::class,
+            'desired_status' => BotStatus::class,
             'capital_allocation' => 'decimal:16',
             'base_inventory' => 'decimal:16',
             'quote_inventory' => 'decimal:16',
