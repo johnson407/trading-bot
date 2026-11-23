@@ -31,8 +31,8 @@
 - [x] 4.2 Port the tick loop (60s default, min 1s, one in-flight evaluation, stale `max(180, interval + health interval)`) into Go; verify `make test` against the interval, overlap, and stale fixtures from 4.1.
 - [x] 4.3 Port grid generation and grid sync into Go; verify `make test` against the grid fixtures from 4.1.
 - [x] 4.4 Port `qualifyingFills` paper-fill parity into Go; verify `make test` against the paper-fill fixtures from 4.1, including cross-and-recross-between-ticks.
-- [ ] 4.5 Port `SimpleGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
-- [ ] 4.6 Port `DynamicGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
+- [x] 4.5 Port `SimpleGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
+- [x] 4.6 Port `DynamicGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
 - [ ] 4.7 Port `MartingaleGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
 - [ ] 4.8 Port `TrailingGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
 - [ ] 4.9 Keep PHP code in place until phase 8; verify no PHP strategy/tick files are deleted in this phase.

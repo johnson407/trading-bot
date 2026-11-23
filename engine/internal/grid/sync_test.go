@@ -1,11 +1,14 @@
 package grid_test
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/johnson407/trading-bot/engine/internal/decimal"
 	"github.com/johnson407/trading-bot/engine/internal/goldenfixture"
 	"github.com/johnson407/trading-bot/engine/internal/grid"
+	"github.com/johnson407/trading-bot/engine/internal/paperfill"
+	"github.com/johnson407/trading-bot/engine/internal/strategy"
 )
 
 type syncFixtureLevel struct {
@@ -37,10 +40,13 @@ type syncFixtureOrder struct {
 }
 
 type syncFixtureStep struct {
-	Label       string             `json:"label"`
-	MarketPrice string             `json:"market_price"`
-	Grids       []syncFixtureGrid  `json:"grids"`
-	Orders      []syncFixtureOrder `json:"orders"`
+	Label       string `json:"label"`
+	MarketPrice string `json:"market_price"`
+	Result      struct {
+		Fills int `json:"fills"`
+	} `json:"result"`
+	Grids  []syncFixtureGrid  `json:"grids"`
+	Orders []syncFixtureOrder `json:"orders"`
 }
 
 type gridSyncFixture struct {
@@ -50,14 +56,14 @@ type gridSyncFixture struct {
 }
 
 type syncScenarioConfig struct {
-	name        string
-	strategyKey string
-	quantity    string
-	// fillSteps are steps where the PHP pipeline also applies paper fills and
-	// strategy placement. This test still owns grid sync only: paperfill proves
-	// fill selection (task 4.4), while the strategy re-arm order that appears
-	// after a fill is task 4.5. These steps therefore assert the grid structure
-	// stays matched.
+	name         string
+	strategyKey  string
+	quantity     string
+	strategyImpl strategy.Strategy
+	config       map[string]any
+	// fillSteps are steps where the PHP pipeline applies paper fills and then
+	// the strategy re-arm order. With SimpleGrid ported, these steps now assert
+	// the exact orders and grid level states recorded by the fixture.
 	fillSteps map[string]bool
 }
 
@@ -69,9 +75,17 @@ func TestGoldenGridSyncCreateMatchFillAndTrailingRecenter(t *testing.T) {
 
 	scenarios := []syncScenarioConfig{
 		{
-			name:        "simple_grid_create_match_and_fill",
-			strategyKey: "simple-grid",
-			quantity:    "1",
+			name:         "simple_grid_create_match_and_fill",
+			strategyKey:  "simple-grid",
+			quantity:     "1",
+			strategyImpl: strategy.NewSimpleGrid(),
+			config: map[string]any{
+				"center_price":    "100",
+				"levels_per_side": 1,
+				"spacing_type":    "arithmetic",
+				"spacing_value":   "10",
+				"order_quantity":  "1",
+			},
 			fillSteps: map[string]bool{
 				"buy_fill_at_89":   true,
 				"sell_fill_at_111": true,
@@ -93,11 +107,12 @@ func TestGoldenGridSyncCreateMatchFillAndTrailingRecenter(t *testing.T) {
 
 		t.Run(scenarioConfig.name, func(t *testing.T) {
 			var (
-				active      *grid.Grid
-				grids       []grid.Grid
-				orders      []grid.Order
-				nextGridID  int64 = 1
-				nextOrderID int64 = 1
+				active        *grid.Grid
+				grids         []grid.Grid
+				orders        []grid.Order
+				nextGridID    int64 = 1
+				nextOrderID   int64 = 1
+				strategyState       = strategy.NewState()
 			)
 
 			for _, step := range scenario.Steps {
@@ -157,14 +172,35 @@ func TestGoldenGridSyncCreateMatchFillAndTrailingRecenter(t *testing.T) {
 
 					active = result.Grid
 
-					if scenarioConfig.fillSteps[step.Label] {
-						if !result.Matched {
-							t.Fatal("fill-driven tick with unchanged levels must keep the matching grid")
+					if scenarioConfig.strategyImpl != nil {
+						input := strategyInputForStep(scenarioConfig, step.MarketPrice, strategyState, orders)
+
+						if strategyState.IsNew() {
+							initialized, initializeErr := scenarioConfig.strategyImpl.Initialize(input)
+							if initializeErr != nil {
+								t.Fatal(initializeErr)
+							}
+
+							strategyState = initialized.State
+							input = input.WithState(strategyState)
 						}
 
-						assertGridStructure(t, grids, step.Grids)
+						tickDecision, tickErr := scenarioConfig.strategyImpl.OnTick(input)
+						if tickErr != nil {
+							t.Fatal(tickErr)
+						}
 
-						return
+						strategyState = tickDecision.State
+
+						if scenarioConfig.fillSteps[step.Label] {
+							if !result.Matched {
+								t.Fatal("fill-driven tick with unchanged levels must keep the matching grid")
+							}
+
+							applyPaperFillsAndRearm(t, step, &orders, &grids, active, scenarioConfig, &strategyState, &nextOrderID)
+						}
+					} else if scenarioConfig.fillSteps[step.Label] {
+						t.Fatal("fill step requires a strategy implementation")
 					}
 
 					if len(grids) != len(step.Grids) {
@@ -305,6 +341,214 @@ func assertOrdersExact(t *testing.T, actual []grid.Order, expected []syncFixture
 			)
 		}
 	}
+}
+
+func strategyInputForStep(
+	scenarioConfig syncScenarioConfig,
+	price string,
+	state strategy.State,
+	orders []grid.Order,
+) strategy.Input {
+	openOrders := make([]strategy.OpenOrderSnapshot, 0, len(orders))
+
+	for _, order := range orders {
+		if !isOpenOrder(order.Status) {
+			continue
+		}
+
+		sequence := order.GridLevelSequence
+		openOrders = append(openOrders, strategy.OpenOrderSnapshot{
+			ClientOrderID:     strconv.FormatInt(order.ID, 10),
+			Side:              strategy.Side(order.Side),
+			Price:             order.Price,
+			Quantity:          order.Quantity,
+			GridLevelSequence: &sequence,
+		})
+	}
+
+	return strategy.Input{
+		Market: strategy.MarketSnapshot{Price: decimal.MustParse(price)},
+		Bot:    strategy.BotSnapshot{OpenOrders: openOrders},
+		Config: strategy.Config{Key: scenarioConfig.strategyKey, Values: scenarioConfig.config},
+		State:  state,
+	}
+}
+
+func applyPaperFillsAndRearm(
+	t *testing.T,
+	step syncFixtureStep,
+	orders *[]grid.Order,
+	grids *[]grid.Grid,
+	active *grid.Grid,
+	scenarioConfig syncScenarioConfig,
+	state *strategy.State,
+	nextOrderID *int64,
+) {
+	t.Helper()
+
+	paperOrders := make([]paperfill.Order, 0, len(*orders))
+
+	for _, order := range *orders {
+		if !isOpenOrder(order.Status) {
+			continue
+		}
+
+		paperOrders = append(paperOrders, paperfill.Order{
+			ClientOrderID:  strconv.FormatInt(order.ID, 10),
+			Side:           paperfill.Side(order.Side),
+			Price:          order.Price,
+			Quantity:       order.Quantity,
+			FilledQuantity: order.FilledQuantity,
+			Status:         paperfill.OrderStatus(order.Status),
+		})
+	}
+
+	fills, err := paperfill.QualifyingFills(decimal.MustParse(step.MarketPrice), paperOrders, "0.001")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(fills) != step.Result.Fills {
+		t.Fatalf("%s: paper fill count = %d, want %d", step.Label, len(fills), step.Result.Fills)
+	}
+
+	for _, fill := range fills {
+		orderIndex := -1
+
+		for index := range *orders {
+			if strconv.FormatInt((*orders)[index].ID, 10) == fill.ClientOrderID {
+				orderIndex = index
+
+				break
+			}
+		}
+
+		if orderIndex < 0 {
+			t.Fatalf("%s: fill references unknown order %q", step.Label, fill.ClientOrderID)
+		}
+
+		order := &(*orders)[orderIndex]
+		order.FilledQuantity = order.FilledQuantity.Add(fill.Quantity)
+
+		if order.FilledQuantity.GreaterThanOrEqual(order.Quantity) {
+			order.Status = grid.OrderFilled
+		} else {
+			order.Status = grid.OrderPartiallyFilled
+		}
+
+		setGridLevelState(active, grids, order.GridID, order.GridLevelSequence, grid.LevelFilled)
+
+		input := strategyInputForStep(scenarioConfig, step.MarketPrice, *state, *orders)
+		decision, fillErr := scenarioConfig.strategyImpl.OnFill(input, strategy.FillEvent{
+			ExchangeFillID:    "paper-" + strconv.FormatInt(order.ID, 10),
+			Side:              strategy.Side(fill.Side),
+			Price:             fill.Price,
+			Quantity:          fill.Quantity,
+			Fee:               fill.Fee,
+			ClientOrderID:     stringPointer(fill.ClientOrderID),
+			GridLevelSequence: intPointer(order.GridLevelSequence),
+		})
+		if fillErr != nil {
+			t.Fatal(fillErr)
+		}
+
+		*state = decision.State
+
+		for _, intent := range decision.Orders {
+			if intent.GridLevelSequence == nil {
+				continue
+			}
+
+			if hasOpenOrderAtLevel(*orders, active.ID, *intent.GridLevelSequence) {
+				continue
+			}
+
+			price := intent.Price
+			if level := gridLevel(active, *intent.GridLevelSequence); level != nil {
+				price = level.Price
+			}
+
+			*orders = append(*orders, grid.Order{
+				ID:                *nextOrderID,
+				GridID:            active.ID,
+				GridLevelSequence: *intent.GridLevelSequence,
+				Side:              grid.Side(intent.Side),
+				Type:              grid.OrderTypeLimit,
+				Price:             price,
+				Quantity:          intent.Quantity,
+				FilledQuantity:    decimal.Zero(),
+				Status:            grid.OrderOpen,
+				Mode:              grid.ModePaper,
+			})
+			*nextOrderID = *nextOrderID + 1
+
+			setGridLevelState(active, grids, active.ID, *intent.GridLevelSequence, grid.LevelOpen)
+		}
+	}
+}
+
+func isOpenOrder(status grid.OrderStatus) bool {
+	return status == grid.OrderPending || status == grid.OrderOpen || status == grid.OrderPartiallyFilled
+}
+
+func hasOpenOrderAtLevel(orders []grid.Order, gridID int64, sequence int) bool {
+	for _, order := range orders {
+		if order.GridID == gridID && order.GridLevelSequence == sequence && isOpenOrder(order.Status) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func gridLevel(active *grid.Grid, sequence int) *grid.GridLevel {
+	if active == nil {
+		return nil
+	}
+
+	for index := range active.Levels {
+		if active.Levels[index].Sequence == sequence {
+			return &active.Levels[index]
+		}
+	}
+
+	return nil
+}
+
+func setGridLevelState(
+	active *grid.Grid,
+	grids *[]grid.Grid,
+	gridID int64,
+	sequence int,
+	state grid.LevelState,
+) {
+	for index := range *grids {
+		if (*grids)[index].ID != gridID {
+			continue
+		}
+
+		for levelIndex := range (*grids)[index].Levels {
+			if (*grids)[index].Levels[levelIndex].Sequence == sequence {
+				(*grids)[index].Levels[levelIndex].State = state
+			}
+		}
+	}
+
+	if active != nil && active.ID == gridID {
+		for index := range active.Levels {
+			if active.Levels[index].Sequence == sequence {
+				active.Levels[index].State = state
+			}
+		}
+	}
+}
+
+func stringPointer(value string) *string {
+	return &value
+}
+
+func intPointer(value int) *int {
+	return &value
 }
 
 func fixed(t *testing.T, value decimal.Decimal) string {

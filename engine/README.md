@@ -1,11 +1,12 @@
 # Trading engine (Go)
 
 This directory is the Go trading engine for the hybrid layout described in
-`openspec/changes/adopt-hybrid-go-engine/`. **Phase 4.2/4.3/4.4 adds the
-tick-loop semantics, the grid generator/sync port, and paper-fill selection;
-there are still:**
+`openspec/changes/adopt-hybrid-go-engine/`. **Phase 4.2/4.3/4.4/4.5/4.6 adds
+the tick-loop semantics, the grid generator/sync port, paper-fill selection,
+and the simple-grid and dynamic-grid strategies; there are still:**
 
-- no strategies, orders, risk gates, or credential decryption;
+- no order placement, risk gates, or credential decryption;
+- no Martingale or trailing-grid strategies yet (tasks 4.7–4.8);
 - no private, signed, or user-data exchange calls and no API keys;
 - **no exchange connection by default** — the Compose service sets no market
   data endpoints, so the feed stays idle;
@@ -67,7 +68,7 @@ The server listens on `ENGINE_LISTEN_ADDR` (default `:8080`). The Compose
 healthcheck runs `/engine healthcheck`, which performs an in-container
 `GET /healthz`; it never contacts an exchange.
 
-### Tick, grid, and paper-fill ports (phase 4.2/4.3/4.4)
+### Tick, grid, paper-fill, and strategy ports (phase 4.2–4.6)
 
 `internal/tick` ports the PHP `bots:dispatch` due-check (60s default, 1s
 minimum), the per-interval cache guard, the `RunBotTick` unique/overlap policy,
@@ -79,9 +80,10 @@ is started by `main`, and it has no database or Redis source yet.
 ladders plus validation), `GridDerivation`, and the `BotTickPipeline` grid
 create/match/cancel/recenter path. These packages are proven against the
 committed `tick_loop.json`, `grid_generation.json`, and `grid_sync.json`
-fixtures. The `grid_sync` fixture is end-to-end for the PHP pipeline; phase
-4.2/4.3 asserts its grid and order lifecycle slices, while paper fills and
-strategy decisions remain tasks 4.4-4.8.
+fixtures. The `grid_sync` fixture is end-to-end for the PHP pipeline; the test
+asserts its grid and order lifecycle, and after the strategy port it also
+models the simple-grid paper fill/re-arm so the fill steps match the exact
+orders and level states.
 
 `internal/decimal` implements PHP `Decimal` scale-16 bcmath semantics: add/sub
 and multiply truncate at 16 places, divide truncates at 17 then rounds half-up
@@ -98,6 +100,29 @@ library and only sees the price observed by a tick, so an intra-tick print that
 crosses and returns before the next tick does not fill an order. The package is
 proven against the committed `paper_fills.json` fixture, including the
 cross-and-recross-between-ticks scenario. Nothing places or persists orders yet.
+
+### Strategies (phase 4.5/4.6)
+
+`internal/strategy` ports the pure PHP strategy value objects and
+`SimpleGridStrategy` / `DynamicGridStrategy`: initialize, tick, fill, cancel,
+`shouldStop`, and `getGridLevels`. It also ports the shared
+`GeneratesGridLevels` ladder, stable-price sort, duplicate detection, and
+disarmed-level re-arm behaviour. Strategies stay pure: they receive an `Input`
+and return a `Decision`; they never read the database, an exchange, or PHP
+state.
+
+Both strategies are proven against every case in the committed
+`strategies.json` fixture (`simple-grid` and `dynamic-grid`), including
+arithmetic and geometric ladders, order suppression at open levels, adjacent
+opposite orders after a fill, fill/pair re-arming on the next tick, dynamic
+volatility spacing, interval suppression, recalculation with order cancels and
+re-orders, cancel bookkeeping, and the recorded validation errors. The
+`grid_sync.json` simple-grid scenario now also models the paper fill and
+strategy re-arm, so its fill steps assert the exact orders and grid level
+states instead of only the grid structure.
+
+Martingale and trailing-grid remain tasks 4.7–4.8; nothing here is wired into
+`main`, placed, persisted, or connected to an exchange.
 
 ## Configuration
 
@@ -145,6 +170,7 @@ engine/
   internal/tick/              bots:dispatch due-check, overlap, stale threshold
   internal/grid/              grid generation, derivation, create/match/recenter
   internal/paperfill/         qualifyingFills paper-fill selection
+  internal/strategy/          simple-grid and dynamic-grid pure strategy ports
   internal/goldenfixture/     locates tests/golden/engine for parity tests
   internal/health/            /healthz and /livez handlers
   internal/healthcheck/       in-container Compose probe
@@ -189,13 +215,15 @@ Compose Redis or a live Postgres. The market-data suite covers subscription,
 reconnect with backoff, trade-id gap detection, quiet-period recovery, periodic
 REST fallback, and disconnect → REST snapshot → resumed socket.
 
-The tick, grid, and paper-fill parity tests read the committed PHP golden
-fixtures. They cover due-check interval/minimum/paused-stopped skips, the cache
-guard, job uniqueness/overlap policy, stale thresholds,
+The tick, grid, paper-fill, and strategy parity tests read the committed PHP
+golden fixtures. They cover due-check interval/minimum/paused-stopped skips, the
+cache guard, job uniqueness/overlap policy, stale thresholds,
 arithmetic/geometric/dynamic grid generation, derivation errors, grid creation,
 level matching, fill-driven sync, trailing recenter, paper-fill crossing and
-ordering, partial quantities, fees, skipped filled/canceled orders, and
-tick-time cross-and-recross for both sides.
+ordering, partial quantities, fees, skipped filled/canceled orders,
+tick-time cross-and-recross for both sides, and every simple-grid/dynamic-grid
+strategy case (including the exact decimal state, levels, order intents,
+cancels, and validation errors).
 
 ## Docker
 
