@@ -35,7 +35,7 @@
 - [x] 4.6 Port `DynamicGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
 - [x] 4.7 Port `MartingaleGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
 - [x] 4.8 Port `TrailingGridStrategy` into Go; verify `make test` against its fixtures from 4.1.
-- [ ] 4.9 Keep PHP code in place until phase 8; verify no PHP strategy/tick files are deleted in this phase.
+- [x] 4.9 Keep PHP code in place until phase 8; verify no PHP strategy/tick files are deleted in this phase.
 
 ## 5. Risk, live gates, and credentials in Go
 
