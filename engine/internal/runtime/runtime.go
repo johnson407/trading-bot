@@ -137,11 +137,23 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 
 	// A stopped bot may be started again: desired_status is the intent and
 	// the engine acknowledges it here. Pause/stop remain idempotent so a
-	// retried command still performs the cancellation work.
-	_, err = r.pool.Exec(ctx,
-		`UPDATE bots SET status = $2, updated_at = now() WHERE id = $1 AND user_id = $3`,
-		command.BotID, status, command.UserID,
-	)
+	// retried command still performs the cancellation work. Starting also
+	// refreshes stale timestamps so the reconciler does not pause the bot
+	// before its first due tick.
+	if status == "running" {
+		_, err = r.pool.Exec(ctx,
+			`UPDATE bots
+			    SET status = 'running', last_tick_at = NULL, last_successful_tick_at = now(),
+			        consecutive_failures = 0, last_error = NULL, updated_at = now()
+			  WHERE id = $1 AND user_id = $2`,
+			command.BotID, command.UserID,
+		)
+	} else {
+		_, err = r.pool.Exec(ctx,
+			`UPDATE bots SET status = $2, updated_at = now() WHERE id = $1 AND user_id = $3`,
+			command.BotID, status, command.UserID,
+		)
+	}
 	if err != nil {
 		return fmt.Errorf("update bot status: %w", err)
 	}

@@ -381,3 +381,43 @@ func TestReconcilerRetriesPausedCancellation(t *testing.T) {
 		t.Fatalf("risk-paused bot auto-resumed: status=%s", status)
 	}
 }
+
+func TestStartRefreshesStaleTimestampBeforeReconcile(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+	suffix := time.Now().UnixNano()
+	var userID, botID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO users (name, email, password, created_at, updated_at)
+		 VALUES ('Stale start bot', $1, 'x', now(), now()) RETURNING id`, fmt.Sprintf("stale-start-%d@example.test", suffix)).Scan(&userID); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
+		 capital_allocation, quote_inventory, tick_interval_seconds, settings,
+		 last_tick_at, last_successful_tick_at, created_at, updated_at)
+		 VALUES ($1, 'Stale start bot', 'binance', 'BTC/USDT', 'simple-grid', 'paper', 'paused', 'running',
+		 '1000', '1000', 1, '{}'::jsonb, now() - interval '1 hour', now() - interval '1 hour', now(), now())
+		 RETURNING id`, userID).Scan(&botID); err != nil {
+		t.Fatalf("insert bot: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID) })
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+	if err := trading.Process(ctx, command(protocol.CommandBotStart, userID, botID, nil)); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	assertBotState(t, pool, botID, "running", "running")
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	assertBotState(t, pool, botID, "running", "running")
+}
