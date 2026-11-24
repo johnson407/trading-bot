@@ -51,7 +51,7 @@ Each successful production build SHALL publish an application image and a matchi
 #### Scenario: Commit and latest tags
 
 - **WHEN** a production build succeeds for a commit
-- **THEN** both images are published with the full commit SHA and with `latest`
+- **THEN** all three images are published with the full commit SHA and with `latest`
 
 #### Scenario: Incomplete image set is not activated
 
@@ -117,17 +117,17 @@ Deployment SHALL be initiated from the NAS using only outbound registry and netw
 
 ### Requirement: Health-gated activation
 
-A deployment SHALL be considered successful only when all six services are healthy within 180 seconds of activation. Failure of the application, web server, worker, or scheduler SHALL be treated as an application-tier failure. Failure of PostgreSQL or Redis SHALL be treated as an infrastructure failure and retried without image rollback.
+A deployment SHALL be considered successful only when all seven services are healthy within 180 seconds of activation. Failure of the application, web server, engine, worker, or scheduler SHALL be treated as an application-tier failure. Failure of PostgreSQL or Redis SHALL be treated as an infrastructure failure and retried without image rollback.
 
 #### Scenario: All services become healthy
 
-- **WHEN** all six services report healthy within the activation window
+- **WHEN** all seven services report healthy within the activation window
 - **THEN** the deployment is recorded as successful
 
 #### Scenario: Application-tier failure rolls back
 
-- **WHEN** the application, web server, worker, or scheduler does not become healthy in time
-- **THEN** the deployer rolls back the application and web-server images
+- **WHEN** the application, web server, engine, worker, or scheduler does not become healthy in time
+- **THEN** the deployer rolls back the application, web-server, and engine images
 
 #### Scenario: Infrastructure failure retries
 
@@ -160,7 +160,7 @@ After an application-tier failure, the deployer SHALL record the failed image id
 
 ### Requirement: Rollback
 
-On application-tier failure, the deployer SHALL restore the last fully healthy application and web-server images without pulling an ephemeral tag. It SHALL NOT attempt to roll back database schema or data. The last-good record SHALL be updated only after a fully healthy deployment.
+On application-tier failure, the deployer SHALL restore the last fully healthy application, web-server, and engine images without pulling an ephemeral tag. It SHALL NOT attempt to roll back database schema or data. The last-good record SHALL be updated only after a fully healthy deployment.
 
 #### Scenario: Restore the previous images
 

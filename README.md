@@ -126,7 +126,7 @@ is deferred to the follow-up after `add-qnap-ci-deploy`; phase 8 stays on the
 
 Pushes to `main` are tested by GitHub Actions and, when green, published as
 private application and Nginx images in GHCR. A QNAP scheduled task pulls the
-desired image over an outbound connection, waits for all six services to become
+desired image over an outbound connection, waits for all seven services to become
 healthy, and rolls back the application images on a health failure. See
 [Production deployment](docs/deployment.md) for first install, registry login,
 pins, holds, rollback, and recovery.

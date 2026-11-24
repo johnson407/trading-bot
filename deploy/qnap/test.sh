@@ -132,6 +132,9 @@ case "$cmd" in
                     *trading-bot-nginx*)
                         default_id="${STUB_NGINX_ID:-sha256:new-nginx}"
                         ;;
+                    *trading-bot-engine*)
+                        default_id="${STUB_ENGINE_ID:-sha256:new-engine}"
+                        ;;
                     *)
                         default_id="${STUB_APP_ID:-sha256:new-app}"
                         ;;
@@ -168,7 +171,7 @@ STUB
 chmod +x "$TMP/bin/docker"
 
 reset_env() {
-    unset STUB_UNHEALTHY STUB_PREVIOUS STUB_APP_ID STUB_NGINX_ID STUB_PULL_FAIL STUB_NO_REVISION STUB_REVISION DRY_RUN 2>/dev/null || true
+    unset STUB_UNHEALTHY STUB_PREVIOUS STUB_APP_ID STUB_NGINX_ID STUB_ENGINE_ID STUB_PULL_FAIL STUB_NO_REVISION STUB_REVISION DRY_RUN 2>/dev/null || true
 }
 
 new_case() {
@@ -202,6 +205,7 @@ check "first deploy succeeds" test -s "$CASE/.last-good"
 check "last-good tag is immutable" assert_eq "$(sed -n '1p' "$CASE/.last-good")" "sha-abc123"
 check "last-good app id recorded" assert_eq "$(sed -n '2p' "$CASE/.last-good")" "sha256:new-app"
 check "last-good nginx id recorded" assert_eq "$(sed -n '3p' "$CASE/.last-good")" "sha256:new-nginx"
+check "last-good engine id recorded" assert_eq "$(sed -n '4p' "$CASE/.last-good")" "sha256:new-engine"
 check "success is logged" assert_file_contains "$CASE/deploy.log" "deployment successful: sha-abc123"
 
 # A failed image is held and skipped on the next poll.
@@ -252,14 +256,14 @@ check "--clear-hold activates the desired tag" assert_file_contains "$CASE/deplo
 
 # --rollback uses the last-good tag.
 new_case
-printf 'sha-old\nsha256:old-app\nsha256:old-nginx\n' > "$CASE/.last-good"
+printf 'sha-old\nsha256:old-app\nsha256:old-nginx\nsha256:old-engine\n' > "$CASE/.last-good"
 run_deploy --rollback
 check "--rollback records the desired tag" assert_eq "$(cat "$CASE/.desired-tag")" "sha-old"
 check "--rollback activates last-good" assert_file_contains "$CASE/deploy.log" "activating sha-old"
 
 # --rollback falls back to local last-good images when the registry is unavailable.
 new_case
-printf 'sha-old\nsha256:old-app\nsha256:old-nginx\n' > "$CASE/.last-good"
+printf 'sha-old\nsha256:old-app\nsha256:old-nginx\nsha256:old-engine\n' > "$CASE/.last-good"
 export STUB_PULL_FAIL=1
 run_deploy --rollback
 check "rollback uses local images" assert_file_contains "$CASE/deploy.log" "using local last-good images"
@@ -283,6 +287,7 @@ if run_deploy; then rc=0; else rc=$?; fi
 check "application failure exits non-zero" test "$rc" -ne 0
 check "application failure is classified" assert_file_contains "$CASE/deploy.log" "application-tier failure"
 check "rollback retags previous app image" assert_file_contains "$CASE/docker.log" "tag sha256:prev-app ghcr.io/johnson407/trading-bot:rollback"
+check "rollback retags previous engine image" assert_file_contains "$CASE/docker.log" "tag sha256:prev-engine ghcr.io/johnson407/trading-bot-engine:rollback"
 check "rollback starts without pulling" assert_file_contains "$CASE/docker.log" "up -d --pull never --remove-orphans"
 check "application failure holds the image" assert_eq "$(cat "$CASE/.hold")" "sha256:new-app"
 check "failed deployment does not become last-good" assert_file_absent "$CASE/.last-good"

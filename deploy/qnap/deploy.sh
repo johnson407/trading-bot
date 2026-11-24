@@ -17,6 +17,7 @@ cd "$SCRIPT_DIR"
 
 APP_IMAGE_REPO=${APP_IMAGE_REPO:-ghcr.io/johnson407/trading-bot}
 NGINX_IMAGE_REPO=${NGINX_IMAGE_REPO:-ghcr.io/johnson407/trading-bot-nginx}
+ENGINE_IMAGE_REPO=${ENGINE_IMAGE_REPO:-ghcr.io/johnson407/trading-bot-engine}
 COMPOSE_FILE=${COMPOSE_FILE:-docker-compose.prod.yml}
 STATE_DIR=${STATE_DIR:-$SCRIPT_DIR}
 if [ -f "$STATE_DIR/.docker/config.json" ]; then
@@ -38,10 +39,11 @@ MODE="normal"
 TAG_ARG=""
 CURRENT_APP_ID=""
 CURRENT_NGINX_ID=""
+CURRENT_ENGINE_ID=""
 FINAL_FAILED=""
 FAILED_IMAGE_ID=""
 
-APP_TIER="app nginx horizon scheduler"
+APP_TIER="app nginx engine horizon scheduler"
 INFRA_TIER="postgres redis"
 SERVICES="$APP_TIER $INFRA_TIER"
 
@@ -164,6 +166,10 @@ read_last_good_nginx_id() {
     [ -s "$LAST_GOOD_FILE" ] && sed -n '3p' "$LAST_GOOD_FILE" || true
 }
 
+read_last_good_engine_id() {
+    [ -s "$LAST_GOOD_FILE" ] && sed -n '4p' "$LAST_GOOD_FILE" || true
+}
+
 validate_tag() {
     case "$1" in
         ''|*[!A-Za-z0-9_.-]*)
@@ -204,12 +210,14 @@ all_healthy() {
 }
 
 images_current() {
-    [ -n "$CURRENT_APP_ID" ] && [ -n "$CURRENT_NGINX_ID" ] || return 1
+    [ -n "$CURRENT_APP_ID" ] && [ -n "$CURRENT_NGINX_ID" ] && [ -n "$CURRENT_ENGINE_ID" ] || return 1
     app_remote=$(remote_repo_digest "$APP_IMAGE_REPO:$TAG")
     nginx_remote=$(remote_repo_digest "$NGINX_IMAGE_REPO:$TAG")
-    [ -n "$app_remote" ] && [ -n "$nginx_remote" ] || return 1
+    engine_remote=$(remote_repo_digest "$ENGINE_IMAGE_REPO:$TAG")
+    [ -n "$app_remote" ] && [ -n "$nginx_remote" ] && [ -n "$engine_remote" ] || return 1
     [ "$app_remote" = "$(repo_digest_for "$APP_IMAGE_REPO:$TAG")" ] &&
-        [ "$nginx_remote" = "$(repo_digest_for "$NGINX_IMAGE_REPO:$TAG")" ]
+        [ "$nginx_remote" = "$(repo_digest_for "$NGINX_IMAGE_REPO:$TAG")" ] &&
+        [ "$engine_remote" = "$(repo_digest_for "$ENGINE_IMAGE_REPO:$TAG")" ]
 }
 
 health_of() {
@@ -264,28 +272,31 @@ pull_images() {
     if [ "$DRY_RUN" = "1" ]; then
         log "DRY-RUN: docker pull $APP_IMAGE_REPO:$TAG"
         log "DRY-RUN: docker pull $NGINX_IMAGE_REPO:$TAG"
+        log "DRY-RUN: docker pull $ENGINE_IMAGE_REPO:$TAG"
         return 0
     fi
 
-    if docker pull "$APP_IMAGE_REPO:$TAG" && docker pull "$NGINX_IMAGE_REPO:$TAG"; then
+    if docker pull "$APP_IMAGE_REPO:$TAG" && docker pull "$NGINX_IMAGE_REPO:$TAG" && docker pull "$ENGINE_IMAGE_REPO:$TAG"; then
         return 0
     fi
 
     if [ "$MODE" = "rollback" ]; then
         app_id=$(read_last_good_app_id)
         nginx_id=$(read_last_good_nginx_id)
-        if [ -n "$app_id" ] && [ -n "$nginx_id" ]; then
+        engine_id=$(read_last_good_engine_id)
+        if [ -n "$app_id" ] && [ -n "$nginx_id" ] && [ -n "$engine_id" ]; then
             log "registry tag $TAG is unavailable; using local last-good images"
-            if docker image inspect "$app_id" >/dev/null 2>&1 && docker image inspect "$nginx_id" >/dev/null 2>&1; then
+            if docker image inspect "$app_id" >/dev/null 2>&1 && docker image inspect "$nginx_id" >/dev/null 2>&1 && docker image inspect "$engine_id" >/dev/null 2>&1; then
                 docker tag "$app_id" "$APP_IMAGE_REPO:rollback"
                 docker tag "$nginx_id" "$NGINX_IMAGE_REPO:rollback"
+                docker tag "$engine_id" "$ENGINE_IMAGE_REPO:rollback"
                 TAG="rollback"
                 return 0
             fi
         fi
     fi
 
-    log "failed to pull $APP_IMAGE_REPO:$TAG or $NGINX_IMAGE_REPO:$TAG; run 'docker login ghcr.io' and check the tag"
+    log "failed to pull $APP_IMAGE_REPO:$TAG, $NGINX_IMAGE_REPO:$TAG, or $ENGINE_IMAGE_REPO:$TAG; run 'docker login ghcr.io' and check the tag"
     return 1
 }
 
@@ -293,6 +304,7 @@ on_success() {
     revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$APP_IMAGE_REPO:$TAG" 2>/dev/null || true)
     app_id=$(image_id_for "$APP_IMAGE_REPO:$TAG")
     nginx_id=$(image_id_for "$NGINX_IMAGE_REPO:$TAG")
+    engine_id=$(image_id_for "$ENGINE_IMAGE_REPO:$TAG")
 
     case "$revision" in
         ''|'<no value>'|'<no value>'*)
@@ -306,12 +318,14 @@ on_success() {
     if [ -n "$good_tag" ] && [ "$good_tag" != "$TAG" ]; then
         docker tag "$APP_IMAGE_REPO:$TAG" "$APP_IMAGE_REPO:$good_tag"
         docker tag "$NGINX_IMAGE_REPO:$TAG" "$NGINX_IMAGE_REPO:$good_tag"
+        docker tag "$ENGINE_IMAGE_REPO:$TAG" "$ENGINE_IMAGE_REPO:$good_tag"
     fi
 
-    printf '%s\n%s\n%s\n' "$good_tag" "$app_id" "$nginx_id" > "$LAST_GOOD_FILE"
+    printf '%s\n%s\n%s\n%s\n' "$good_tag" "$app_id" "$nginx_id" "$engine_id" > "$LAST_GOOD_FILE"
     rm -f "$HOLD_FILE"
     docker image rm "$APP_IMAGE_REPO:rollback" >/dev/null 2>&1 || true
     docker image rm "$NGINX_IMAGE_REPO:rollback" >/dev/null 2>&1 || true
+    docker image rm "$ENGINE_IMAGE_REPO:rollback" >/dev/null 2>&1 || true
     docker image prune -f >/dev/null 2>&1 || true
     log "deployment successful: $good_tag"
 }
@@ -327,9 +341,10 @@ on_failure() {
 
     log "application-tier failure ($FINAL_FAILED); rolling back"
 
-    if [ -n "$CURRENT_APP_ID" ] && [ -n "$CURRENT_NGINX_ID" ]; then
+    if [ -n "$CURRENT_APP_ID" ] && [ -n "$CURRENT_NGINX_ID" ] && [ -n "$CURRENT_ENGINE_ID" ]; then
         docker tag "$CURRENT_APP_ID" "$APP_IMAGE_REPO:rollback"
         docker tag "$CURRENT_NGINX_ID" "$NGINX_IMAGE_REPO:rollback"
+        docker tag "$CURRENT_ENGINE_ID" "$ENGINE_IMAGE_REPO:rollback"
         if compose up -d --pull never --remove-orphans; then
             if wait_for_health "$ROLLBACK_TIMEOUT"; then
                 log "rollback is healthy"
@@ -437,6 +452,7 @@ main() {
     if [ "$DRY_RUN" != "1" ]; then
         CURRENT_APP_ID=$(container_image_id app)
         CURRENT_NGINX_ID=$(container_image_id nginx)
+        CURRENT_ENGINE_ID=$(container_image_id engine)
         if images_current && all_healthy; then
             log "desired image $TAG is already running and healthy; nothing to do"
             exit 0
@@ -449,7 +465,7 @@ main() {
 
     if [ "$DRY_RUN" = "1" ]; then
         log "DRY-RUN: compose up -d --remove-orphans (IMAGE_TAG=$TAG)"
-        log "DRY-RUN: wait up to ${HEALTH_TIMEOUT}s for all six services to be healthy"
+        log "DRY-RUN: wait up to ${HEALTH_TIMEOUT}s for all seven services to be healthy"
         log "DRY-RUN complete; no state changed"
         exit 0
     fi
