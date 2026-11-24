@@ -63,6 +63,34 @@ services:
       timeout: 3s
       retries: 10
 
+  engine:
+    image: ghcr.io/johnson407/trading-bot-engine:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: ${DB_DATABASE:-trading_bot}
+      DB_USERNAME: ${DB_USERNAME:-trading_bot}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      ENGINE_LISTEN_ADDR: ":8080"
+      TRADING_LIVE_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/engine", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
   horizon:
     image: ghcr.io/johnson407/trading-bot:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -87,7 +115,7 @@ services:
     image: ghcr.io/johnson407/trading-bot:${IMAGE_TAG:-latest}
     restart: unless-stopped
     working_dir: /var/www/html
-    command: ["sh", "-c", "php artisan bots:reconcile || true; exec php artisan schedule:work"]
+    command: ["php", "artisan", "schedule:work"]
     env_file: .env
     environment:
       RUN_MIGRATIONS: "false"

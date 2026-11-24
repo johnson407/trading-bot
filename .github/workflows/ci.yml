@@ -16,6 +16,7 @@ concurrency:
 env:
   APP_IMAGE: ghcr.io/johnson407/trading-bot
   NGINX_IMAGE: ghcr.io/johnson407/trading-bot-nginx
+  ENGINE_IMAGE: ghcr.io/johnson407/trading-bot-engine
 
 jobs:
   tests:
@@ -53,6 +54,12 @@ jobs:
           extensions: bcmath, gmp, intl, pcntl, pdo_pgsql, pgsql, zip, redis
           coverage: none
           tools: composer:v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: engine/go.sum
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -96,6 +103,10 @@ jobs:
       - name: Run tests
         run: composer test
 
+      - name: Run Go engine tests
+        working-directory: engine
+        run: go test ./...
+
   build-validate:
     name: Build images without pushing
     needs: tests
@@ -124,10 +135,18 @@ jobs:
             --tag trading-bot-nginx:ci \
             .
 
+      - name: Build engine image
+        run: |
+          docker build \
+            --file engine/Dockerfile \
+            --tag trading-bot-engine:ci \
+            engine
+
       - name: Verify images
         run: |
           docker run --rm --entrypoint php trading-bot:ci artisan --version
           docker run --rm trading-bot-nginx:ci test -f /var/www/html/public/index.php
+          docker image inspect trading-bot-engine:ci > /dev/null
 
   build-and-push:
     name: Build and push images
@@ -180,6 +199,26 @@ jobs:
           tags: |
             type=sha,format=long
             type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Prepare engine metadata
+        id: engine-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ENGINE_IMAGE }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push engine image
+        uses: docker/build-push-action@v6
+        with:
+          context: engine
+          file: engine/Dockerfile
+          push: true
+          tags: ${{ steps.engine-meta.outputs.tags }}
+          labels: ${{ steps.engine-meta.outputs.labels }}
+          cache-from: type=gha,scope=engine
+          cache-to: type=gha,mode=max,scope=engine
 
       - name: Build and push web-server image
         uses: docker/build-push-action@v6

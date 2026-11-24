@@ -1,0 +1,645 @@
+{
+    "metadata": {
+        "format": "php-golden-backtest-sweep/1",
+        "clock": "2026-11-23T00:00:00+00:00",
+        "decimal_scale": 16,
+        "fee_rate": "0.001",
+        "captured_from": "App\\Actions\\CreateBacktestSweep",
+        "notes": [
+            "runs are emitted in center -> spacing -> level order",
+            "bot ids are normalized to 0; other snapshot fields are preserved",
+            "labels are trimmed to 160 characters with a three-character ellipsis"
+        ]
+    },
+    "cases": [
+        {
+            "label": "cartesian_grouping",
+            "parameters": {
+                "center_prices": [
+                    "50000",
+                    "51000"
+                ],
+                "spacing_values": [
+                    "100",
+                    "200"
+                ],
+                "level_counts": [
+                    4,
+                    5
+                ]
+            },
+            "name": "Grid sweep",
+            "total_runs": 8,
+            "runs": [
+                {
+                    "label": "Grid sweep · center 50000 · spacing 100 · levels 4",
+                    "strategy_configuration": {
+                        "center_price": "50000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "100",
+                        "order_quantity": "0.001",
+                        "level_count": 4,
+                        "levels_per_side": 4
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "50000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "100",
+                                "order_quantity": "0.001",
+                                "level_count": 4,
+                                "levels_per_side": 4
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                },
+                {
+                    "label": "Grid sweep · center 50000 · spacing 100 · levels 5",
+                    "strategy_configuration": {
+                        "center_price": "50000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "100",
+                        "order_quantity": "0.001",
+                        "level_count": 5,
+                        "levels_per_side": 5
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "50000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "100",
+                                "order_quantity": "0.001",
+                                "level_count": 5,
+                                "levels_per_side": 5
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                },
+                {
+                    "label": "Grid sweep · center 50000 · spacing 200 · levels 4",
+                    "strategy_configuration": {
+                        "center_price": "50000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "200",
+                        "order_quantity": "0.001",
+                        "level_count": 4,
+                        "levels_per_side": 4
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "50000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "200",
+                                "order_quantity": "0.001",
+                                "level_count": 4,
+                                "levels_per_side": 4
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                },
+                {
+                    "label": "Grid sweep · center 50000 · spacing 200 · levels 5",
+                    "strategy_configuration": {
+                        "center_price": "50000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "200",
+                        "order_quantity": "0.001",
+                        "level_count": 5,
+                        "levels_per_side": 5
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "50000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "200",
+                                "order_quantity": "0.001",
+                                "level_count": 5,
+                                "levels_per_side": 5
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                },
+                {
+                    "label": "Grid sweep · center 51000 · spacing 100 · levels 4",
+                    "strategy_configuration": {
+                        "center_price": "51000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "100",
+                        "order_quantity": "0.001",
+                        "level_count": 4,
+                        "levels_per_side": 4
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "51000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "100",
+                                "order_quantity": "0.001",
+                                "level_count": 4,
+                                "levels_per_side": 4
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                },
+                {
+                    "label": "Grid sweep · center 51000 · spacing 100 · levels 5",
+                    "strategy_configuration": {
+                        "center_price": "51000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "100",
+                        "order_quantity": "0.001",
+                        "level_count": 5,
+                        "levels_per_side": 5
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "51000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "100",
+                                "order_quantity": "0.001",
+                                "level_count": 5,
+                                "levels_per_side": 5
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                },
+                {
+                    "label": "Grid sweep · center 51000 · spacing 200 · levels 4",
+                    "strategy_configuration": {
+                        "center_price": "51000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "200",
+                        "order_quantity": "0.001",
+                        "level_count": 4,
+                        "levels_per_side": 4
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "51000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "200",
+                                "order_quantity": "0.001",
+                                "level_count": 4,
+                                "levels_per_side": 4
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                },
+                {
+                    "label": "Grid sweep · center 51000 · spacing 200 · levels 5",
+                    "strategy_configuration": {
+                        "center_price": "51000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "200",
+                        "order_quantity": "0.001",
+                        "level_count": 5,
+                        "levels_per_side": 5
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "51000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "200",
+                                "order_quantity": "0.001",
+                                "level_count": 5,
+                                "levels_per_side": 5
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "label": "trimmed_label",
+            "parameters": {
+                "center_prices": [
+                    "50000",
+                    "51000"
+                ],
+                "spacing_values": [
+                    "100"
+                ],
+                "level_counts": [
+                    4,
+                    6
+                ]
+            },
+            "name": "Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name",
+            "total_runs": 4,
+            "runs": [
+                {
+                    "label": "Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name · center 50000 · sp...",
+                    "strategy_configuration": {
+                        "center_price": "50000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "100",
+                        "order_quantity": "0.001",
+                        "level_count": 4,
+                        "levels_per_side": 4
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "50000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "100",
+                                "order_quantity": "0.001",
+                                "level_count": 4,
+                                "levels_per_side": 4
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                },
+                {
+                    "label": "Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name · center 50000 · sp...",
+                    "strategy_configuration": {
+                        "center_price": "50000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "100",
+                        "order_quantity": "0.001",
+                        "level_count": 6,
+                        "levels_per_side": 6
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "50000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "100",
+                                "order_quantity": "0.001",
+                                "level_count": 6,
+                                "levels_per_side": 6
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                },
+                {
+                    "label": "Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name · center 51000 · sp...",
+                    "strategy_configuration": {
+                        "center_price": "51000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "100",
+                        "order_quantity": "0.001",
+                        "level_count": 4,
+                        "levels_per_side": 4
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "51000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "100",
+                                "order_quantity": "0.001",
+                                "level_count": 4,
+                                "levels_per_side": 4
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                },
+                {
+                    "label": "Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name Golden long sweep name · center 51000 · sp...",
+                    "strategy_configuration": {
+                        "center_price": "51000",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "100",
+                        "order_quantity": "0.001",
+                        "level_count": 6,
+                        "levels_per_side": 6
+                    },
+                    "snapshot": {
+                        "bot": {
+                            "id": 0,
+                            "name": "Golden sweep bot",
+                            "exchange": "binance",
+                            "symbol": "BTC/USDT",
+                            "strategy_key": "simple-grid",
+                            "capital_allocation": "10000",
+                            "fee_rate": "0.001"
+                        },
+                        "strategy": {
+                            "key": "simple-grid",
+                            "configuration": {
+                                "center_price": "51000",
+                                "spacing_type": "arithmetic",
+                                "spacing_value": "100",
+                                "order_quantity": "0.001",
+                                "level_count": 6,
+                                "levels_per_side": 6
+                            }
+                        },
+                        "risk": {
+                            "max_position_notional": "1000",
+                            "max_open_orders": 20,
+                            "daily_loss_limit": "100"
+                        },
+                        "exit": {
+                            "stop_loss_percent": "5",
+                            "take_profit_percent": "10",
+                            "range_low": "40000",
+                            "range_high": "70000"
+                        },
+                        "period": {
+                            "timeframe": "15m",
+                            "start_at": "2026-01-01T00:00:00+00:00",
+                            "end_at": "2026-01-02T00:00:00+00:00"
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -8,6 +8,7 @@ use App\Domain\Portfolio\MarkPrice;
 use App\Domain\Support\Decimal;
 use App\Models\ActivityLog;
 use App\Models\Bot;
+use App\Services\Engine\EngineHeartbeat;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,7 +16,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, InventoryLedger $ledger, EquityHistory $history): Response
+    public function __invoke(Request $request, InventoryLedger $ledger, EquityHistory $history, EngineHeartbeat $heartbeat): Response
     {
         $user = $request->user();
 
@@ -76,6 +77,7 @@ class DashboardController extends Controller
             ],
             'recentActivity' => $activity,
             'equityHistory' => fn () => $history->forUser($user, $rangeDays),
+            'engine' => $heartbeat->status(),
         ]);
     }
 }

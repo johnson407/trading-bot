@@ -15,6 +15,7 @@ it('documents every dashboard route that exists', function () {
         'bots.start',
         'bots.pause',
         'bots.stop',
+        'bots.orders.cancel',
         'kill-switch.create',
         'kill-switch.store',
         'exchange-credentials.index',

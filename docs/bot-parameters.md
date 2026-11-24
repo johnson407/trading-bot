@@ -223,13 +223,13 @@ These live in `.env`, `config/trading.php`, and `config/risk.php`:
 | `TRADING_EXCHANGES` | `binance` | Comma-separated allowlist for the exchange dropdown. |
 | `TRADING_PAPER_FEE_RATE` | `0` | Default paper fee fraction (prefills the create form and seeds `fee_rate` when the field is omitted). |
 | `TRADING_MARKET_DATA_CACHE_SECONDS` | `60` | How long preview market data is cached per exchange and symbol. |
-| `TRADING_TICK_INTERVAL` | `60` | Copied into each new bot's `tick_interval_seconds`. Dispatcher checks every second; each bot evaluates only when its interval elapsed. |
-| `TRADING_MAX_CONSECUTIVE_FAILURES` | `3` | Failures before the bot is paused. |
+| `TRADING_TICK_INTERVAL` | `60` | Copied into each new bot's `tick_interval_seconds`. The Go engine evaluates each bot only when its interval has elapsed. |
+| `TRADING_MAX_CONSECUTIVE_FAILURES` | `3` | Documented threshold; the current Go runtime hardcodes 3 and does not read this variable yet. |
 | `TRADING_RECONCILIATION_TOLERANCE` | `0.0001` | Absolute quantity tolerance when comparing local vs exchange balances. |
-| `TRADING_STALE_TICK_SECONDS` | `180` | Health monitor marks a bot stale after this (or interval + health interval, whichever is longer). |
-| `TRADING_HEALTH_CHECK_SECONDS` | `30` | Health check cadence. |
-| `TRADING_ORDER_SYNC_SECONDS` | `5` | Exchange open-order sync cadence. |
-| `TRADING_BALANCE_SYNC_SECONDS` | `60` | Live inventory sync cadence (skipped when multiple live bots share a credential). |
+| `TRADING_STALE_TICK_SECONDS` | `180` | Documented floor; the current Go runtime hardcodes max(180s, tick interval + 30s). |
+| `TRADING_HEALTH_CHECK_SECONDS` | `30` | The engine's health-check cadence. |
+| `TRADING_ORDER_SYNC_SECONDS` | `5` | The engine's exchange open-order sync cadence. |
+| `TRADING_BALANCE_SYNC_SECONDS` | `60` | The engine's live inventory sync cadence (skipped when multiple live bots share a credential). |
 | `TRADING_EXCHANGE_TIMEOUT_MS` | `15000` | CCXT request timeout. |
 | `TRADING_EXCHANGE_RATE_LIMIT_MS` | `1000` | Minimum gap between exchange calls. |
 | `TRADING_EXCHANGE_MAX_RETRIES` | `3` | Retry attempts on transient exchange errors. |

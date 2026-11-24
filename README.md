@@ -10,19 +10,24 @@ authenticated Inertia + Vue dashboard.
 
 ## Status
 
-The MVP is implemented:
+The hybrid runtime is implemented on the `hybrid-engine` branch:
 
 - Four strategies: Simple, Trailing, Martingale, and Dynamic grid.
 - Durable grid, order, fill, inventory, P&L, strategy-state, and risk data.
-- CCXT market data and live order execution, plus a public-data paper simulator.
-- Queued per-bot ticks (60-second default interval) with per-bot locking,
-  startup reconciliation, health checks, and balance sync.
+- Go engine bot runtime: control handlers, due-check ticks, grid sync, paper
+  fills, daily-loss/exit guards, and backtests.
+- Laravel publishes commands and owns configuration, `desired_status`, the live
+  gate, previews, and the dashboard.
+- **Live execution remains disabled in the Go engine.** A live bot start is
+  paused with a clear `last_error`; Laravel still owns the live gate and cancels
+  open live orders locally on stop/kill-switch when the engine cannot.
 - Risk controls: position/open-order caps, per-bot and account-wide daily loss
-  pauses, kill switch, and live-mode safeguards.
+  pauses, kill switch (immediate command plus emergency live cancel), and
+  live-mode safeguards.
 - Breeze authentication, authorization policies, bot creation/list/detail/edit,
   live controls, credentials, activity log, and a kill-switch confirmation page.
-- Historical backtesting with cached public candles, saved runs, metrics, equity
-  curves, and side-by-side comparison of compatible runs.
+- Historical backtesting with cached candles, saved runs, metrics, equity curves,
+  and side-by-side comparison of compatible runs, executed by the Go engine.
 
 ## Stack
 
@@ -31,9 +36,9 @@ The MVP is implemented:
 | Application | PHP 8.4, Laravel 12 |
 | Frontend | Inertia.js, Vue 3, Tailwind, Vite, Breeze auth |
 | Exchange | CCXT, Binance by default |
-| Queue and cache | Redis, Laravel Horizon |
+| Queue and cache | Redis, Laravel Horizon (alerts/default jobs) |
 | Database | PostgreSQL 16+ |
-| Local runtime | Docker Compose (app, Nginx, PostgreSQL, Redis, Horizon, scheduler) |
+| Local runtime | Docker Compose (app, Nginx, PostgreSQL, Redis, Horizon, scheduler, Go engine) |
 
 ## Requirements
 
@@ -91,14 +96,37 @@ docker compose down
 ```
 
 The entrypoint waits for PostgreSQL, generates `APP_KEY` when needed, and runs
-`php artisan migrate --force`. The app, Nginx, PostgreSQL, Redis, Horizon, and
-scheduler services each have health checks.
+`php artisan migrate --force`. The app, Nginx, PostgreSQL, Redis, Horizon,
+scheduler, and Go engine services each have health checks.
+
+## Go engine
+
+`engine/` is the hybrid trading engine from the
+`adopt-hybrid-go-engine` change. It consumes `engine.commands` and
+`engine.backtests`, publishes `engine:heartbeat`, and serves `GET /healthz` and
+`GET /livez`. It executes the paper-trading bot runtime (control commands,
+due-check ticks, grids, paper orders/fills, daily-loss and exit guards), backtest
+replays, and sweeps. Live execution is intentionally disabled: a live bot start
+is paused with a clear error, and Laravel keeps the live gate plus its emergency
+`CancelBotOrders` path. Laravel remains the UI/configuration layer.
+
+There is no Go toolchain on the host. Run its tests through Docker:
+
+```bash
+cd engine
+make test
+```
+
+See [engine/README.md](engine/README.md) for endpoints, environment variables,
+and the multi-stage image. Adding the engine to production Compose, GHCR, and CI
+is deferred to the follow-up after `add-qnap-ci-deploy`; phase 8 stays on the
+`hybrid-engine` branch/tag until then.
 
 ## Production deployment (QNAP NAS)
 
 Pushes to `main` are tested by GitHub Actions and, when green, published as
 private application and Nginx images in GHCR. A QNAP scheduled task pulls the
-desired image over an outbound connection, waits for all six services to become
+desired image over an outbound connection, waits for all seven services to become
 healthy, and rolls back the application images on a health failure. See
 [Production deployment](docs/deployment.md) for first install, registry login,
 pins, holds, rollback, and recovery.
@@ -129,8 +157,8 @@ php artisan serve
 Run the workers in separate terminals:
 
 ```bash
-php artisan horizon               # queued bot ticks and order sync
-php artisan schedule:work         # tick dispatch, health, balance sync
+php artisan horizon               # alert email and default-queue jobs
+php artisan schedule:work         # analytics and alert maintenance
 ```
 
 The dashboard is at <http://localhost:8000>. For frontend development, run
@@ -145,10 +173,12 @@ The dashboard is at <http://localhost:8000>. For frontend development, run
 4. Set the center price, levels per side, spacing, and order quantity. Strategy
    specific fields appear for trailing, martingale, and dynamic grids.
 5. Save, open the bot detail page, and press **Start**.
-6. The scheduler checks for due bots every second and evaluates each bot at its
-   tick interval (60 seconds by default). The detail and list pages poll every
-   five seconds for orders, fills, inventory, and P&L.
-7. Press **Pause** to keep open orders, or **Stop** to cancel them.
+6. Start publishes a command; the Go engine evaluates the bot at its tick
+   interval (60 seconds by default). The detail and list pages poll every five
+   seconds for orders, fills, inventory, and P&L.
+7. Press **Pause** to keep open orders, or **Stop** to request cancellation. If
+   the engine is unreachable, stop and kill-switch cancel open live orders
+   locally as an emergency measure.
 
 Paper fills use public market data: a buy limit fills when the market price is at
 or below the limit, and a sell limit fills when the market price is at or above it.
@@ -169,10 +199,11 @@ for every bot field, its validation, and its runtime effect.
 
 ## Backtesting
 
-Open **Backtests** to replay an existing bot's configuration against cached public
-candles over a past range. Runs are queued, snapshot the bot and its effective risk
-limits, and store metrics, simulated fills, and a bounded equity curve. Compatible
-runs can be compared on normalized equity.
+Open **Backtests** to replay an existing bot's configuration against cached
+candles over a past range. Laravel inserts queued rows and publishes
+`backtest.run` / `backtest.sweep`; the Go engine runs the replay and stores
+metrics, simulated fills, and a bounded equity curve. Compatible runs can be
+compared on normalized equity.
 
 See [docs/backtesting.md](docs/backtesting.md) for the fill model, data and cache
 rules, capital and risk behavior, run states, metrics, comparison rules, and the
@@ -274,34 +305,36 @@ docker compose exec -u www-data \
 
 The full suite uses the PostgreSQL `trading_bot_test` database. The opt-in testnet suite only runs when `CCXT_TESTNET=1` and Binance testnet credentials are provided.
 
+PHP engine golden fixtures for the Go ports live in
+[`tests/golden/engine/`](tests/golden/engine/) and are asserted by the Go test
+suite. They are frozen from the removed PHP engine and are no longer regenerated.
+See [`tests/golden/README.md`](tests/golden/README.md) for coverage.
+
 ## Runtime operations
 
 ```bash
-php artisan bots:dispatch
-php artisan bots:reconcile
-php artisan bots:health
-php artisan bots:sync-balances
 php artisan horizon:status
 php artisan horizon:terminate
 php artisan queue:failed
+docker compose logs -f engine
 ```
 
-See [docs/runtime.md](docs/runtime.md) for the tick pipeline, locks, recovery,
-Horizon supervision, health checks, and the ten-bot one-second capacity stress
-profile.
+See [docs/runtime.md](docs/runtime.md) for the command/heartbeat flow, engine
+recovery, emergency cancel, backtest lifecycle, and the phase 8 release gate.
 
 ## Project layout
 
 ```text
 app/
   Domain/          Bot, Grid, Order, Portfolio, Risk, Strategy, Exchange
-  Strategies/      Simple, Trailing, Martingale, Dynamic
+  Strategies/      Preview-only Simple, Trailing, Martingale, Dynamic ladders
   Services/Exchange/  CCXT and paper clients
-  Jobs/            RunBotTick, PlaceOrder, SyncOrders
+  Services/Engine/ Command publisher and heartbeat reader
   Actions/         Bot controls, credentials, kill switch
   Http/            Controllers, requests, resources
   Models/          Eloquent persistence
-docs/              Bot parameters, strategies, exchanges, risk, runtime, dashboard, security, deployment
+engine/            Go engine (commands, ticks, orders, risk, backtests)
+docs/              Bot parameters, strategies, exchanges, risk, runtime, engine, dashboard, security, deployment
 openspec/          Change proposals and capability specs
 ```
 
@@ -312,9 +345,11 @@ openspec/          Change proposals and capability specs
 - [Exchanges and live trading](docs/exchanges.md)
 - [Risk controls](docs/risk.md)
 - [Runtime and recovery](docs/runtime.md)
+- [Go engine contract](docs/engine.md)
 - [Dashboard flows](docs/dashboard.md)
 - [Security checklist](docs/security.md)
 - [Production deployment](docs/deployment.md)
+- [Go engine](engine/README.md)
 
 ## OpenSpec workflow
 
@@ -334,9 +369,9 @@ openspec validate <name> --strict
 ## Operational notes
 
 - Keep `TRADING_LIVE_ENABLED=false` in local and staging environments.
-- Run exactly one scheduler process and at least one Horizon supervisor.
-- Do not horizontally scale `schedule:work`; per-bot locks prevent overlapping
-  ticks, but the scheduler itself is a singleton.
+- Run exactly one scheduler process, one Horizon supervisor group for alerts, and
+  one Go engine instance.
+- Do not horizontally scale `schedule:work` or the engine command consumers.
 - Back up PostgreSQL before live trading. Paper data is disposable.
 - Before teardown of a live deployment, activate the kill switch and confirm all
   open orders are canceled.

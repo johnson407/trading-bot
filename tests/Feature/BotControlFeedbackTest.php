@@ -1,9 +1,12 @@
 <?php
 
+use App\Actions\PauseBot;
 use App\Models\Bot;
 use App\Models\User;
+use App\Services\Exchange\ExchangeClientFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Fixtures\FakeExchangeClient;
 
 uses(RefreshDatabase::class);
 
@@ -31,7 +34,7 @@ it('surfaces a control action error after a failed pause', function () {
     $user = User::factory()->create();
     $bot = Bot::factory()->for($user)->create(['status' => 'idle']);
 
-    $this->mock(\App\Actions\PauseBot::class, function ($mock) {
+    $this->mock(PauseBot::class, function ($mock) {
         $mock->shouldReceive('handle')->andThrow(new RuntimeException('Pause failed.'));
     });
 
@@ -59,7 +62,7 @@ it('rejects a name-only confirmation when starting a live bot', function () {
         'capital_allocation' => '1000',
     ]);
 
-    app()->instance(\App\Services\Exchange\ExchangeClientFactory::class, new \App\Services\Exchange\ExchangeClientFactory(live: new \Tests\Fixtures\FakeExchangeClient(quoteBalance: '1000')));
+    app()->instance(ExchangeClientFactory::class, new ExchangeClientFactory(live: new FakeExchangeClient(quoteBalance: '1000')));
 
     $this->from(route('bots.show', $bot))
         ->actingAs($user)
@@ -67,14 +70,14 @@ it('rejects a name-only confirmation when starting a live bot', function () {
         ->assertRedirect(route('bots.show', $bot))
         ->assertSessionHasErrors('confirmation');
 
-    expect($bot->fresh()->status->value)->toBe('idle');
+    expect($bot->fresh()->desired_status->value)->toBe('idle');
 
     $this->from(route('bots.show', $bot))
         ->actingAs($user)
         ->post(route('bots.start', $bot), ['confirmation' => 'Live BTC grid on binance'])
         ->assertSessionHasNoErrors();
 
-    expect($bot->fresh()->status->value)->toBe('running');
+    expect($bot->fresh()->desired_status->value)->toBe('running');
 });
 
 it('shows the exact confirmation phrase in the create and start forms', function () {

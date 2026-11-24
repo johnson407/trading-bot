@@ -2,8 +2,8 @@
 
 This runbook describes the outbound-only production deployment for the trading
 bot. GitHub Actions tests every pull request and every push to `main`. A green
-`main` build publishes two private GHCR images. A scheduled task on the NAS
-pulls the desired image and activates it, waiting for all six services to become
+`main` build publishes three private GHCR images. A scheduled task on the NAS
+pulls the desired image and activates it, waiting for all seven services to become
 healthy.
 
 The architecture, trade-offs, and failure-handling decisions are recorded in
@@ -13,10 +13,11 @@ The OpenSpec change is `add-qnap-ci-deploy`.
 ## What runs where
 
 - **GitHub Actions** runs the PHP test suite. `main` builds publish
-  `ghcr.io/johnson407/trading-bot` and
-  `ghcr.io/johnson407/trading-bot-nginx`, tagged with `sha-<commit>` and
+  `ghcr.io/johnson407/trading-bot`,
+  `ghcr.io/johnson407/trading-bot-nginx`, and
+  `ghcr.io/johnson407/trading-bot-engine`, tagged with `sha-<commit>` and
   `latest`.
-- **GHCR** stores both private images. The NAS needs only `read:packages`.
+- **GHCR** stores all three private images. The NAS needs only `read:packages`.
 - **QNAP NAS** runs the six containers from `docker-compose.prod.yml`. It polls
   outbound on a five-minute cron and never accepts an inbound deployment
   connection.
@@ -182,7 +183,7 @@ Nginx so public uploads work.
    ./deploy.sh
    ```
 
-   The first poll deploys `latest`. The script pulls both images, starts the
+   The first poll deploys `latest`. The script pulls all three images, starts the
    stack, and waits up to 180 seconds for `app`, `nginx`, `horizon`, `scheduler`,
    `postgres`, and `redis` to report healthy. On success it records `.last-good`
    and removes `.hold`.
@@ -197,7 +198,7 @@ Nginx so public uploads work.
    ```
 
    First deployment recorded on 2026-11-22: image
-   `sha-b4239202475ad86b94b8580663fb750980088c27`, all six services healthy,
+   `sha-b4239202475ad86b94b8580663fb750980088c27`, all seven services healthy,
    `/up` and `/login` returned HTTP 200, `app_env=production`, live trading
    disabled, and the database contained zero users before bootstrap. The UI is
    available at `http://192.168.88.150:8000`.
@@ -205,7 +206,7 @@ Nginx so public uploads work.
    End-to-end update verified on 2026-11-22: the green `main` commit
    `81a91d7da1be02e162013715502073d598c8cb84` was published, the `19:15` cron
    poll activated `sha-81a91d7da1be02e162013715502073d598c8cb84` at `19:16:44`
-   (within one five-minute interval), all six services were healthy, and `/up`
+   (within one five-minute interval), all seven services were healthy, and `/up`
    returned `Application up`. The `19:05` and `19:10` polls correctly skipped
    because the running image had not changed.
 
@@ -263,7 +264,7 @@ Nginx so public uploads work.
 ## Routine operation
 
 Push a tested commit to `main`. The `tests` job must pass, then
-`build-and-push` publishes both images. Within one polling interval the NAS
+`build-and-push` publishes all three images. Within one polling interval the NAS
 pulls the new desired image, activates it, and records it as last-good.
 
 Watch a deployment:
@@ -276,7 +277,7 @@ docker compose -f docker-compose.prod.yml ps
 
 The deploy script takes a single-instance lock. If a poll arrives while a deploy
 is running, it exits without changing anything. When the desired registry image
-already matches the running application and all six services are healthy, the
+already matches the running application and all seven services are healthy, the
 poll exits without pulling or restarting. Successful deployments prune dangling
 images; tagged images and named volumes are preserved.
 
@@ -285,7 +286,7 @@ images; tagged images and named volumes are preserved.
 | State | Meaning |
 | --- | --- |
 | `.desired-tag` | Tag to deploy. Absent means `latest`. A SHA pin survives polls and reboots. |
-| `.last-good` | First line: last fully healthy tag. Second line: application image ID. Third line: Nginx image ID. |
+| `.last-good` | First line: last fully healthy tag. Second line: application image ID. Third line: Nginx image ID. Fourth line: engine image ID. |
 | `.hold` | Application image ID that failed health checks. The same image is skipped until a different image is desired or the hold is cleared. |
 
 ```sh
@@ -296,9 +297,9 @@ images; tagged images and named volumes are preserved.
 DRY_RUN=1 ./deploy.sh      # print commands only
 ```
 
-A deployment is successful only when all six services are healthy within 180
+A deployment is successful only when all seven services are healthy within 180
 seconds. An application-tier failure (`app`, `nginx`, `horizon`, or `scheduler`)
-retags the previous application and Nginx image IDs as `:rollback`, restarts them
+retags the previous application, Nginx, and engine image IDs as `:rollback`, restarts them
 with `--pull never`, and writes the failed image ID to `.hold`. A PostgreSQL or
 Redis failure is an infrastructure failure: the script logs it, does not roll
 back images, does not write a hold, and exits non-zero so the next poll retries.
@@ -338,9 +339,9 @@ exchange credentials in the compose file or an image.
 
 - [ ] `uname -m` reports `x86_64`.
 - [ ] `docker compose -f docker-compose.prod.yml config` succeeds.
-- [ ] Both GHCR images pull with the read-only token.
+- [ ] All three GHCR images pull with the read-only token.
 - [ ] `DRY_RUN=1 ./deploy.sh` changes no state.
-- [ ] First deploy reports all six services healthy.
+- [ ] First deploy reports all seven services healthy.
 - [ ] `/up` and `/login` respond.
 - [ ] The production database contains no development rows.
 - [ ] The first account can log in.

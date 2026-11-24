@@ -1,18 +1,15 @@
 <?php
 
-use App\Actions\StartBot;
-use App\Domain\Bot\BotTickPipeline;
 use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Models\Bot;
 use App\Models\Grid;
 use App\Models\GridLevel;
 use App\Models\StrategyConfig;
 use App\Models\User;
-use App\Services\Exchange\ExchangeClientFactory;
+use App\Services\Engine\CommandPublisher;
 use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
-use Tests\Fixtures\FakeExchangeClient;
 
 uses(RefreshDatabase::class);
 
@@ -161,7 +158,7 @@ it('preserves the grid, strategy state, fee and identity when only non-structura
         ->and($bot->strategy_key)->toBe('simple-grid');
 });
 
-it('resets strategy state and retires the grid when structural parameters change', function () {
+it('publishes a config command without writing engine-owned strategy or grid state when structural parameters change', function () {
     $user = User::factory()->create();
     $bot = updatableBot($user);
     $config = StrategyConfig::query()->where('bot_id', $bot->id)->firstOrFail();
@@ -176,57 +173,41 @@ it('resets strategy state and retires the grid when structural parameters change
         'center_price' => '50000',
         'status' => 'active',
     ]);
+    $publisher = app(CommandPublisher::class);
 
     $this->actingAs($user)
         ->patch(route('bots.update', $bot), updatePayload())
         ->assertRedirect(route('bots.show', $bot));
 
-    expect($config->fresh()->state)->toBeNull()
-        ->and($grid->fresh()->status->value)->toBe('stopped');
+    expect($config->fresh()->state['data']['fill_count'])->toBe(3)
+        ->and($grid->fresh()->status->value)->toBe('active')
+        ->and($publisher->ofType('bot.config'))->toHaveCount(1)
+        ->and($publisher->ofType('bot.config')[0]['bot_id'])->toBe($bot->id)
+        ->and($publisher->ofType('bot.config')[0]['payload'])->toBe(['strategy_reset' => true]);
 });
 
-it('applies edited structural parameters on the next tick', function () {
+it('keeps a retryable config reset when the engine command cannot be published', function () {
     $user = User::factory()->create();
     $bot = updatableBot($user);
-    $bot->forceFill(['status' => 'stopped'])->save();
+    $publisher = app(CommandPublisher::class);
+    $publisher->fail = true;
 
-    $config = StrategyConfig::query()->where('bot_id', $bot->id)->firstOrFail();
-    $config->forceFill(['state' => ['version' => 1, 'data' => [
-        'center_price' => '50000',
-        'spacing_type' => 'arithmetic',
-        'spacing_value' => '100',
-        'fill_count' => 3,
-    ]]])->save();
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload())
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHasErrors('engine');
 
-    Grid::factory()->for($bot)->create(['center_price' => '50000', 'status' => 'active']);
+    expect($bot->fresh()->strategy_reset_pending)->toBeTrue();
 
-    $fake = new FakeExchangeClient(price: '195');
-    app()->instance(ExchangeClientFactory::class, new ExchangeClientFactory($fake, $fake));
+    $publisher->fail = false;
 
-    $this->actingAs($user)->patch(route('bots.update', $bot), [
-        'name' => 'Edited grid',
-        'capital_allocation' => '1000',
-        'fee_rate' => '0',
-        'center_price' => '200',
-        'level_count' => 2,
-        'spacing_type' => 'arithmetic',
-        'spacing_value' => '20',
-        'order_quantity' => '1',
-    ])->assertRedirect(route('bots.show', $bot));
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload())
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHasNoErrors();
 
-    app(StartBot::class)->handle($bot->fresh());
-    app(BotTickPipeline::class)->tick($bot->fresh());
-
-    $grid = $bot->fresh()->activeGrid;
-    $prices = $grid->levels->sortBy('sequence')->pluck('price')->all();
-
-    expect($grid->center_price)->toBe('200.0000000000000000')
-        ->and($prices)->toBe([
-            '160.0000000000000000',
-            '180.0000000000000000',
-            '220.0000000000000000',
-            '240.0000000000000000',
-        ]);
+    expect($bot->fresh()->strategy_reset_pending)->toBeTrue()
+        ->and($publisher->ofType('bot.config'))->toHaveCount(1);
 });
 
 it('rejects an update that cannot be constructed and leaves the bot unchanged', function (array $overrides) {
@@ -318,3 +299,56 @@ it('rejects missing strategy fields with validation errors instead of a server e
         'max_spacing' => '10',
     ]],
 ]);
+
+it('preserves engine-owned settings when a bot is updated', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill([
+        'settings' => [
+            'mark_price' => '50123',
+            'recent_prices' => ['50000', '50123'],
+            'daily_loss_baseline' => '0',
+            'webhook_url' => 'https://example.test/hook',
+        ],
+    ])->save();
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload())
+        ->assertRedirect(route('bots.show', $bot));
+
+    expect($bot->fresh()->settings)->toMatchArray([
+        'mark_price' => '50123',
+        'recent_prices' => ['50000', '50123'],
+        'daily_loss_baseline' => '0',
+        'webhook_url' => 'https://example.test/hook',
+    ]);
+});
+
+it('merges user settings without overwriting engine-owned keys', function () {
+    $bot = Bot::factory()->create([
+        'settings' => [
+            'mark_price' => '50123',
+            'recent_prices' => ['50000'],
+            'daily_loss_baseline' => '10',
+            'webhook_url' => 'old',
+        ],
+    ]);
+
+    $bot->mergeSettings([
+        'mark_price' => '1',
+        'recent_prices' => [],
+        'daily_loss_baseline' => '99',
+        'webhook_url' => 'new',
+        'theme' => 'dark',
+    ]);
+
+    $bot->save();
+
+    expect($bot->fresh()->settings)->toMatchArray([
+        'mark_price' => '50123',
+        'recent_prices' => ['50000'],
+        'daily_loss_baseline' => '10',
+        'webhook_url' => 'new',
+        'theme' => 'dark',
+    ]);
+});

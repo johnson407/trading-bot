@@ -27,7 +27,7 @@ bot activity feed.
 | `risk.stop_loss_triggered` | critical | A protective stop-loss paused a bot and canceled its open orders. |
 | `risk.take_profit_triggered` | warning | A protective take-profit paused a bot and canceled its open orders. |
 | `risk.range_exit_triggered` | warning | A protective range bound paused a bot and canceled its open orders. |
-| `risk.exit_cancel_failed` | critical | Orders could not be canceled after a protective exit pause. |
+| `risk.cancel_failed` | warning | An open order could not be canceled and the pause retry marker was set. |
 
 Cancellation failures are critical because they leave orders live after the bot
 has been paused. Stop-loss and exit-cancellation alerts are emailed; take-profit

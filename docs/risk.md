@@ -1,6 +1,6 @@
 # Risk Controls
 
-Risk checks are enforced by the trading engine, not just the dashboard. Strategies return order intents; only the pipeline may turn an intent into an order, and every intent passes through `RiskGuard`.
+Risk checks are enforced by the Go trading engine, not just the dashboard. Strategies return order intents; only the engine may turn an intent into an order, and every intent passes through its risk guard.
 
 ## Limits
 
@@ -25,7 +25,10 @@ New bots do not receive a bot-scope row, so the account-wide limits apply immedi
 
 ## Daily loss
 
-`DailyLossMonitor` evaluates each running bot and the account as a whole. A loss is the positive difference between the start-of-day realized P&L baseline and the current realized P&L, plus optional unrealized P&L at the current mark.
+`DailyLossMonitor` runs inside the Go engine for each running bot and the
+account as a whole (see [runtime.md](runtime.md)). A loss is the positive
+difference between the start-of-day realized P&L baseline and the current
+realized P&L, plus optional unrealized P&L at the current mark.
 
 - The baseline resets at the first evaluation after UTC midnight: `day_start` becomes the new day and `day_start_realized_pnl` captures the bot's realized P&L at that moment.
 - A bot without a bot-scope override stores its own baseline in its settings instead of mutating the shared user row.
@@ -35,7 +38,7 @@ New bots do not receive a bot-scope row, so the account-wide limits apply immedi
 
 ## Protective exits
 
-Each bot can carry optional stop-loss, take-profit, and range-exit rules. They are configured per bot on its detail page and are evaluated on every running tick after the latest mark price is stored and before the daily-loss check and strategy logic. Null or blank fields disable a rule.
+Each bot can carry optional stop-loss, take-profit, and range-exit rules. They are configured per bot on its detail page and are evaluated by the engine on every running tick after the latest mark price is stored and before the daily-loss check and strategy logic. Null or blank fields disable a rule.
 
 | Rule | Trigger |
 | --- | --- |
@@ -47,11 +50,18 @@ Stop-loss and take-profit require positive base inventory and a positive average
 
 A trigger pauses the bot, cancels its pending, open, and partially-filled orders, records a risk event, and writes a `bot.exit_guard_triggered` activity row. The bot's base and quote inventory are never changed: there is no market order, liquidation, or automatic resume. Exit is manual, and a resumed bot that is still beyond its threshold pauses again on its next tick.
 
-A cancellation failure during the exit is recorded as `risk.exit_cancel_failed` and does not prevent the pause. Trigger events are `risk.stop_loss_triggered` (critical), `risk.take_profit_triggered` (warning), and `risk.range_exit_triggered` (warning); the alert catalog mirrors those severities, so stop-loss reaches email while take-profit and range exits stay in the in-app inbox.
+A cancellation failure during the exit is recorded as `risk.cancel_failed` and does not prevent the pause. Trigger events are `risk.stop_loss_triggered` (critical), `risk.take_profit_triggered` (warning), and `risk.range_exit_triggered` (warning); the alert catalog mirrors those severities, so stop-loss reaches email while take-profit and range exits stay in the in-app inbox.
 
 ## Kill-switch
 
-`ActivateKillSwitch` pauses every non-stopped bot owned by the user immediately, then cancels each bot's open orders in parallel. A failure on one order is recorded as a `risk.kill_switch_cancel_failed` risk event and reported in the result; other orders and bots continue. This is the emergency control for live trading.
+Laravel writes `desired_status=paused` for every non-stopped bot owned by the
+user and publishes one `kill_switch` command. The engine pauses each bot and
+cancels its orders. If the heartbeat is missing/expired or publishing fails,
+Laravel immediately cancels open orders on the user's live bots through
+`CancelBotOrders`. A failure on one order is recorded as a
+`risk.kill_switch_cancel_failed` risk event and reported in the result; other
+orders and bots continue. This is the emergency control for live trading and it
+does not wait for a tick.
 
 ## Live-mode prerequisites
 
@@ -66,7 +76,7 @@ Paper mode is the default and never sends private exchange orders. There is no s
 
 ## Risk events
 
-Risk events are queryable per bot and per user, newest first. Important types include `risk.position_limit`, `risk.open_order_limit`, `risk.daily_loss_limit`, `risk.kill_switch_cancel_failed`, `exchange.failure_threshold`, `risk.stop_loss_triggered`, `risk.take_profit_triggered`, `risk.range_exit_triggered`, and `risk.exit_cancel_failed`. Each event stores severity, message, and JSON context.
+Risk events are queryable per bot and per user, newest first. Important types include `risk.position_limit`, `risk.open_order_limit`, `risk.daily_loss_limit`, `risk.kill_switch_cancel_failed`, `exchange.failure_threshold`, `risk.stop_loss_triggered`, `risk.take_profit_triggered`, `risk.range_exit_triggered`, and `risk.cancel_failed`. Each event stores severity, message, and JSON context.
 
 ## Fees
 
@@ -78,4 +88,4 @@ Fees may be charged in the quote asset, the base asset, or a third asset (for ex
 
 Migration `2026_11_21_000100_remove_bot_scope_risk_limit_shadows` removes legacy auto-created bot-scope risk rows so the user-level limits apply again. Explicit per-bot overrides are still available through `RiskLimitService::updateForBot`.
 
-`bots:sync-balances` refreshes a live bot's base and quote inventory from the exchange only when a single live bot uses that credential. When several live bots share one exchange account, the sync is skipped, per-bot inventory is left untouched, and `bot.balance_sync_skipped` is recorded with `reason: shared_account`, at most once per bot per day. Wallet totals cannot be attributed to individual bots, so each bot's ledger stays authoritative.
+Live balance synchronization is not active while live execution is disabled in the Go runtime. When live execution returns, it will refresh a live bot's base and quote inventory from the exchange only when a single live bot uses that credential; shared-account sync will record `bot.balance_sync_skipped` with `reason: shared_account` instead of guessing per-bot attribution.

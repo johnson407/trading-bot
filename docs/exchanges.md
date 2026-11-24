@@ -62,16 +62,23 @@ Paper is the default mode for every bot.
 
 - Paper mode reads public market data only. Private calls and order placement
   through `PaperExchangeClient` throw a normalized `unsupported` error.
-- Paper orders are simulated locally: a buy fills when the market price is at
-  or below its limit, a sell fills when the market price is at or above its
+- Paper orders are simulated by the engine: a buy fills when the market price is
+  at or below its limit, a sell fills when the market price is at or above its
   limit. Fills happen at the limit price and fees use `trading.paper.fee_rate`.
-  Fills are evaluated from the market last observed when a tick runs, so a price
-  that crosses and recrosses a limit between ticks is not guaranteed to fill.
-- Live mode uses the bot's encrypted credential and places real limit orders
-  through `CcxtExchangeClient`.
+  Fills are evaluated at engine tick time, so a price that crosses and recrosses
+  a limit between ticks is not guaranteed to fill.
+- Live mode is intended to use the bot's encrypted credential and place real
+  limit orders from the Go engine. Live execution is deliberately disabled in
+  the Go runtime: a live start is paused with a clear error. See
+  [runtime.md](runtime.md).
 - Live execution requires both `TRADING_LIVE_ENABLED=true` and per-bot
   confirmation with a passing balance check. There is no automatic fallback
   from live to paper.
+
+Laravel publishes the control command and keeps the live gate; the engine owns
+order placement, fills, reconciliation, and failure handling. If the engine is
+unreachable during stop or kill-switch, Laravel cancels open live orders locally
+through `CancelBotOrders` as an emergency measure.
 
 ## Rate limiting and retries
 
@@ -83,22 +90,27 @@ insufficient balance, and not-found errors are not retried.
 ## Failure handling
 
 Each failed exchange operation increments the bot's consecutive failure count.
-A successful operation resets it. When the count reaches
-`trading.failure.max_consecutive`, the bot is paused, open orders are canceled,
-and an activity log plus a critical risk event are recorded. The bot keeps its
-configured mode; a live bot is never silently switched to paper. Reconciliation
-conflicts after a restart pause the bot and require an explicit resume.
+A successful operation resets it. The Go runtime currently uses a fixed
+threshold of three failed ticks: it pauses the bot, cancels open orders, and
+records an activity log plus a critical risk event. The legacy
+`trading.failure.max_consecutive` setting is not read by the Go runtime yet. The
+stale-tick guard uses a fixed 180-second floor (or interval + 30 seconds,
+whichever is greater). The bot keeps its configured mode; a live bot is never
+silently switched to paper. Reconciliation conflicts after a restart pause the
+bot and require an explicit resume.
 
 ## Runtime commands
 
 ```bash
-php artisan horizon            # process queued exchange/tick jobs
-php artisan schedule:work      # run the one-second bot due-check and scheduled maintenance
+php artisan horizon            # alert and default-queue jobs only
+php artisan schedule:work      # analytics and alert maintenance
 php artisan migrate --force
 php artisan config:show trading
 ```
 
-In Docker, run these inside the `horizon` and `scheduler` services.
+In Docker, run Laravel commands inside the `horizon` and `scheduler` services.
+The Go engine service runs the tick/order/backtest runtime; see
+[docs/runtime.md](runtime.md).
 
 ## Opt-in CCXT testnet integration suite
 

@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Domain\Backtest\Contracts\CandleProvider;
 use App\Domain\Strategy\StrategyRegistry;
 use App\Logging\RedactSecrets;
 use App\Models\BacktestRun;
@@ -11,7 +10,9 @@ use App\Models\ExchangeCredential;
 use App\Policies\BacktestRunPolicy;
 use App\Policies\BotPolicy;
 use App\Policies\ExchangeCredentialPolicy;
-use App\Services\Backtest\CcxtCandleProvider;
+use App\Services\Engine\CommandPublisher;
+use App\Services\Engine\EngineHeartbeat;
+use App\Services\Engine\RedisCommandPublisher;
 use App\Services\Exchange\ExchangeClientFactory;
 use App\Strategies\DynamicGridStrategy;
 use App\Strategies\MartingaleGridStrategy;
@@ -35,7 +36,8 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(StrategyRegistry::class);
         $this->app->singleton(ExchangeClientFactory::class, fn () => new ExchangeClientFactory);
-        $this->app->bind(CandleProvider::class, CcxtCandleProvider::class);
+        $this->app->bind(CommandPublisher::class, RedisCommandPublisher::class);
+        $this->app->singleton(EngineHeartbeat::class);
     }
 
     /**

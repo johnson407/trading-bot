@@ -1,13 +1,7 @@
 <?php
 
 use App\Actions\CreateBot;
-use App\Domain\Order\Enums\OrderSide;
-use App\Domain\Order\Enums\OrderStatus;
-use App\Domain\Risk\DailyLossMonitor;
-use App\Domain\Risk\RiskGuard;
 use App\Domain\Risk\RiskLimitService;
-use App\Models\Bot;
-use App\Models\Order;
 use App\Models\RiskLimit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -37,47 +31,6 @@ it('does not create a shadowing bot risk row when a bot is created', function ()
 
     expect(RiskLimit::query()->where('scope', 'bot')->count())->toBe(0)
         ->and(RiskLimit::query()->where('scope', 'user')->where('user_id', $user->id)->count())->toBe(1);
-});
-
-it('applies user risk limits to a bot that has no override', function () {
-    $user = User::factory()->create();
-    $bot = Bot::factory()->for($user)->create();
-
-    app(RiskLimitService::class)->updateForUser($user, [
-        'max_position_notional' => '100',
-        'max_open_orders' => '1',
-        'daily_loss_limit' => '50',
-    ]);
-
-    $effective = app(RiskLimitService::class)->forBot($bot);
-
-    expect($effective->scope->value)->toBe('user')
-        ->and($effective->max_open_orders)->toBe(1);
-
-    Order::factory()->for($bot)->create(['status' => OrderStatus::Open]);
-
-    $decision = app(RiskGuard::class)->checkOrder($bot, OrderSide::Buy, '10', '1');
-
-    expect($decision->allowed)->toBeFalse()
-        ->and($decision->type)->toBe('risk.open_order_limit');
-});
-
-it('keeps a per-bot daily loss baseline when the bot uses user limits', function () {
-    $user = User::factory()->create();
-    $bot = Bot::factory()->for($user)->running()->create(['realized_pnl' => '-150']);
-    app(RiskLimitService::class)->updateForUser($user, [
-        'max_position_notional' => '5000',
-        'max_open_orders' => '20',
-        'daily_loss_limit' => '100',
-    ]);
-
-    app(DailyLossMonitor::class)->evaluate($bot);
-
-    $bot->refresh();
-
-    expect($bot->status->value)->toBe('paused')
-        ->and($bot->settings['daily_loss_baseline']['day'])->toBe(now('UTC')->toDateString())
-        ->and($bot->settings['daily_loss_baseline']['realized'])->toBe('-150.0000000000000000');
 });
 
 it('lets an owner edit account risk limits', function () {

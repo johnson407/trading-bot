@@ -11,6 +11,8 @@ readonly class KillSwitchResult
     public function __construct(
         public array $botIds,
         public array $results,
+        public bool $published = false,
+        public bool $emergency = false,
     ) {}
 
     public function failures(): int

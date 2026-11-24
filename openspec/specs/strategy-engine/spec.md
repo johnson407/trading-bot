@@ -22,7 +22,7 @@ A bot SHALL run any strategy registered under a stable identifier. Creating or u
 
 ### Requirement: Strategy lifecycle contract
 
-Every strategy SHALL support initialization from its configuration, evaluation on each price tick, notification of fills and cancellations, a stop decision, and generation of grid levels. The engine SHALL invoke these behaviors consistently. Cancellations SHALL be reported through `onCancel`, a stop decision SHALL use the standard stop procedure, and missing persisted state after a completed tick SHALL pause the bot.
+Every strategy SHALL support initialization from its configuration, evaluation on each price tick, notification of fills and cancellations, a stop decision, and generation of grid levels. The Go engine SHALL invoke these behaviors consistently. Cancellations SHALL be reported through `onCancel`, and a stop decision SHALL use the standard stop procedure. Laravel SHALL store strategy configuration only and SHALL NOT evaluate strategies after cutover.
 
 #### Scenario: Evaluate a price tick
 
@@ -38,6 +38,11 @@ Every strategy SHALL support initialization from its configuration, evaluation o
 
 - **WHEN** the engine cancels an order for a strategy or replaces the grid
 - **THEN** the strategy receives `onCancel` for that client order id
+
+#### Scenario: Laravel does not evaluate strategies
+
+- **WHEN** the engine cutover is complete
+- **THEN** Laravel does not call strategy `onTick`, `onFill`, or `onCancel` for trading or backtests
 
 ### Requirement: Configuration validity at creation
 
@@ -136,7 +141,7 @@ The Dynamic strategy SHALL adjust grid spacing from recent market volatility and
 
 ### Requirement: Strategy state persistence
 
-Strategy state SHALL be persisted after each tick and fill and SHALL be restored when a bot resumes after a restart. If stored state is missing when required or cannot be interpreted, the bot SHALL pause without placing orders and SHALL surface an error.
+Strategy state SHALL be persisted by the engine after each tick and fill and SHALL be restored when a bot resumes after a restart. Laravel SHALL NOT write `strategy_configs.state`. If stored state is missing when required or cannot be interpreted, the bot SHALL pause without placing orders and SHALL surface an error.
 
 #### Scenario: Resume from persisted state
 

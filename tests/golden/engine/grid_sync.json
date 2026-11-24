@@ -1,0 +1,648 @@
+{
+    "format": "php-golden-engine/1",
+    "clock": "2026-11-23T00:00:00+00:00",
+    "decimal_scale": 16,
+    "fee_rate": "0.001",
+    "description": "BotTickPipeline grid creation, level matching, fill-driven grid sync, and trailing recenter, with paper exchange data.",
+    "scenarios": {
+        "simple_grid_create_match_and_fill": {
+            "steps": [
+                {
+                    "label": "initial_tick",
+                    "market_price": "95",
+                    "result": {
+                        "status": "ok",
+                        "market_price": "95",
+                        "orders_placed": 2,
+                        "fills": 0,
+                        "orders_rejected": 0,
+                        "errors": []
+                    },
+                    "bot": {
+                        "status": "running",
+                        "base_inventory": "2.0000000000000000",
+                        "quote_inventory": "1000.0000000000000000",
+                        "average_entry_price": "0.0000000000000000",
+                        "realized_pnl": "0.0000000000000000",
+                        "fees_paid": "0.0000000000000000",
+                        "last_error": null,
+                        "settings": {
+                            "recent_prices": [
+                                "95"
+                            ],
+                            "mark_price": "95",
+                            "daily_loss_baseline": {
+                                "day": "2026-11-23",
+                                "realized": "0.0000000000000000"
+                            }
+                        }
+                    },
+                    "grids": [
+                        {
+                            "center_price": "100.0000000000000000",
+                            "spacing_type": "arithmetic",
+                            "spacing_value": "20.0000000000000000",
+                            "level_count": 2,
+                            "status": "active",
+                            "levels": [
+                                {
+                                    "sequence": 1,
+                                    "price": "90.0000000000000000",
+                                    "side": "buy",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 2,
+                                    "price": "110.0000000000000000",
+                                    "side": "sell",
+                                    "state": "open"
+                                }
+                            ]
+                        }
+                    ],
+                    "orders": [
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 1,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "90.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 2,
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "110.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                {
+                    "label": "same_levels_keep_grid_and_orders",
+                    "market_price": "95",
+                    "result": {
+                        "status": "ok",
+                        "market_price": "95",
+                        "orders_placed": 0,
+                        "fills": 0,
+                        "orders_rejected": 0,
+                        "errors": []
+                    },
+                    "bot": {
+                        "status": "running",
+                        "base_inventory": "2.0000000000000000",
+                        "quote_inventory": "1000.0000000000000000",
+                        "average_entry_price": "0.0000000000000000",
+                        "realized_pnl": "0.0000000000000000",
+                        "fees_paid": "0.0000000000000000",
+                        "last_error": null,
+                        "settings": {
+                            "recent_prices": [
+                                "95",
+                                "95"
+                            ],
+                            "mark_price": "95",
+                            "daily_loss_baseline": {
+                                "day": "2026-11-23",
+                                "realized": "0.0000000000000000"
+                            }
+                        }
+                    },
+                    "grids": [
+                        {
+                            "center_price": "100.0000000000000000",
+                            "spacing_type": "arithmetic",
+                            "spacing_value": "20.0000000000000000",
+                            "level_count": 2,
+                            "status": "active",
+                            "levels": [
+                                {
+                                    "sequence": 1,
+                                    "price": "90.0000000000000000",
+                                    "side": "buy",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 2,
+                                    "price": "110.0000000000000000",
+                                    "side": "sell",
+                                    "state": "open"
+                                }
+                            ]
+                        }
+                    ],
+                    "orders": [
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 1,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "90.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 2,
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "110.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                {
+                    "label": "buy_fill_at_89",
+                    "market_price": "89",
+                    "result": {
+                        "status": "ok",
+                        "market_price": "89",
+                        "orders_placed": 0,
+                        "fills": 1,
+                        "orders_rejected": 0,
+                        "errors": []
+                    },
+                    "bot": {
+                        "status": "running",
+                        "base_inventory": "3.0000000000000000",
+                        "quote_inventory": "909.9100000000000000",
+                        "average_entry_price": "30.0000000000000000",
+                        "realized_pnl": "-0.0900000000000000",
+                        "fees_paid": "0.0900000000000000",
+                        "last_error": null,
+                        "settings": {
+                            "recent_prices": [
+                                "95",
+                                "95",
+                                "89"
+                            ],
+                            "mark_price": "89",
+                            "daily_loss_baseline": {
+                                "day": "2026-11-23",
+                                "realized": "0.0000000000000000"
+                            }
+                        }
+                    },
+                    "grids": [
+                        {
+                            "center_price": "100.0000000000000000",
+                            "spacing_type": "arithmetic",
+                            "spacing_value": "20.0000000000000000",
+                            "level_count": 2,
+                            "status": "active",
+                            "levels": [
+                                {
+                                    "sequence": 1,
+                                    "price": "90.0000000000000000",
+                                    "side": "buy",
+                                    "state": "filled"
+                                },
+                                {
+                                    "sequence": 2,
+                                    "price": "110.0000000000000000",
+                                    "side": "sell",
+                                    "state": "open"
+                                }
+                            ]
+                        }
+                    ],
+                    "orders": [
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 1,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "90.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "1.0000000000000000",
+                            "status": "filled",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 2,
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "110.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                {
+                    "label": "sell_fill_at_111",
+                    "market_price": "111",
+                    "result": {
+                        "status": "ok",
+                        "market_price": "111",
+                        "orders_placed": 0,
+                        "fills": 1,
+                        "orders_rejected": 0,
+                        "errors": []
+                    },
+                    "bot": {
+                        "status": "running",
+                        "base_inventory": "2.0000000000000000",
+                        "quote_inventory": "1019.8000000000000000",
+                        "average_entry_price": "30.0000000000000000",
+                        "realized_pnl": "79.8000000000000000",
+                        "fees_paid": "0.2000000000000000",
+                        "last_error": null,
+                        "settings": {
+                            "recent_prices": [
+                                "95",
+                                "95",
+                                "89",
+                                "111"
+                            ],
+                            "mark_price": "111",
+                            "daily_loss_baseline": {
+                                "day": "2026-11-23",
+                                "realized": "0.0000000000000000"
+                            }
+                        }
+                    },
+                    "grids": [
+                        {
+                            "center_price": "100.0000000000000000",
+                            "spacing_type": "arithmetic",
+                            "spacing_value": "20.0000000000000000",
+                            "level_count": 2,
+                            "status": "active",
+                            "levels": [
+                                {
+                                    "sequence": 1,
+                                    "price": "90.0000000000000000",
+                                    "side": "buy",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 2,
+                                    "price": "110.0000000000000000",
+                                    "side": "sell",
+                                    "state": "filled"
+                                }
+                            ]
+                        }
+                    ],
+                    "orders": [
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 1,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "90.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "1.0000000000000000",
+                            "status": "filled",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 2,
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "110.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "1.0000000000000000",
+                            "status": "filled",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 1,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "90.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                }
+            ]
+        },
+        "trailing_grid_recenter": {
+            "steps": [
+                {
+                    "label": "initial_grid_at_100",
+                    "market_price": "100",
+                    "result": {
+                        "status": "ok",
+                        "market_price": "100",
+                        "orders_placed": 4,
+                        "fills": 0,
+                        "orders_rejected": 0,
+                        "errors": []
+                    },
+                    "bot": {
+                        "status": "running",
+                        "base_inventory": "2.0000000000000000",
+                        "quote_inventory": "1000.0000000000000000",
+                        "average_entry_price": "0.0000000000000000",
+                        "realized_pnl": "0.0000000000000000",
+                        "fees_paid": "0.0000000000000000",
+                        "last_error": null,
+                        "settings": {
+                            "recent_prices": [
+                                "100"
+                            ],
+                            "mark_price": "100",
+                            "daily_loss_baseline": {
+                                "day": "2026-11-23",
+                                "realized": "0.0000000000000000"
+                            }
+                        }
+                    },
+                    "grids": [
+                        {
+                            "center_price": "100.0000000000000000",
+                            "spacing_type": "arithmetic",
+                            "spacing_value": "10.0000000000000000",
+                            "level_count": 4,
+                            "status": "active",
+                            "levels": [
+                                {
+                                    "sequence": 1,
+                                    "price": "80.0000000000000000",
+                                    "side": "buy",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 2,
+                                    "price": "90.0000000000000000",
+                                    "side": "buy",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 3,
+                                    "price": "110.0000000000000000",
+                                    "side": "sell",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 4,
+                                    "price": "120.0000000000000000",
+                                    "side": "sell",
+                                    "state": "open"
+                                }
+                            ]
+                        }
+                    ],
+                    "orders": [
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 1,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "80.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 2,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "90.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 3,
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "110.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 4,
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "120.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                {
+                    "label": "recenter_at_111",
+                    "market_price": "111",
+                    "result": {
+                        "status": "ok",
+                        "market_price": "111",
+                        "orders_placed": 4,
+                        "fills": 0,
+                        "orders_rejected": 0,
+                        "errors": []
+                    },
+                    "bot": {
+                        "status": "running",
+                        "base_inventory": "2.0000000000000000",
+                        "quote_inventory": "1000.0000000000000000",
+                        "average_entry_price": "0.0000000000000000",
+                        "realized_pnl": "0.0000000000000000",
+                        "fees_paid": "0.0000000000000000",
+                        "last_error": null,
+                        "settings": {
+                            "recent_prices": [
+                                "100",
+                                "111"
+                            ],
+                            "mark_price": "111",
+                            "daily_loss_baseline": {
+                                "day": "2026-11-23",
+                                "realized": "0.0000000000000000"
+                            }
+                        }
+                    },
+                    "grids": [
+                        {
+                            "center_price": "100.0000000000000000",
+                            "spacing_type": "arithmetic",
+                            "spacing_value": "10.0000000000000000",
+                            "level_count": 4,
+                            "status": "stopped",
+                            "levels": [
+                                {
+                                    "sequence": 1,
+                                    "price": "80.0000000000000000",
+                                    "side": "buy",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 2,
+                                    "price": "90.0000000000000000",
+                                    "side": "buy",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 3,
+                                    "price": "110.0000000000000000",
+                                    "side": "sell",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 4,
+                                    "price": "120.0000000000000000",
+                                    "side": "sell",
+                                    "state": "open"
+                                }
+                            ]
+                        },
+                        {
+                            "center_price": "111.0000000000000000",
+                            "spacing_type": "arithmetic",
+                            "spacing_value": "10.0000000000000000",
+                            "level_count": 4,
+                            "status": "active",
+                            "levels": [
+                                {
+                                    "sequence": 1,
+                                    "price": "91.0000000000000000",
+                                    "side": "buy",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 2,
+                                    "price": "101.0000000000000000",
+                                    "side": "buy",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 3,
+                                    "price": "121.0000000000000000",
+                                    "side": "sell",
+                                    "state": "open"
+                                },
+                                {
+                                    "sequence": 4,
+                                    "price": "131.0000000000000000",
+                                    "side": "sell",
+                                    "state": "open"
+                                }
+                            ]
+                        }
+                    ],
+                    "orders": [
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 1,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "80.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "canceled",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 2,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "90.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "canceled",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 3,
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "110.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "canceled",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 1,
+                            "grid_level_sequence": 4,
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "120.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "canceled",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 2,
+                            "grid_level_sequence": 1,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "91.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 2,
+                            "grid_level_sequence": 2,
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "101.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 2,
+                            "grid_level_sequence": 3,
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "121.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        },
+                        {
+                            "grid": 2,
+                            "grid_level_sequence": 4,
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "131.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}

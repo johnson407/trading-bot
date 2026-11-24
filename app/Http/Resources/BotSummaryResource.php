@@ -22,6 +22,7 @@ class BotSummaryResource extends JsonResource
             'strategy_key' => $this->strategy_key,
             'mode' => $this->mode->value,
             'status' => $this->status->value,
+            'desired_status' => $this->desired_status?->value,
             'capital_allocation' => $this->capital_allocation,
             'fee_rate' => $this->fee_rate,
             'base_inventory' => $this->base_inventory,

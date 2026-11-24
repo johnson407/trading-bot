@@ -1,11 +1,14 @@
 <?php
 
 use App\Domain\Bot\Enums\BotStatus;
+use App\Domain\Order\Enums\OrderStatus;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\ActivityLog;
 use App\Models\Bot;
 use App\Models\EquitySnapshot;
+use App\Models\Order;
 use App\Models\User;
+use App\Services\Engine\EngineHeartbeat;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -243,4 +246,27 @@ it('supports a ninety-day range', function () {
             ->where('equityHistory.range_days', 30)
             ->has('equityHistory.points', 1)
             ->etc());
+});
+
+it('shows an expired engine heartbeat as a warning without mutating bots or orders', function () {
+    $heartbeat = app(EngineHeartbeat::class);
+    $heartbeat->available = false;
+    $heartbeat->lastSeenAt = '2026-11-22T11:55:00+00:00';
+
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->running()->create([
+        'desired_status' => BotStatus::Running,
+    ]);
+    $order = Order::factory()->for($bot)->create(['status' => OrderStatus::Open]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('engine.available', false)
+            ->where('engine.last_seen_at', '2026-11-22T11:55:00+00:00')
+            ->etc());
+
+    expect($bot->fresh()->status)->toBe(BotStatus::Running)
+        ->and($bot->fresh()->desired_status)->toBe(BotStatus::Running)
+        ->and($order->fresh()->status)->toBe(OrderStatus::Open);
 });

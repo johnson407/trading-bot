@@ -2,15 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\CancelBotOrder;
 use App\Actions\CreateBot;
 use App\Actions\PauseBot;
 use App\Actions\StartBot;
 use App\Actions\StopBot;
 use App\Domain\Activity\ActivityRecorder;
-use App\Domain\Bot\CancelBotOrders;
 use App\Domain\Bot\Enums\BotStatus;
 use App\Domain\Exchange\ValueObjects\MarketData;
-use App\Domain\Grid\Enums\GridStatus;
 use App\Domain\Grid\GridPlanEvaluator;
 use App\Domain\Grid\PresetResolver;
 use App\Domain\Grid\ValueObjects\GridPlanRequest;
@@ -28,13 +27,16 @@ use App\Http\Requests\UpdateBotRequest;
 use App\Http\Resources\BotSummaryResource;
 use App\Models\ActivityLog;
 use App\Models\Bot;
+use App\Models\Order;
 use App\Models\RiskEvent;
+use App\Services\Engine\CommandPublisher;
 use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -261,11 +263,14 @@ class BotController extends Controller
         UpdateBotRequest $request,
         Bot $bot,
         ActivityRecorder $activity,
-        CancelBotOrders $cancelOrders,
+        CommandPublisher $commands,
     ): RedirectResponse {
         $this->authorize('update', $bot);
 
-        DB::transaction(function () use ($request, $bot, $activity, $cancelOrders) {
+        $structuralChange = false;
+        $needsStrategyReset = false;
+
+        DB::transaction(function () use ($request, $bot, $activity, &$structuralChange, &$needsStrategyReset) {
             /** @var Bot $locked */
             $locked = Bot::query()->lockForUpdate()->findOrFail($bot->id);
 
@@ -289,29 +294,38 @@ class BotController extends Controller
 
             $configuration = $request->strategyConfiguration($locked);
             $structuralChange = $config->configuration !== $configuration;
+            $needsStrategyReset = $structuralChange || (bool) $locked->strategy_reset_pending;
 
             if ($structuralChange) {
-                // The strategies copy structural parameters into their state on
-                // initialization, so a changed configuration only takes effect
-                // after the state and the old grid are retired.
-                $cancelOrders->handle($locked);
-
-                $locked->grids()
-                    ->where('status', GridStatus::Active->value)
-                    ->update(['status' => GridStatus::Stopped->value]);
-
-                $config->state = null;
+                $locked->forceFill(['strategy_reset_pending' => true])->save();
             }
 
             $config->configuration = $configuration;
             $config->save();
 
-            $activity->record('bot.updated', "Bot {$locked->name} updated", $locked, $request->user(), [
+            $activity->recordUser('bot.updated', "Bot {$locked->name} updated", $locked, $request->user(), [
                 'strategy' => $locked->strategy_key,
                 'symbol' => $locked->symbol,
                 'strategy_reset' => $structuralChange,
             ]);
         });
+
+        if ($needsStrategyReset) {
+            try {
+                $commands->publish('bot.config', $request->user()->id, $bot->id, ['strategy_reset' => true]);
+            } catch (Throwable $exception) {
+                $bot->forceFill(['strategy_reset_pending' => true])->save();
+
+                Log::warning('bot.config command publish failed', [
+                    'bot_id' => $bot->id,
+                    'error_type' => $exception::class,
+                ]);
+
+                return redirect()
+                    ->route('bots.show', $bot)
+                    ->withErrors(['engine' => 'The bot was saved, but the engine could not be notified. Retry the update to reset the runtime strategy state.']);
+            }
+        }
 
         return redirect()->route('bots.show', $bot)->with('status', 'Bot updated.');
     }
@@ -385,6 +399,23 @@ class BotController extends Controller
             $stopBot->handle($bot);
 
             return back()->with('status', 'Bot stopped.');
+        } catch (Throwable $exception) {
+            return back()->withErrors(['action' => $exception->getMessage()]);
+        }
+    }
+
+    public function cancelOrder(Bot $bot, Order $order, CancelBotOrder $cancelOrder): RedirectResponse
+    {
+        $this->authorize('control', $bot);
+        abort_unless($order->bot_id === $bot->id, 404);
+
+        try {
+            $published = $cancelOrder->handle($bot, $order);
+
+            return back()->with(
+                'status',
+                $published ? 'Order cancellation queued.' : 'The order is already closed.',
+            );
         } catch (Throwable $exception) {
             return back()->withErrors(['action' => $exception->getMessage()]);
         }

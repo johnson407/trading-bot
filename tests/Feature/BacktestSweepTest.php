@@ -3,12 +3,12 @@
 use App\Actions\CreateBacktestSweep;
 use App\Domain\Backtest\Enums\BacktestStatus;
 use App\Domain\Backtest\Enums\Timeframe;
-use App\Jobs\RunBacktest;
 use App\Models\BacktestRun;
 use App\Models\BacktestSweep;
 use App\Models\Bot;
 use App\Models\StrategyConfig;
 use App\Models\User;
+use App\Services\Engine\CommandPublisher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
@@ -92,7 +92,9 @@ it('creates the cartesian product of sweep values as grouped runs', function () 
         ->and($run->config_snapshot['strategy']['configuration']['spacing_type'])->toBe('arithmetic')
         ->and($run->config_snapshot['bot']['name'])->toBe($bot->name);
 
-    Queue::assertPushed(RunBacktest::class, 8);
+    $published = app(CommandPublisher::class)->ofType('backtest.sweep');
+    expect($published)->toHaveCount(1)
+        ->and($published[0]['payload']['backtest_sweep_id'])->toBe($sweep->id);
 });
 
 it('rolls the sweep and all runs back when a run cannot be created', function () {
@@ -118,15 +120,15 @@ it('rolls the sweep and all runs back when a run cannot be created', function ()
     expect(BacktestSweep::query()->count())->toBe(0)
         ->and(BacktestRun::query()->count())->toBe(0);
 
-    Queue::assertNothingPushed();
+    expect(app(CommandPublisher::class)->ofType('backtest.sweep'))->toHaveCount(0);
 });
 
-it('marks runs failed when a dispatch fails and leaves the sweep terminal', function () {
+it('marks runs failed when a publish fails and leaves the sweep terminal', function () {
     $user = User::factory()->create();
     $bot = sweepBot($user);
     Log::spy();
 
-    config(['queue.default' => 'missing-sweep-queue']);
+    app(CommandPublisher::class)->fail = true;
 
     $sweep = createSweep($bot, [
         'center_prices' => ['50000', '51000'],
@@ -143,9 +145,9 @@ it('marks runs failed when a dispatch fails and leaves the sweep terminal', func
         ->and($runs->every(fn (BacktestRun $run) => $run->finished_at !== null))->toBeTrue();
 
     Log::shouldHaveReceived('error')
-        ->withArgs(fn (string $message, array $context): bool => $message === 'backtest.sweep_dispatch_failed'
+        ->withArgs(fn (string $message, array $context): bool => $message === 'backtest.sweep_publish_failed'
             && $context['backtest_sweep_id'] === $sweep->id)
-        ->twice();
+        ->once();
 
     $this->actingAs($user)
         ->get(route('backtest-sweeps.show', $sweep))

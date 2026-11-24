@@ -1,0 +1,3066 @@
+{
+    "metadata": {
+        "format": "php-golden-risk/1",
+        "clock": "2026-11-23T00:00:00+00:00",
+        "decimal_scale": 16,
+        "captured_from": "current PHP engine on branch hybrid-engine"
+    },
+    "live_mode_guard": {
+        "notes": [
+            "gate is config trading.live_enabled (TRADING_LIVE_ENABLED); the fixture never enables it outside these isolated cases",
+            "a live bot rejected by the gate stays live and idle; it is never converted to paper"
+        ],
+        "start_cases": [
+            {
+                "label": "paper_mode_gate_off_starts",
+                "gate": false,
+                "confirmation": null,
+                "quote_balance": "0",
+                "symbol": "BTC/USDT",
+                "error": null,
+                "bot": {
+                    "mode": "paper",
+                    "status": "running",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": []
+                },
+                "balance_calls": 0
+            },
+            {
+                "label": "live_gate_off_valid_confirmation_rejected_stays_idle",
+                "gate": false,
+                "confirmation": "Golden live_gate_off_valid_confirmation_rejected_stays_idle on binance",
+                "quote_balance": "1000",
+                "symbol": "BTC/USDT",
+                "error": {
+                    "exception": "LiveTradingDisabledException",
+                    "message": "Live trading is disabled by configuration; bot {bot_id} cannot start in live mode."
+                },
+                "bot": {
+                    "mode": "live",
+                    "status": "idle",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": []
+                },
+                "balance_calls": 0
+            },
+            {
+                "label": "live_gate_on_missing_confirmation_rejected",
+                "gate": true,
+                "confirmation": null,
+                "quote_balance": "1000",
+                "symbol": "BTC/USDT",
+                "error": {
+                    "exception": "LiveConfirmationRequiredException",
+                    "message": "Live mode requires confirmation text matching the bot name \"Golden live_gate_on_missing_confirmation_rejected\" for bot {bot_id}."
+                },
+                "bot": {
+                    "mode": "live",
+                    "status": "idle",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": []
+                },
+                "balance_calls": 0
+            },
+            {
+                "label": "live_gate_on_wrong_confirmation_rejected",
+                "gate": true,
+                "confirmation": "not the phrase",
+                "quote_balance": "1000",
+                "symbol": "BTC/USDT",
+                "error": {
+                    "exception": "LiveConfirmationRequiredException",
+                    "message": "Live mode requires confirmation text matching the bot name \"Golden live_gate_on_wrong_confirmation_rejected\" for bot {bot_id}."
+                },
+                "bot": {
+                    "mode": "live",
+                    "status": "idle",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": []
+                },
+                "balance_calls": 0
+            },
+            {
+                "label": "live_gate_on_exact_quote_balance_starts",
+                "gate": true,
+                "confirmation": "Golden live_gate_on_exact_quote_balance_starts on binance",
+                "quote_balance": "1000",
+                "symbol": "BTC/USDT",
+                "error": null,
+                "bot": {
+                    "mode": "live",
+                    "status": "running",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": []
+                },
+                "balance_calls": 1
+            },
+            {
+                "label": "live_gate_on_insufficient_quote_balance_rejected",
+                "gate": true,
+                "confirmation": "Golden live_gate_on_insufficient_quote_balance_rejected on binance",
+                "quote_balance": "999.99",
+                "symbol": "BTC/USDT",
+                "error": {
+                    "exception": "InsufficientLiveBalanceException",
+                    "message": "Insufficient USDT balance for live bot {bot_id}: required 1000, available 999.99."
+                },
+                "bot": {
+                    "mode": "live",
+                    "status": "idle",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": []
+                },
+                "balance_calls": 1
+            },
+            {
+                "label": "live_gate_on_missing_quote_asset_rejected",
+                "gate": true,
+                "confirmation": "Golden live_gate_on_missing_quote_asset_rejected on binance",
+                "quote_balance": "1000",
+                "symbol": "BTC/EUR",
+                "error": {
+                    "exception": "InsufficientLiveBalanceException",
+                    "message": "Insufficient EUR balance for live bot {bot_id}: required 1000, available 0."
+                },
+                "bot": {
+                    "mode": "live",
+                    "status": "idle",
+                    "exchange": "binance",
+                    "symbol": "BTC/EUR",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": []
+                },
+                "balance_calls": 1
+            },
+            {
+                "label": "paper_mode_gate_on_ignores_balance",
+                "gate": true,
+                "confirmation": null,
+                "quote_balance": "0",
+                "symbol": "BTC/USDT",
+                "error": null,
+                "bot": {
+                    "mode": "paper",
+                    "status": "running",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": []
+                },
+                "balance_calls": 0
+            }
+        ],
+        "tick_gate_closed": {
+            "label": "live_tick_gate_closed_pauses_instead_of_falling_back_to_paper",
+            "result": {
+                "status": "skipped",
+                "market_price": null,
+                "orders_placed": 0,
+                "fills": 0,
+                "orders_rejected": 0,
+                "errors": []
+            },
+            "bot": {
+                "mode": "live",
+                "status": "paused",
+                "exchange": "binance",
+                "symbol": "BTC/USDT",
+                "capital_allocation": "1000.0000000000000000",
+                "base_inventory": "0.0000000000000000",
+                "quote_inventory": "0.0000000000000000",
+                "average_entry_price": "0.0000000000000000",
+                "realized_pnl": "0.0000000000000000",
+                "fees_paid": "0.0000000000000000",
+                "consecutive_failures": 0,
+                "stop_loss_percent": null,
+                "take_profit_percent": null,
+                "range_low": null,
+                "range_high": null,
+                "last_error": "Live trading is disabled by configuration; bot {bot_id} cannot start in live mode.",
+                "settings": []
+            },
+            "orders": [
+                {
+                    "client_order_id": "live-tick-open-buy",
+                    "side": "buy",
+                    "type": "limit",
+                    "price": "90.0000000000000000",
+                    "quantity": "0.5000000000000000",
+                    "filled_quantity": "0.0000000000000000",
+                    "status": "canceled",
+                    "mode": "live"
+                },
+                {
+                    "client_order_id": "live-tick-open-sell",
+                    "side": "sell",
+                    "type": "limit",
+                    "price": "110.0000000000000000",
+                    "quantity": "0.5000000000000000",
+                    "filled_quantity": "0.0000000000000000",
+                    "status": "canceled",
+                    "mode": "live"
+                }
+            ],
+            "risk_events": [
+                {
+                    "type": "risk.live_trading_disabled",
+                    "severity": "critical",
+                    "message": "Live trading is disabled by configuration; bot {bot_id} cannot start in live mode.",
+                    "context": []
+                }
+            ],
+            "activity": [
+                {
+                    "type": "bot.live_trading_disabled",
+                    "severity": "error",
+                    "message": "Live trading was disabled; the bot was paused.",
+                    "context": []
+                },
+                {
+                    "type": "order.canceled",
+                    "severity": "info",
+                    "message": "Order live-tick-open-buy canceled",
+                    "context": {
+                        "client_order_id": "live-tick-open-buy",
+                        "exchange_order_id": null,
+                        "price": "90.0000000000000000",
+                        "quantity": "0.5000000000000000"
+                    }
+                },
+                {
+                    "type": "order.canceled",
+                    "severity": "info",
+                    "message": "Order live-tick-open-sell canceled",
+                    "context": {
+                        "client_order_id": "live-tick-open-sell",
+                        "exchange_order_id": null,
+                        "price": "110.0000000000000000",
+                        "quantity": "0.5000000000000000"
+                    }
+                }
+            ],
+            "exchange_calls": {
+                "market": 0,
+                "place": 0,
+                "balances": 0,
+                "cancel": 0
+            }
+        }
+    },
+    "risk_guard": {
+        "notes": [
+            "limits are created as bot-scope rows with explicit values so the fixture does not depend on env defaults",
+            "insufficient inventory is a block without a risk event; other rejections record an event"
+        ],
+        "cases": [
+            {
+                "label": "allow_buy_inside_position_limit",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": []
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "5"
+                },
+                "decision": {
+                    "allowed": true,
+                    "type": null,
+                    "message": null,
+                    "context": [],
+                    "severity": "warning"
+                },
+                "risk_events": []
+            },
+            {
+                "label": "allow_buy_at_exact_position_boundary",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": []
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "10"
+                },
+                "decision": {
+                    "allowed": true,
+                    "type": null,
+                    "message": null,
+                    "context": [],
+                    "severity": "warning"
+                },
+                "risk_events": []
+            },
+            {
+                "label": "reject_buy_above_position_boundary",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": []
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "10.0000000000000001"
+                },
+                "decision": {
+                    "allowed": false,
+                    "type": "risk.position_limit",
+                    "message": "Order would exceed the maximum position notional.",
+                    "context": {
+                        "projected_notional": "1000.00000000000001",
+                        "max_position_notional": "1000",
+                        "side": "buy",
+                        "order_notional": "1000.00000000000001"
+                    },
+                    "severity": "critical"
+                },
+                "risk_events": [
+                    {
+                        "type": "risk.position_limit",
+                        "severity": "critical",
+                        "message": "Order would exceed the maximum position notional.",
+                        "context": {
+                            "projected_notional": "1000.00000000000001",
+                            "max_position_notional": "1000",
+                            "side": "buy",
+                            "order_notional": "1000.00000000000001"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "reject_zero_price",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": []
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "0",
+                    "quantity": "1"
+                },
+                "decision": {
+                    "allowed": false,
+                    "type": "risk.invalid_order",
+                    "message": "Order price and quantity must be positive.",
+                    "context": {
+                        "price": "0",
+                        "quantity": "1"
+                    },
+                    "severity": "critical"
+                },
+                "risk_events": [
+                    {
+                        "type": "risk.invalid_order",
+                        "severity": "critical",
+                        "message": "Order price and quantity must be positive.",
+                        "context": {
+                            "price": "0",
+                            "quantity": "1"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "reject_negative_quantity",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": []
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "-1"
+                },
+                "decision": {
+                    "allowed": false,
+                    "type": "risk.invalid_order",
+                    "message": "Order price and quantity must be positive.",
+                    "context": {
+                        "price": "100",
+                        "quantity": "-1"
+                    },
+                    "severity": "critical"
+                },
+                "risk_events": [
+                    {
+                        "type": "risk.invalid_order",
+                        "severity": "critical",
+                        "message": "Order price and quantity must be positive.",
+                        "context": {
+                            "price": "100",
+                            "quantity": "-1"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "reject_sell_above_uncommitted_inventory_without_event",
+                "bot": {
+                    "base_inventory": "1.0000000000000000",
+                    "open_orders": []
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "sell",
+                    "price": "100",
+                    "quantity": "1.5"
+                },
+                "decision": {
+                    "allowed": false,
+                    "type": "risk.insufficient_inventory",
+                    "message": "Sell quantity exceeds the uncommitted base inventory held by the bot.",
+                    "context": {
+                        "base_inventory": "1",
+                        "reserved_sell_quantity": "0",
+                        "available": "1",
+                        "quantity": "1.5"
+                    },
+                    "severity": "warning"
+                },
+                "risk_events": []
+            },
+            {
+                "label": "allow_sell_fully_covered_by_inventory",
+                "bot": {
+                    "base_inventory": "2.0000000000000000",
+                    "open_orders": []
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "sell",
+                    "price": "100",
+                    "quantity": "1"
+                },
+                "decision": {
+                    "allowed": true,
+                    "type": null,
+                    "message": null,
+                    "context": [],
+                    "severity": "warning"
+                },
+                "risk_events": []
+            },
+            {
+                "label": "allow_sell_covered_after_reserved_sells",
+                "bot": {
+                    "base_inventory": "2.0000000000000000",
+                    "open_orders": [
+                        {
+                            "client_order_id": "reserved-sell",
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "100.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "sell",
+                    "price": "100",
+                    "quantity": "1"
+                },
+                "decision": {
+                    "allowed": true,
+                    "type": null,
+                    "message": null,
+                    "context": [],
+                    "severity": "warning"
+                },
+                "risk_events": []
+            },
+            {
+                "label": "reject_sell_above_available_after_reserved_sells",
+                "bot": {
+                    "base_inventory": "2.0000000000000000",
+                    "open_orders": [
+                        {
+                            "client_order_id": "reserved-sell",
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "100.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "sell",
+                    "price": "100",
+                    "quantity": "1.0000000000000001"
+                },
+                "decision": {
+                    "allowed": false,
+                    "type": "risk.insufficient_inventory",
+                    "message": "Sell quantity exceeds the uncommitted base inventory held by the bot.",
+                    "context": {
+                        "base_inventory": "2",
+                        "reserved_sell_quantity": "1",
+                        "available": "1",
+                        "quantity": "1.0000000000000001"
+                    },
+                    "severity": "warning"
+                },
+                "risk_events": []
+            },
+            {
+                "label": "allow_position_at_boundary_with_open_buy_notional",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": [
+                        {
+                            "client_order_id": "open-buy",
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "100.0000000000000000",
+                            "quantity": "2.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                "limits": {
+                    "max_position_notional": "250",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "0.5"
+                },
+                "decision": {
+                    "allowed": true,
+                    "type": null,
+                    "message": null,
+                    "context": [],
+                    "severity": "warning"
+                },
+                "risk_events": []
+            },
+            {
+                "label": "reject_position_with_open_buy_notional",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": [
+                        {
+                            "client_order_id": "open-buy",
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "100.0000000000000000",
+                            "quantity": "2.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                "limits": {
+                    "max_position_notional": "250",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "0.6"
+                },
+                "decision": {
+                    "allowed": false,
+                    "type": "risk.position_limit",
+                    "message": "Order would exceed the maximum position notional.",
+                    "context": {
+                        "projected_notional": "260",
+                        "max_position_notional": "250",
+                        "side": "buy",
+                        "order_notional": "60"
+                    },
+                    "severity": "critical"
+                },
+                "risk_events": [
+                    {
+                        "type": "risk.position_limit",
+                        "severity": "critical",
+                        "message": "Order would exceed the maximum position notional.",
+                        "context": {
+                            "projected_notional": "260",
+                            "max_position_notional": "250",
+                            "side": "buy",
+                            "order_notional": "60"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "allow_at_open_order_boundary",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": [
+                        {
+                            "client_order_id": "open-1",
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "100.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 2,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "1"
+                },
+                "decision": {
+                    "allowed": true,
+                    "type": null,
+                    "message": null,
+                    "context": [],
+                    "severity": "warning"
+                },
+                "risk_events": []
+            },
+            {
+                "label": "reject_above_open_order_limit",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": [
+                        {
+                            "client_order_id": "open-1",
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "100.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 1,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "1"
+                },
+                "decision": {
+                    "allowed": false,
+                    "type": "risk.open_order_limit",
+                    "message": "Order would exceed the maximum number of open orders.",
+                    "context": {
+                        "open_orders": 1,
+                        "max_open_orders": 1
+                    },
+                    "severity": "warning"
+                },
+                "risk_events": [
+                    {
+                        "type": "risk.open_order_limit",
+                        "severity": "warning",
+                        "message": "Order would exceed the maximum number of open orders.",
+                        "context": {
+                            "open_orders": 1,
+                            "max_open_orders": 1
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "allow_when_only_terminal_orders_exist",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": [
+                        {
+                            "client_order_id": "filled-1",
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "100.0000000000000000",
+                            "quantity": "1.0000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "filled",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 1,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "1"
+                },
+                "decision": {
+                    "allowed": true,
+                    "type": null,
+                    "message": null,
+                    "context": [],
+                    "severity": "warning"
+                },
+                "risk_events": []
+            },
+            {
+                "label": "open_buy_counts_remaining_quantity_only",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": [
+                        {
+                            "client_order_id": "open-partial",
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "100.0000000000000000",
+                            "quantity": "2.0000000000000000",
+                            "filled_quantity": "1.0000000000000000",
+                            "status": "open",
+                            "mode": "paper"
+                        }
+                    ]
+                },
+                "limits": {
+                    "max_position_notional": "150",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "0.6"
+                },
+                "decision": {
+                    "allowed": false,
+                    "type": "risk.position_limit",
+                    "message": "Order would exceed the maximum position notional.",
+                    "context": {
+                        "projected_notional": "160",
+                        "max_position_notional": "150",
+                        "side": "buy",
+                        "order_notional": "60"
+                    },
+                    "severity": "critical"
+                },
+                "risk_events": [
+                    {
+                        "type": "risk.position_limit",
+                        "severity": "critical",
+                        "message": "Order would exceed the maximum position notional.",
+                        "context": {
+                            "projected_notional": "160",
+                            "max_position_notional": "150",
+                            "side": "buy",
+                            "order_notional": "60"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "allow_without_limit_row_uses_config_defaults",
+                "bot": {
+                    "base_inventory": "0.0000000000000000",
+                    "open_orders": []
+                },
+                "limits": {
+                    "max_position_notional": "1000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100"
+                },
+                "order": {
+                    "side": "buy",
+                    "price": "100",
+                    "quantity": "5"
+                },
+                "decision": {
+                    "allowed": true,
+                    "type": null,
+                    "message": null,
+                    "context": [],
+                    "severity": "warning"
+                },
+                "risk_events": []
+            }
+        ]
+    },
+    "daily_loss_monitor": {
+        "notes": [
+            "bots without a bot-scope override store the per-bot baseline in bot.settings.daily_loss_baseline",
+            "the user-wide baseline stays on the user-scope risk_limits row (day_start / day_start_realized_pnl)",
+            "pausing never resumes automatically"
+        ],
+        "cases": [
+            {
+                "label": "per_bot_realized_loss_pauses_and_cancels_orders",
+                "baseline_after_first_evaluate": {
+                    "day": "2026-11-23",
+                    "realized": "0.0000000000000000"
+                },
+                "user_limit_after": {
+                    "scope": "user",
+                    "max_position_notional": "1000.0000000000000000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "15.0000000000000000",
+                    "day_start": "2026-11-23T00:00:00+00:00",
+                    "day_start_realized_pnl": "0.0000000000000000"
+                },
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "-20.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Daily loss limit breached (bot).",
+                    "settings": {
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "orders": [
+                    {
+                        "client_order_id": "daily-open-buy",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "95.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "canceled",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [
+                    {
+                        "type": "risk.daily_loss_limit",
+                        "severity": "critical",
+                        "message": "Daily loss limit breached; bot paused.",
+                        "context": {
+                            "scope": "bot",
+                            "loss": "20",
+                            "limit": "15"
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "order.canceled",
+                        "severity": "info",
+                        "message": "Order daily-open-buy canceled",
+                        "context": {
+                            "client_order_id": "daily-open-buy",
+                            "exchange_order_id": null,
+                            "price": "95.0000000000000000",
+                            "quantity": "0.5000000000000000"
+                        }
+                    },
+                    {
+                        "type": "bot.daily_loss_paused",
+                        "severity": "error",
+                        "message": "Bot paused after breaching the daily loss limit.",
+                        "context": {
+                            "scope": "bot",
+                            "loss": "20",
+                            "limit": "15"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "loss_below_limit_keeps_running_without_events",
+                "bot": {
+                    "mode": "paper",
+                    "status": "running",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "-9.9900000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": {
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "risk_events": [],
+                "activity": []
+            },
+            {
+                "label": "account_wide_loss_pauses_every_user_bot",
+                "first": {
+                    "bot": {
+                        "mode": "paper",
+                        "status": "paused",
+                        "exchange": "binance",
+                        "symbol": "BTC/USDT",
+                        "capital_allocation": "1000.0000000000000000",
+                        "base_inventory": "1.0000000000000000",
+                        "quote_inventory": "1000.0000000000000000",
+                        "average_entry_price": "100.0000000000000000",
+                        "realized_pnl": "-20.0000000000000000",
+                        "fees_paid": "0.0000000000000000",
+                        "consecutive_failures": 0,
+                        "stop_loss_percent": null,
+                        "take_profit_percent": null,
+                        "range_low": null,
+                        "range_high": null,
+                        "last_error": "Daily loss limit breached (user).",
+                        "settings": {
+                            "daily_loss_baseline": {
+                                "day": "2026-11-23",
+                                "realized": "0.0000000000000000"
+                            }
+                        }
+                    },
+                    "risk_events": [
+                        {
+                            "type": "risk.daily_loss_limit",
+                            "severity": "critical",
+                            "message": "Daily loss limit breached; bot paused.",
+                            "context": {
+                                "scope": "user",
+                                "loss": "30",
+                                "limit": "25"
+                            }
+                        }
+                    ],
+                    "activity": [
+                        {
+                            "type": "order.canceled",
+                            "severity": "info",
+                            "message": "Order account-first-open canceled",
+                            "context": {
+                                "client_order_id": "account-first-open",
+                                "exchange_order_id": null,
+                                "price": "95.0000000000000000",
+                                "quantity": "0.5000000000000000"
+                            }
+                        },
+                        {
+                            "type": "bot.daily_loss_paused",
+                            "severity": "error",
+                            "message": "Bot paused after breaching the daily loss limit.",
+                            "context": {
+                                "scope": "user",
+                                "loss": "30",
+                                "limit": "25"
+                            }
+                        }
+                    ]
+                },
+                "second": {
+                    "bot": {
+                        "mode": "paper",
+                        "status": "paused",
+                        "exchange": "binance",
+                        "symbol": "BTC/USDT",
+                        "capital_allocation": "1000.0000000000000000",
+                        "base_inventory": "1.0000000000000000",
+                        "quote_inventory": "1000.0000000000000000",
+                        "average_entry_price": "100.0000000000000000",
+                        "realized_pnl": "-10.0000000000000000",
+                        "fees_paid": "0.0000000000000000",
+                        "consecutive_failures": 0,
+                        "stop_loss_percent": null,
+                        "take_profit_percent": null,
+                        "range_low": null,
+                        "range_high": null,
+                        "last_error": "Daily loss limit breached (user).",
+                        "settings": {
+                            "daily_loss_baseline": {
+                                "day": "2026-11-23",
+                                "realized": "0.0000000000000000"
+                            }
+                        }
+                    },
+                    "risk_events": [
+                        {
+                            "type": "risk.daily_loss_limit",
+                            "severity": "critical",
+                            "message": "Daily loss limit breached; bot paused.",
+                            "context": {
+                                "scope": "user",
+                                "loss": "30",
+                                "limit": "25"
+                            }
+                        }
+                    ],
+                    "activity": [
+                        {
+                            "type": "order.canceled",
+                            "severity": "info",
+                            "message": "Order account-second-open canceled",
+                            "context": {
+                                "client_order_id": "account-second-open",
+                                "exchange_order_id": null,
+                                "price": "105.0000000000000000",
+                                "quantity": "0.5000000000000000"
+                            }
+                        },
+                        {
+                            "type": "bot.daily_loss_paused",
+                            "severity": "error",
+                            "message": "Bot paused after breaching the daily loss limit.",
+                            "context": {
+                                "scope": "user",
+                                "loss": "30",
+                                "limit": "25"
+                            }
+                        }
+                    ]
+                },
+                "orders": {
+                    "first": [
+                        {
+                            "client_order_id": "account-first-open",
+                            "side": "buy",
+                            "type": "limit",
+                            "price": "95.0000000000000000",
+                            "quantity": "0.5000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "canceled",
+                            "mode": "paper"
+                        }
+                    ],
+                    "second": [
+                        {
+                            "client_order_id": "account-second-open",
+                            "side": "sell",
+                            "type": "limit",
+                            "price": "105.0000000000000000",
+                            "quantity": "0.5000000000000000",
+                            "filled_quantity": "0.0000000000000000",
+                            "status": "canceled",
+                            "mode": "paper"
+                        }
+                    ]
+                }
+            },
+            {
+                "label": "bot_baselines_are_isolated_from_sibling_bots",
+                "first_baseline_after_first_evaluate": {
+                    "day": "2026-11-23",
+                    "realized": "0.0000000000000000"
+                },
+                "second_baseline_after_first_evaluate": {
+                    "day": "2026-11-23",
+                    "realized": "0.0000000000000000"
+                },
+                "first": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "-20.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Daily loss limit breached (bot).",
+                    "settings": {
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "second": {
+                    "mode": "paper",
+                    "status": "running",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "-10.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": {
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "risk_events": {
+                    "first": [
+                        {
+                            "type": "risk.daily_loss_limit",
+                            "severity": "critical",
+                            "message": "Daily loss limit breached; bot paused.",
+                            "context": {
+                                "scope": "bot",
+                                "loss": "20",
+                                "limit": "15"
+                            }
+                        }
+                    ],
+                    "second": []
+                }
+            },
+            {
+                "label": "bot_without_override_uses_engine_owned_settings_baseline",
+                "baseline_after_first_evaluate": {
+                    "day": "2026-11-23",
+                    "realized": "0.0000000000000000"
+                },
+                "baseline_after_second_evaluate": {
+                    "day": "2026-11-23",
+                    "realized": "0.0000000000000000"
+                },
+                "user_row_after_first_evaluate": {
+                    "scope": "user",
+                    "max_position_notional": "1000.0000000000000000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100.0000000000000000",
+                    "day_start": "2026-11-23T00:00:00+00:00",
+                    "day_start_realized_pnl": "0.0000000000000000"
+                },
+                "user_row_after_second_evaluate": {
+                    "scope": "user",
+                    "max_position_notional": "1000.0000000000000000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100.0000000000000000",
+                    "day_start": "2026-11-23T00:00:00+00:00",
+                    "day_start_realized_pnl": "0.0000000000000000"
+                },
+                "bot": {
+                    "mode": "paper",
+                    "status": "running",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "-5.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": {
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "risk_events": []
+            },
+            {
+                "label": "explicit_bot_override_resets_daily_baseline_then_breaches",
+                "row_after_reset": {
+                    "scope": "bot",
+                    "max_position_notional": "1000.0000000000000000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "10.0000000000000000",
+                    "day_start": "2026-11-23T00:00:00+00:00",
+                    "day_start_realized_pnl": "-20.0000000000000000"
+                },
+                "row_after_breach": {
+                    "scope": "bot",
+                    "max_position_notional": "1000.0000000000000000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "10.0000000000000000",
+                    "day_start": "2026-11-23T00:00:00+00:00",
+                    "day_start_realized_pnl": "-20.0000000000000000"
+                },
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "-35.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Daily loss limit breached (bot).",
+                    "settings": []
+                },
+                "risk_events": [
+                    {
+                        "type": "risk.daily_loss_limit",
+                        "severity": "critical",
+                        "message": "Daily loss limit breached; bot paused.",
+                        "context": {
+                            "scope": "bot",
+                            "loss": "15",
+                            "limit": "10"
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "bot.daily_loss_paused",
+                        "severity": "error",
+                        "message": "Bot paused after breaching the daily loss limit.",
+                        "context": {
+                            "scope": "bot",
+                            "loss": "15",
+                            "limit": "10"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "unrealized_loss_at_mark_pauses_bot",
+                "mark": "80",
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Daily loss limit breached (bot).",
+                    "settings": {
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "risk_events": [
+                    {
+                        "type": "risk.daily_loss_limit",
+                        "severity": "critical",
+                        "message": "Daily loss limit breached; bot paused.",
+                        "context": {
+                            "scope": "bot",
+                            "loss": "20",
+                            "limit": "15"
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "bot.daily_loss_paused",
+                        "severity": "error",
+                        "message": "Bot paused after breaching the daily loss limit.",
+                        "context": {
+                            "scope": "bot",
+                            "loss": "20",
+                            "limit": "15"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "account_wide_loss_uses_each_bots_own_mark",
+                "first_mark": "80",
+                "second_mark": "70",
+                "statuses_after_first_mark": [
+                    "running",
+                    "running"
+                ],
+                "btc": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Daily loss limit breached (bot).",
+                    "settings": {
+                        "mark_price": "80",
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "eth": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "ETH/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Daily loss limit breached (user).",
+                    "settings": {
+                        "mark_price": "100"
+                    }
+                },
+                "risk_events": {
+                    "btc": [
+                        {
+                            "type": "risk.daily_loss_limit",
+                            "severity": "critical",
+                            "message": "Daily loss limit breached; bot paused.",
+                            "context": {
+                                "scope": "bot",
+                                "loss": "30",
+                                "limit": "25"
+                            }
+                        }
+                    ],
+                    "eth": [
+                        {
+                            "type": "risk.daily_loss_limit",
+                            "severity": "critical",
+                            "message": "Daily loss limit breached; bot paused.",
+                            "context": {
+                                "scope": "user",
+                                "loss": "30",
+                                "limit": "25"
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "label": "paused_bot_is_not_resumed_after_loss_recovers",
+                "after_pause": {
+                    "status": "paused",
+                    "risk_events": 1
+                },
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Daily loss limit breached (bot).",
+                    "settings": {
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        }
+                    }
+                },
+                "risk_events": [
+                    {
+                        "type": "risk.daily_loss_limit",
+                        "severity": "critical",
+                        "message": "Daily loss limit breached; bot paused.",
+                        "context": {
+                            "scope": "bot",
+                            "loss": "20",
+                            "limit": "15"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "tick_pauses_before_placing_orders",
+                "result": {
+                    "status": "skipped",
+                    "market_price": null,
+                    "orders_placed": 0,
+                    "fills": 0,
+                    "orders_rejected": 0,
+                    "errors": []
+                },
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Daily loss limit breached (bot).",
+                    "settings": {
+                        "daily_loss_baseline": {
+                            "day": "2026-11-23",
+                            "realized": "0.0000000000000000"
+                        },
+                        "recent_prices": [
+                            "80"
+                        ],
+                        "mark_price": "80"
+                    }
+                },
+                "orders": [],
+                "risk_events": [
+                    {
+                        "type": "risk.daily_loss_limit",
+                        "severity": "critical",
+                        "message": "Daily loss limit breached; bot paused.",
+                        "context": {
+                            "scope": "bot",
+                            "loss": "20",
+                            "limit": "15"
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "bot.daily_loss_paused",
+                        "severity": "error",
+                        "message": "Bot paused after breaching the daily loss limit.",
+                        "context": {
+                            "scope": "bot",
+                            "loss": "20",
+                            "limit": "15"
+                        }
+                    }
+                ]
+            }
+        ]
+    },
+    "exit_guard": {
+        "notes": [
+            "precedence is stop-loss, then take-profit, then range",
+            "the guard pauses and cancels open orders; it never places a market flatten order and never resumes automatically"
+        ],
+        "rule_cases": [
+            {
+                "label": "stop_loss_triggers_at_threshold",
+                "rules": {
+                    "stop_loss_percent": "10",
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "90",
+                    "average_entry_price": "100",
+                    "base_inventory": "1"
+                },
+                "signal": {
+                    "rule": "stop_loss",
+                    "label": "Stop-loss",
+                    "risk_event_type": "risk.stop_loss_triggered",
+                    "mark_price": "90",
+                    "threshold": "90",
+                    "average_entry_price": "100",
+                    "base_inventory": "1",
+                    "bound": null,
+                    "context": {
+                        "rule": "stop_loss",
+                        "observed_price": "90",
+                        "threshold": "90",
+                        "average_entry_price": "100",
+                        "base_inventory": "1"
+                    }
+                }
+            },
+            {
+                "label": "stop_loss_triggers_below_threshold",
+                "rules": {
+                    "stop_loss_percent": "10",
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "89",
+                    "average_entry_price": "100",
+                    "base_inventory": "1"
+                },
+                "signal": {
+                    "rule": "stop_loss",
+                    "label": "Stop-loss",
+                    "risk_event_type": "risk.stop_loss_triggered",
+                    "mark_price": "89",
+                    "threshold": "90",
+                    "average_entry_price": "100",
+                    "base_inventory": "1",
+                    "bound": null,
+                    "context": {
+                        "rule": "stop_loss",
+                        "observed_price": "89",
+                        "threshold": "90",
+                        "average_entry_price": "100",
+                        "base_inventory": "1"
+                    }
+                }
+            },
+            {
+                "label": "stop_loss_does_not_trigger_above_threshold",
+                "rules": {
+                    "stop_loss_percent": "10",
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "91",
+                    "average_entry_price": "100",
+                    "base_inventory": "1"
+                },
+                "signal": null
+            },
+            {
+                "label": "take_profit_triggers_at_threshold",
+                "rules": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": "9",
+                    "range_low": null,
+                    "range_high": null
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "109",
+                    "average_entry_price": "100",
+                    "base_inventory": "1"
+                },
+                "signal": {
+                    "rule": "take_profit",
+                    "label": "Take-profit",
+                    "risk_event_type": "risk.take_profit_triggered",
+                    "mark_price": "109",
+                    "threshold": "109",
+                    "average_entry_price": "100",
+                    "base_inventory": "1",
+                    "bound": null,
+                    "context": {
+                        "rule": "take_profit",
+                        "observed_price": "109",
+                        "threshold": "109",
+                        "average_entry_price": "100",
+                        "base_inventory": "1"
+                    }
+                }
+            },
+            {
+                "label": "take_profit_does_not_trigger_below_threshold",
+                "rules": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": "9",
+                    "range_low": null,
+                    "range_high": null
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "108.99",
+                    "average_entry_price": "100",
+                    "base_inventory": "1"
+                },
+                "signal": null
+            },
+            {
+                "label": "range_low_triggers_at_bound",
+                "rules": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": "90",
+                    "range_high": null
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "90",
+                    "average_entry_price": "0",
+                    "base_inventory": "0"
+                },
+                "signal": {
+                    "rule": "range_exit",
+                    "label": "Range exit",
+                    "risk_event_type": "risk.range_exit_triggered",
+                    "mark_price": "90",
+                    "threshold": "90",
+                    "average_entry_price": "0",
+                    "base_inventory": "0",
+                    "bound": "low",
+                    "context": {
+                        "rule": "range_exit",
+                        "observed_price": "90",
+                        "threshold": "90",
+                        "average_entry_price": "0",
+                        "base_inventory": "0",
+                        "bound": "low"
+                    }
+                }
+            },
+            {
+                "label": "range_high_triggers_at_bound",
+                "rules": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": "110"
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "110",
+                    "average_entry_price": "0",
+                    "base_inventory": "0"
+                },
+                "signal": {
+                    "rule": "range_exit",
+                    "label": "Range exit",
+                    "risk_event_type": "risk.range_exit_triggered",
+                    "mark_price": "110",
+                    "threshold": "110",
+                    "average_entry_price": "0",
+                    "base_inventory": "0",
+                    "bound": "high",
+                    "context": {
+                        "rule": "range_exit",
+                        "observed_price": "110",
+                        "threshold": "110",
+                        "average_entry_price": "0",
+                        "base_inventory": "0",
+                        "bound": "high"
+                    }
+                }
+            },
+            {
+                "label": "stop_loss_precedes_range_exit",
+                "rules": {
+                    "stop_loss_percent": "10",
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": "100"
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "89",
+                    "average_entry_price": "100",
+                    "base_inventory": "1"
+                },
+                "signal": {
+                    "rule": "stop_loss",
+                    "label": "Stop-loss",
+                    "risk_event_type": "risk.stop_loss_triggered",
+                    "mark_price": "89",
+                    "threshold": "90",
+                    "average_entry_price": "100",
+                    "base_inventory": "1",
+                    "bound": null,
+                    "context": {
+                        "rule": "stop_loss",
+                        "observed_price": "89",
+                        "threshold": "90",
+                        "average_entry_price": "100",
+                        "base_inventory": "1"
+                    }
+                }
+            },
+            {
+                "label": "take_profit_precedes_range_exit",
+                "rules": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": "9",
+                    "range_low": null,
+                    "range_high": "105"
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "109",
+                    "average_entry_price": "100",
+                    "base_inventory": "1"
+                },
+                "signal": {
+                    "rule": "take_profit",
+                    "label": "Take-profit",
+                    "risk_event_type": "risk.take_profit_triggered",
+                    "mark_price": "109",
+                    "threshold": "109",
+                    "average_entry_price": "100",
+                    "base_inventory": "1",
+                    "bound": null,
+                    "context": {
+                        "rule": "take_profit",
+                        "observed_price": "109",
+                        "threshold": "109",
+                        "average_entry_price": "100",
+                        "base_inventory": "1"
+                    }
+                }
+            },
+            {
+                "label": "zero_inventory_ignores_stop_loss_and_take_profit",
+                "rules": {
+                    "stop_loss_percent": "10",
+                    "take_profit_percent": "9",
+                    "range_low": null,
+                    "range_high": null
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "50",
+                    "average_entry_price": "100",
+                    "base_inventory": "0"
+                },
+                "signal": null
+            },
+            {
+                "label": "zero_average_ignores_stop_loss",
+                "rules": {
+                    "stop_loss_percent": "10",
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "50",
+                    "average_entry_price": "0",
+                    "base_inventory": "1"
+                },
+                "signal": null
+            },
+            {
+                "label": "empty_rules_never_trigger",
+                "rules": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "empty": true,
+                "inputs": {
+                    "mark_price": "50",
+                    "average_entry_price": "100",
+                    "base_inventory": "1"
+                },
+                "signal": null
+            },
+            {
+                "label": "non_positive_range_bound_does_not_trigger",
+                "rules": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": "0",
+                    "range_high": null
+                },
+                "empty": false,
+                "inputs": {
+                    "mark_price": "1",
+                    "average_entry_price": "0",
+                    "base_inventory": "0"
+                },
+                "signal": null
+            },
+            {
+                "label": "blank_rule_values_are_normalized",
+                "rules": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "empty": true,
+                "inputs": {
+                    "mark_price": "100",
+                    "average_entry_price": "100",
+                    "base_inventory": "1"
+                },
+                "signal": null
+            }
+        ],
+        "monitor_cases": [
+            {
+                "label": "stop_loss_pauses_cancels_and_keeps_inventory",
+                "mark": "89",
+                "signal": {
+                    "rule": "stop_loss",
+                    "label": "Stop-loss",
+                    "risk_event_type": "risk.stop_loss_triggered",
+                    "mark_price": "89",
+                    "threshold": "90",
+                    "average_entry_price": "100",
+                    "base_inventory": "1",
+                    "bound": null,
+                    "context": {
+                        "rule": "stop_loss",
+                        "observed_price": "89",
+                        "threshold": "90",
+                        "average_entry_price": "100",
+                        "base_inventory": "1"
+                    }
+                },
+                "second_signal": null,
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "1000.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": "10.0000",
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Stop-loss triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                    "settings": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "exit-stop-buy",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "95.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "canceled",
+                        "mode": "paper"
+                    },
+                    {
+                        "client_order_id": "exit-stop-sell",
+                        "side": "sell",
+                        "type": "limit",
+                        "price": "105.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "canceled",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [
+                    {
+                        "type": "risk.stop_loss_triggered",
+                        "severity": "critical",
+                        "message": "Stop-loss triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "stop_loss",
+                            "observed_price": "89",
+                            "threshold": "90",
+                            "average_entry_price": "100",
+                            "base_inventory": "1"
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "order.canceled",
+                        "severity": "info",
+                        "message": "Order exit-stop-buy canceled",
+                        "context": {
+                            "client_order_id": "exit-stop-buy",
+                            "exchange_order_id": null,
+                            "price": "95.0000000000000000",
+                            "quantity": "0.5000000000000000"
+                        }
+                    },
+                    {
+                        "type": "order.canceled",
+                        "severity": "info",
+                        "message": "Order exit-stop-sell canceled",
+                        "context": {
+                            "client_order_id": "exit-stop-sell",
+                            "exchange_order_id": null,
+                            "price": "105.0000000000000000",
+                            "quantity": "0.5000000000000000"
+                        }
+                    },
+                    {
+                        "type": "bot.exit_guard_triggered",
+                        "severity": "error",
+                        "message": "Stop-loss triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "stop_loss",
+                            "observed_price": "89",
+                            "threshold": "90",
+                            "average_entry_price": "100",
+                            "base_inventory": "1"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "take_profit_pauses_and_cancels",
+                "mark": "110",
+                "signal": {
+                    "rule": "take_profit",
+                    "label": "Take-profit",
+                    "risk_event_type": "risk.take_profit_triggered",
+                    "mark_price": "110",
+                    "threshold": "109",
+                    "average_entry_price": "100",
+                    "base_inventory": "1",
+                    "bound": null,
+                    "context": {
+                        "rule": "take_profit",
+                        "observed_price": "110",
+                        "threshold": "109",
+                        "average_entry_price": "100",
+                        "base_inventory": "1"
+                    }
+                },
+                "second_signal": null,
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": "9.0000",
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Take-profit triggered at 110 (threshold 109). Bot paused and open orders canceled.",
+                    "settings": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "exit-tp-buy",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "100.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "canceled",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [
+                    {
+                        "type": "risk.take_profit_triggered",
+                        "severity": "warning",
+                        "message": "Take-profit triggered at 110 (threshold 109). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "take_profit",
+                            "observed_price": "110",
+                            "threshold": "109",
+                            "average_entry_price": "100",
+                            "base_inventory": "1"
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "order.canceled",
+                        "severity": "info",
+                        "message": "Order exit-tp-buy canceled",
+                        "context": {
+                            "client_order_id": "exit-tp-buy",
+                            "exchange_order_id": null,
+                            "price": "100.0000000000000000",
+                            "quantity": "0.5000000000000000"
+                        }
+                    },
+                    {
+                        "type": "bot.exit_guard_triggered",
+                        "severity": "warning",
+                        "message": "Take-profit triggered at 110 (threshold 109). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "take_profit",
+                            "observed_price": "110",
+                            "threshold": "109",
+                            "average_entry_price": "100",
+                            "base_inventory": "1"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "range_low_exit_without_inventory",
+                "mark": "89",
+                "signal": {
+                    "rule": "range_exit",
+                    "label": "Range exit",
+                    "risk_event_type": "risk.range_exit_triggered",
+                    "mark_price": "89",
+                    "threshold": "90",
+                    "average_entry_price": "0",
+                    "base_inventory": "0",
+                    "bound": "low",
+                    "context": {
+                        "rule": "range_exit",
+                        "observed_price": "89",
+                        "threshold": "90",
+                        "average_entry_price": "0",
+                        "base_inventory": "0",
+                        "bound": "low"
+                    }
+                },
+                "second_signal": null,
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": "90.00000000",
+                    "range_high": null,
+                    "last_error": "Range exit triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                    "settings": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "exit-range-buy",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "89.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "canceled",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [
+                    {
+                        "type": "risk.range_exit_triggered",
+                        "severity": "warning",
+                        "message": "Range exit triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "range_exit",
+                            "observed_price": "89",
+                            "threshold": "90",
+                            "average_entry_price": "0",
+                            "base_inventory": "0",
+                            "bound": "low"
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "order.canceled",
+                        "severity": "info",
+                        "message": "Order exit-range-buy canceled",
+                        "context": {
+                            "client_order_id": "exit-range-buy",
+                            "exchange_order_id": null,
+                            "price": "89.0000000000000000",
+                            "quantity": "0.5000000000000000"
+                        }
+                    },
+                    {
+                        "type": "bot.exit_guard_triggered",
+                        "severity": "warning",
+                        "message": "Range exit triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "range_exit",
+                            "observed_price": "89",
+                            "threshold": "90",
+                            "average_entry_price": "0",
+                            "base_inventory": "0",
+                            "bound": "low"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "range_high_exit",
+                "mark": "121",
+                "signal": {
+                    "rule": "range_exit",
+                    "label": "Range exit",
+                    "risk_event_type": "risk.range_exit_triggered",
+                    "mark_price": "121",
+                    "threshold": "120",
+                    "average_entry_price": "0",
+                    "base_inventory": "0",
+                    "bound": "high",
+                    "context": {
+                        "rule": "range_exit",
+                        "observed_price": "121",
+                        "threshold": "120",
+                        "average_entry_price": "0",
+                        "base_inventory": "0",
+                        "bound": "high"
+                    }
+                },
+                "second_signal": null,
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": "120.00000000",
+                    "last_error": "Range exit triggered at 121 (threshold 120). Bot paused and open orders canceled.",
+                    "settings": []
+                },
+                "orders": [],
+                "risk_events": [
+                    {
+                        "type": "risk.range_exit_triggered",
+                        "severity": "warning",
+                        "message": "Range exit triggered at 121 (threshold 120). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "range_exit",
+                            "observed_price": "121",
+                            "threshold": "120",
+                            "average_entry_price": "0",
+                            "base_inventory": "0",
+                            "bound": "high"
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "bot.exit_guard_triggered",
+                        "severity": "warning",
+                        "message": "Range exit triggered at 121 (threshold 120). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "range_exit",
+                            "observed_price": "121",
+                            "threshold": "120",
+                            "average_entry_price": "0",
+                            "base_inventory": "0",
+                            "bound": "high"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "inside_rules_does_not_trigger",
+                "mark": "100",
+                "signal": null,
+                "second_signal": null,
+                "bot": {
+                    "mode": "paper",
+                    "status": "running",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": "10.0000",
+                    "take_profit_percent": "9.0000",
+                    "range_low": "80.00000000",
+                    "range_high": "120.00000000",
+                    "last_error": null,
+                    "settings": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "exit-inside-buy",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "95.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [],
+                "activity": []
+            },
+            {
+                "label": "stop_loss_precedence_over_range",
+                "mark": "89",
+                "signal": {
+                    "rule": "stop_loss",
+                    "label": "Stop-loss",
+                    "risk_event_type": "risk.stop_loss_triggered",
+                    "mark_price": "89",
+                    "threshold": "90",
+                    "average_entry_price": "100",
+                    "base_inventory": "1",
+                    "bound": null,
+                    "context": {
+                        "rule": "stop_loss",
+                        "observed_price": "89",
+                        "threshold": "90",
+                        "average_entry_price": "100",
+                        "base_inventory": "1"
+                    }
+                },
+                "second_signal": null,
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": "10.0000",
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": "95.00000000",
+                    "last_error": "Stop-loss triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                    "settings": []
+                },
+                "orders": [],
+                "risk_events": [
+                    {
+                        "type": "risk.stop_loss_triggered",
+                        "severity": "critical",
+                        "message": "Stop-loss triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "stop_loss",
+                            "observed_price": "89",
+                            "threshold": "90",
+                            "average_entry_price": "100",
+                            "base_inventory": "1"
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "bot.exit_guard_triggered",
+                        "severity": "error",
+                        "message": "Stop-loss triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "stop_loss",
+                            "observed_price": "89",
+                            "threshold": "90",
+                            "average_entry_price": "100",
+                            "base_inventory": "1"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "paused_bot_not_evaluated",
+                "mark": "89",
+                "signal": null,
+                "second_signal": null,
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": "10.0000",
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": null,
+                    "settings": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "exit-already-paused",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "95.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [],
+                "activity": []
+            },
+            {
+                "label": "cancel_failure_keeps_order_open_and_reports_exit_cancel_failed",
+                "mark": "89",
+                "signal": {
+                    "rule": "stop_loss",
+                    "label": "Stop-loss",
+                    "risk_event_type": "risk.stop_loss_triggered",
+                    "mark_price": "89",
+                    "threshold": "90",
+                    "average_entry_price": "100",
+                    "base_inventory": "1",
+                    "bound": null,
+                    "context": {
+                        "rule": "stop_loss",
+                        "observed_price": "89",
+                        "threshold": "90",
+                        "average_entry_price": "100",
+                        "base_inventory": "1"
+                    }
+                },
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "1.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "100.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": "10.0000",
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "Stop-loss triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                    "settings": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "exit-cancel-fail-first",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "95.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    },
+                    {
+                        "client_order_id": "exit-cancel-fail-second",
+                        "side": "sell",
+                        "type": "limit",
+                        "price": "105.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "canceled",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [
+                    {
+                        "type": "risk.exit_cancel_failed",
+                        "severity": "critical",
+                        "message": "Protective exit could not cancel an order.",
+                        "context": {
+                            "client_order_id": "exit-cancel-fail-first",
+                            "error": "exchange refused cancellation"
+                        }
+                    },
+                    {
+                        "type": "risk.stop_loss_triggered",
+                        "severity": "critical",
+                        "message": "Stop-loss triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "stop_loss",
+                            "observed_price": "89",
+                            "threshold": "90",
+                            "average_entry_price": "100",
+                            "base_inventory": "1"
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "order.canceled",
+                        "severity": "info",
+                        "message": "Order exit-cancel-fail-second canceled",
+                        "context": {
+                            "client_order_id": "exit-cancel-fail-second",
+                            "exchange_order_id": null,
+                            "price": "105.0000000000000000",
+                            "quantity": "0.5000000000000000"
+                        }
+                    },
+                    {
+                        "type": "bot.exit_guard_triggered",
+                        "severity": "error",
+                        "message": "Stop-loss triggered at 89 (threshold 90). Bot paused and open orders canceled.",
+                        "context": {
+                            "rule": "stop_loss",
+                            "observed_price": "89",
+                            "threshold": "90",
+                            "average_entry_price": "100",
+                            "base_inventory": "1"
+                        }
+                    }
+                ]
+            }
+        ]
+    },
+    "consecutive_failure_tracker": {
+        "notes": [
+            "the default threshold comes from trading.failure.max_consecutive; cases pass an explicit threshold to stay deterministic",
+            "a stopped bot keeps its stopped status but still cancels orders and records events at the threshold"
+        ],
+        "cases": [
+            {
+                "label": "threshold_2_first_failure_keeps_running",
+                "threshold": 2,
+                "sequence": [
+                    1,
+                    "running"
+                ],
+                "bot": {
+                    "mode": "paper",
+                    "status": "running",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 1,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "first failure",
+                    "settings": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "failure-open",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "100.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [],
+                "activity": []
+            },
+            {
+                "label": "threshold_2_second_failure_pauses_and_cancels",
+                "threshold": 2,
+                "sequence": [
+                    1,
+                    "running",
+                    2,
+                    "paused"
+                ],
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 2,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "second failure",
+                    "settings": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "failure-open",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "100.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "canceled",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [
+                    {
+                        "type": "exchange.failure_threshold",
+                        "severity": "critical",
+                        "message": "Consecutive exchange failures reached the pause threshold.",
+                        "context": {
+                            "operation": "tick",
+                            "consecutive_failures": 2,
+                            "cancellation_failures": 0
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "order.canceled",
+                        "severity": "info",
+                        "message": "Order failure-open canceled",
+                        "context": {
+                            "client_order_id": "failure-open",
+                            "exchange_order_id": null,
+                            "price": "100.0000000000000000",
+                            "quantity": "0.5000000000000000"
+                        }
+                    },
+                    {
+                        "type": "exchange.failure_threshold",
+                        "severity": "error",
+                        "message": "Bot paused after consecutive exchange failures.",
+                        "context": {
+                            "operation": "tick",
+                            "consecutive_failures": 2,
+                            "cancellation_failures": 0,
+                            "error": "second failure"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "stopped_bot_stays_stopped_but_cancels",
+                "threshold": 1,
+                "sequence": [
+                    1,
+                    "stopped"
+                ],
+                "bot": {
+                    "mode": "paper",
+                    "status": "stopped",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 1,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "stopped failure",
+                    "settings": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "failure-open",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "100.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "canceled",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [
+                    {
+                        "type": "exchange.failure_threshold",
+                        "severity": "critical",
+                        "message": "Consecutive exchange failures reached the pause threshold.",
+                        "context": {
+                            "operation": "tick",
+                            "consecutive_failures": 1,
+                            "cancellation_failures": 0
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "order.canceled",
+                        "severity": "info",
+                        "message": "Order failure-open canceled",
+                        "context": {
+                            "client_order_id": "failure-open",
+                            "exchange_order_id": null,
+                            "price": "100.0000000000000000",
+                            "quantity": "0.5000000000000000"
+                        }
+                    },
+                    {
+                        "type": "exchange.failure_threshold",
+                        "severity": "error",
+                        "message": "Bot paused after consecutive exchange failures.",
+                        "context": {
+                            "operation": "tick",
+                            "consecutive_failures": 1,
+                            "cancellation_failures": 0,
+                            "error": "stopped failure"
+                        }
+                    }
+                ]
+            },
+            {
+                "label": "success_resets_failure_counter",
+                "threshold": 3,
+                "bot": {
+                    "mode": "paper",
+                    "status": "running",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 0,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "second failure",
+                    "settings": []
+                },
+                "risk_events": [],
+                "activity": []
+            },
+            {
+                "label": "cancellation_failures_are_reported_at_threshold",
+                "threshold": 1,
+                "failures": 1,
+                "bot": {
+                    "mode": "paper",
+                    "status": "paused",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "capital_allocation": "1000.0000000000000000",
+                    "base_inventory": "0.0000000000000000",
+                    "quote_inventory": "0.0000000000000000",
+                    "average_entry_price": "0.0000000000000000",
+                    "realized_pnl": "0.0000000000000000",
+                    "fees_paid": "0.0000000000000000",
+                    "consecutive_failures": 1,
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null,
+                    "last_error": "boom",
+                    "settings": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "failure-cancel-first",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "100.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    },
+                    {
+                        "client_order_id": "failure-cancel-second",
+                        "side": "sell",
+                        "type": "limit",
+                        "price": "110.0000000000000000",
+                        "quantity": "0.5000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    }
+                ],
+                "risk_events": [
+                    {
+                        "type": "exchange.failure_threshold",
+                        "severity": "critical",
+                        "message": "Consecutive exchange failures reached the pause threshold.",
+                        "context": {
+                            "operation": "place",
+                            "consecutive_failures": 1,
+                            "cancellation_failures": 2
+                        }
+                    },
+                    {
+                        "type": "risk.failure_cancel_failed",
+                        "severity": "critical",
+                        "message": "Orders could not be canceled after consecutive exchange failures.",
+                        "context": {
+                            "operation": "place",
+                            "consecutive_failures": 1,
+                            "cancellation_failures": 2
+                        }
+                    }
+                ],
+                "activity": [
+                    {
+                        "type": "exchange.failure_threshold",
+                        "severity": "error",
+                        "message": "Bot paused after consecutive exchange failures.",
+                        "context": {
+                            "operation": "place",
+                            "consecutive_failures": 1,
+                            "cancellation_failures": 2,
+                            "error": "boom"
+                        }
+                    }
+                ]
+            }
+        ]
+    },
+    "exchange_allowlist": {
+        "notes": [
+            "current PHP validates the allowlist only in StoreBotRequest (creation), not in StartBot or order placement",
+            "the direct_insert cases document that current-PHP gap; task 5.6 must make the Go engine block a non-allowed exchange at start and placement"
+        ],
+        "creation_validation": [
+            {
+                "label": "allowlisted_exchange_passes",
+                "allowlist": [
+                    "binance",
+                    "kraken"
+                ],
+                "default_exchange": "binance",
+                "submitted": "binance",
+                "prepared": "binance",
+                "valid": true,
+                "errors": []
+            },
+            {
+                "label": "second_allowlisted_exchange_passes",
+                "allowlist": [
+                    "binance",
+                    "kraken"
+                ],
+                "default_exchange": "binance",
+                "submitted": "kraken",
+                "prepared": "kraken",
+                "valid": true,
+                "errors": []
+            },
+            {
+                "label": "non_allowlisted_exchange_rejected",
+                "allowlist": [
+                    "binance"
+                ],
+                "default_exchange": "binance",
+                "submitted": "kucoin",
+                "prepared": "kucoin",
+                "valid": false,
+                "errors": [
+                    "The selected exchange is invalid."
+                ]
+            },
+            {
+                "label": "case_sensitive_exchange_rejected",
+                "allowlist": [
+                    "binance"
+                ],
+                "default_exchange": "binance",
+                "submitted": "Binance",
+                "prepared": "Binance",
+                "valid": false,
+                "errors": [
+                    "The selected exchange is invalid."
+                ]
+            },
+            {
+                "label": "blank_uses_allowlisted_default",
+                "allowlist": [
+                    "binance",
+                    "kraken"
+                ],
+                "default_exchange": "kraken",
+                "submitted": "",
+                "prepared": "kraken",
+                "valid": true,
+                "errors": []
+            },
+            {
+                "label": "blank_default_outside_allowlist_rejected",
+                "allowlist": [
+                    "binance"
+                ],
+                "default_exchange": "kucoin",
+                "submitted": "",
+                "prepared": "kucoin",
+                "valid": false,
+                "errors": [
+                    "The selected exchange is invalid."
+                ]
+            }
+        ],
+        "direct_insert_current_php": [
+            {
+                "label": "direct_insert_non_allowlisted_paper_bot_starts_current_php_gap",
+                "exchange": "kucoin",
+                "allowlist": [
+                    "binance"
+                ],
+                "status_after": "running"
+            },
+            {
+                "label": "direct_insert_non_allowlisted_paper_bot_places_current_php_gap",
+                "exchange": "kucoin",
+                "allowlist": [
+                    "binance"
+                ],
+                "result": {
+                    "status": "ok",
+                    "market_price": "100",
+                    "orders_placed": 2,
+                    "fills": 0,
+                    "orders_rejected": 0,
+                    "errors": []
+                },
+                "orders": [
+                    {
+                        "client_order_id": "bot-{bot_id}-grid-{grid_id}-level-1-cycle-1",
+                        "side": "buy",
+                        "type": "limit",
+                        "price": "90.0000000000000000",
+                        "quantity": "0.1000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    },
+                    {
+                        "client_order_id": "bot-{bot_id}-grid-{grid_id}-level-2-cycle-1",
+                        "side": "sell",
+                        "type": "limit",
+                        "price": "110.0000000000000000",
+                        "quantity": "0.1000000000000000",
+                        "filled_quantity": "0.0000000000000000",
+                        "status": "open",
+                        "mode": "paper"
+                    }
+                ]
+            }
+        ]
+    }
+}

@@ -8,10 +8,10 @@ use App\Domain\Support\Decimal;
 use App\Http\Requests\StoreBacktestRequest;
 use App\Http\Resources\BacktestFillResource;
 use App\Http\Resources\BacktestRunResource;
-use App\Jobs\RunBacktest;
 use App\Models\BacktestRun;
 use App\Services\Backtest\BacktestPeriodValidator;
 use App\Services\Backtest\BacktestSnapshotBuilder;
+use App\Services\Engine\CommandPublisher;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -22,6 +22,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class BacktestController extends Controller
 {
@@ -86,6 +87,7 @@ class BacktestController extends Controller
         StoreBacktestRequest $request,
         BacktestSnapshotBuilder $snapshots,
         BacktestPeriodValidator $periods,
+        CommandPublisher $commands,
     ): RedirectResponse {
         $bot = $request->user()->bots()->find($request->integer('bot_id'));
 
@@ -107,7 +109,7 @@ class BacktestController extends Controller
 
         try {
             $snapshot = $snapshots->build($bot, $timeframe, $startAt, $endAt);
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             throw ValidationException::withMessages([
                 'bot_id' => $exception->getMessage(),
             ]);
@@ -130,7 +132,21 @@ class BacktestController extends Controller
             'progress' => 0,
         ]);
 
-        RunBacktest::dispatch($run->id);
+        try {
+            $commands->publish('backtest.run', $request->user()->id, $bot->id, [
+                'backtest_run_id' => $run->id,
+            ]);
+        } catch (Throwable $exception) {
+            $run->forceFill([
+                'status' => BacktestStatus::Failed,
+                'error' => 'The backtest job could not be queued.',
+                'finished_at' => now('UTC'),
+            ])->save();
+
+            return redirect()
+                ->route('backtests.show', $run)
+                ->withErrors(['backtest' => 'The backtest job could not be queued.']);
+        }
 
         return redirect()
             ->route('backtests.show', $run)

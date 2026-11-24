@@ -1,15 +1,14 @@
 <?php
 
-use App\Domain\Bot\Enums\BotStatus;
-use App\Domain\Risk\DailyLossMonitor;
 use App\Domain\Risk\Enums\RiskSeverity;
 use App\Domain\Risk\RiskEventRecorder;
 use App\Jobs\SendAlertEmail;
 use App\Mail\AlertMail;
 use App\Models\Alert;
 use App\Models\Bot;
-use App\Models\RiskLimit;
 use App\Models\User;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -68,7 +67,7 @@ it('does nothing when the alert no longer exists', function () {
 it('logs a transport failure without changing the alert', function () {
     $alert = Alert::factory()->create();
 
-    $mailer = Mockery::mock(\Illuminate\Contracts\Mail\Mailer::class);
+    $mailer = Mockery::mock(Mailer::class);
     $mailer->shouldReceive('to')->once()->andThrow(new RuntimeException('smtp down'));
     Mail::swap($mailer);
     Log::spy();
@@ -129,41 +128,6 @@ it('does not queue an email when the producing transaction rolls back', function
     expect(Alert::query()->count())->toBe(0);
 });
 
-it('keeps the pause and alert when the mail transport fails', function () {
-    config(['queue.default' => 'sync']);
-
-    $user = User::factory()->create();
-    $bot = Bot::factory()->for($user)->running()->create(['realized_pnl' => '-150']);
-
-    RiskLimit::factory()->forBot($bot)->create([
-        'daily_loss_limit' => '100',
-        'day_start' => now('UTC')->startOfDay(),
-        'day_start_realized_pnl' => '0',
-    ]);
-
-    RiskLimit::factory()->create([
-        'scope' => 'user',
-        'user_id' => $user->id,
-        'bot_id' => null,
-        'daily_loss_limit' => '1000',
-        'day_start' => now('UTC')->startOfDay(),
-        'day_start_realized_pnl' => '0',
-    ]);
-
-    $mailer = Mockery::mock(\Illuminate\Contracts\Mail\Mailer::class);
-    $mailer->shouldReceive('to')->andThrow(new RuntimeException('smtp down'));
-    Mail::swap($mailer);
-    Log::spy();
-
-    app(DailyLossMonitor::class)->evaluate($bot);
-
-    expect($bot->fresh()->status)->toBe(BotStatus::Paused)
-        ->and(Alert::query()->count())->toBe(1)
-        ->and(Alert::query()->first()->read_at)->toBeNull();
-
-    Log::shouldHaveReceived('error')->atLeast()->once();
-});
-
 it('keeps warning alerts in the inbox without queueing email', function () {
     Queue::fake();
 
@@ -185,9 +149,9 @@ it('keeps warning alerts in the inbox without queueing email', function () {
 it('keeps the alert when queue dispatch fails', function () {
     Log::spy();
 
-    $dispatcher = Mockery::mock(\Illuminate\Contracts\Bus\Dispatcher::class);
+    $dispatcher = Mockery::mock(Dispatcher::class);
     $dispatcher->shouldReceive('dispatch')->once()->andThrow(new RuntimeException('queue down'));
-    app()->instance(\Illuminate\Contracts\Bus\Dispatcher::class, $dispatcher);
+    app()->instance(Dispatcher::class, $dispatcher);
 
     $bot = Bot::factory()->create();
 
