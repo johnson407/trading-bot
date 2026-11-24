@@ -32,7 +32,7 @@ func TestRESTClientFetchesPublicTickerArray(t *testing.T) {
 
 	client := &marketdata.RESTClient{BaseURL: server.URL + "/", HTTPClient: server.Client()}
 
-	tickers, err := client.Fetch(context.Background(), []string{"btcusdt", "ETHUSDT", "btcusdt"})
+	tickers, err := client.Fetch(context.Background(), []string{"btcusdt", "ETHUSDT", "btcusdt", "BTC/USDT"})
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}

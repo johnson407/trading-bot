@@ -605,7 +605,7 @@ func normalizeSymbols(symbols []string) []string {
 }
 
 func normalizeSymbol(symbol string) string {
-	return strings.ToUpper(strings.TrimSpace(symbol))
+	return strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(symbol)), "/", "")
 }
 
 func containsSymbol(symbols []string, symbol string) bool {
