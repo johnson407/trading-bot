@@ -29,8 +29,14 @@ const (
 	StreamCommandsDLQ = "engine.commands.dlq"
 	StreamEventsDLQ   = "engine.events.dlq"
 
-	CommandsGroup = "engine"
-	EventsGroup   = "laravel"
+	// Backtests use a dedicated command stream so long replays cannot block
+	// control commands (stop, kill switch) on the serial command consumer.
+	StreamBacktestCommands    = "engine.backtests"
+	StreamBacktestCommandsDLQ = "engine.backtests.dlq"
+
+	CommandsGroup         = "engine"
+	BacktestCommandsGroup = "engine-backtests"
+	EventsGroup           = "laravel"
 )
 
 // EnvelopeField is the Redis Stream field that holds the JSON envelope.
@@ -49,6 +55,7 @@ const (
 	CommandBotStart      = "bot.start"
 	CommandBotPause      = "bot.pause"
 	CommandBotStop       = "bot.stop"
+	CommandBotConfig     = "bot.config"
 	CommandOrderCancel   = "order.cancel"
 	CommandKillSwitch    = "kill_switch"
 	CommandBacktestRun   = "backtest.run"
@@ -76,6 +83,7 @@ var commandTypes = map[string]struct{}{
 	CommandBotStart:      {},
 	CommandBotPause:      {},
 	CommandBotStop:       {},
+	CommandBotConfig:     {},
 	CommandOrderCancel:   {},
 	CommandKillSwitch:    {},
 	CommandBacktestRun:   {},

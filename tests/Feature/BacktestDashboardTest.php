@@ -1,14 +1,13 @@
 <?php
 
 use App\Domain\Backtest\Enums\BacktestStatus;
-use App\Domain\Backtest\ValueObjects\BacktestConfiguration;
-use App\Jobs\RunBacktest;
 use App\Models\BacktestFill;
 use App\Models\BacktestRun;
 use App\Models\Bot;
 use App\Models\RiskLimit;
 use App\Models\StrategyConfig;
 use App\Models\User;
+use App\Services\Engine\CommandPublisher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
@@ -44,7 +43,9 @@ it('creates and queues a backtest from an owned bot', function () {
         ->and($run->config_snapshot['bot']['name'])->toBe($bot->name)
         ->and($run->config_snapshot['strategy']['configuration'])->toHaveKey('center_price');
 
-    Queue::assertPushed(RunBacktest::class);
+    $published = app(CommandPublisher::class)->ofType('backtest.run');
+    expect($published)->toHaveCount(1)
+        ->and($published[0]['payload']['backtest_run_id'])->toBe($run->id);
     expect(RiskLimit::query()->count())->toBe(0);
 });
 
@@ -62,7 +63,7 @@ it('does not let another user backtest a bot they do not own', function () {
     ])->assertForbidden();
 
     expect(BacktestRun::query()->count())->toBe(0);
-    Queue::assertNothingPushed();
+    expect(app(CommandPublisher::class)->ofType('backtest.run'))->toHaveCount(0);
 });
 
 it('rejects an invalid date range and a future end date', function () {
@@ -123,15 +124,13 @@ it('snapshots the bot exit rules and hydrates them for the replay', function () 
     ])->assertRedirect();
 
     $run = BacktestRun::query()->firstOrFail();
-    $configuration = BacktestConfiguration::fromSnapshot($run->config_snapshot);
 
     expect($run->config_snapshot['exit'])->toBe([
         'stop_loss_percent' => '4',
         'take_profit_percent' => '9',
         'range_low' => '80000',
         'range_high' => '120000',
-    ])
-        ->and($configuration->exitRules->toArray())->toBe($run->config_snapshot['exit']);
+    ]);
 });
 
 it('keeps exit rules in the snapshot after the bot rules change', function () {

@@ -1,0 +1,1820 @@
+{
+    "metadata": {
+        "format": "php-golden-backtest/1",
+        "clock": "2026-11-23T00:00:00+00:00",
+        "decimal_scale": 16,
+        "fee_rate": "0.001",
+        "captured_from": "current PHP engine on branch hybrid-engine",
+        "notes": [
+            "duration_ms is normalized to 0; hrtime is not deterministic",
+            "equity_curve and fills are the committed production values",
+            "final_state is the strategy state after the last processed candle"
+        ]
+    },
+    "cases": [
+        {
+            "label": "first_candle_no_fill",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "range_end",
+                    "final_equity": "10000",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "unrealized_pnl": "0",
+                    "fees": "0",
+                    "return_percent": "0",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "final_base_inventory": "0",
+                    "final_quote_inventory": "10000",
+                    "final_price": "100",
+                    "fill_count": 0,
+                    "buy_count": 0,
+                    "sell_count": 0,
+                    "candles_processed": 1,
+                    "duration_ms": 0
+                },
+                "fills": [],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "last_fill_side": null,
+                        "fill_count": 0
+                    }
+                }
+            }
+        },
+        {
+            "label": "later_candle_single_fill",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "90",
+                    "high": "90",
+                    "low": "90",
+                    "close": "90",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "110",
+                    "high": "110",
+                    "low": "110",
+                    "close": "110",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "range_end",
+                    "final_equity": "10019.8",
+                    "net_pnl": "19.8",
+                    "realized_pnl": "19.8",
+                    "unrealized_pnl": "0",
+                    "fees": "0.2",
+                    "return_percent": "0.198",
+                    "max_drawdown": "0.09",
+                    "max_drawdown_percent": "0.0009",
+                    "final_base_inventory": "0",
+                    "final_quote_inventory": "10019.8",
+                    "final_price": "110",
+                    "fill_count": 2,
+                    "buy_count": 1,
+                    "sell_count": 1,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [
+                    {
+                        "sequence": 1,
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "client_order_id": "backtest-2",
+                        "grid_level_sequence": 2
+                    },
+                    {
+                        "sequence": 2,
+                        "side": "sell",
+                        "price": "110",
+                        "quantity": "1",
+                        "fee": "0.11",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:45:00+00:00",
+                        "client_order_id": "backtest-3",
+                        "grid_level_sequence": 3
+                    }
+                ],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "9999.91"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "10019.8"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "last_fill_side": "sell",
+                        "fill_count": 2,
+                        "last_fill_price": "110",
+                        "disarmed_levels": {
+                            "110": {
+                                "side": "sell",
+                                "pair": "90"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "label": "same_candle_sequential_fills",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 3
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "70",
+                    "high": "70",
+                    "low": "70",
+                    "close": "70",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "130",
+                    "high": "130",
+                    "low": "130",
+                    "close": "130",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "range_end",
+                    "final_equity": "10129.65",
+                    "net_pnl": "129.65",
+                    "realized_pnl": "29.65",
+                    "unrealized_pnl": "100",
+                    "fees": "0.35",
+                    "return_percent": "1.2965",
+                    "max_drawdown": "30.24",
+                    "max_drawdown_percent": "0.3024",
+                    "final_base_inventory": "2",
+                    "final_quote_inventory": "9869.65",
+                    "final_price": "130",
+                    "fill_count": 4,
+                    "buy_count": 3,
+                    "sell_count": 1,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [
+                    {
+                        "sequence": 1,
+                        "side": "buy",
+                        "price": "70",
+                        "quantity": "1",
+                        "fee": "0.07",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "client_order_id": "backtest-1",
+                        "grid_level_sequence": 1
+                    },
+                    {
+                        "sequence": 2,
+                        "side": "buy",
+                        "price": "80",
+                        "quantity": "1",
+                        "fee": "0.08",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "client_order_id": "backtest-2",
+                        "grid_level_sequence": 2
+                    },
+                    {
+                        "sequence": 3,
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "client_order_id": "backtest-3",
+                        "grid_level_sequence": 3
+                    },
+                    {
+                        "sequence": 4,
+                        "side": "sell",
+                        "price": "110",
+                        "quantity": "1",
+                        "fee": "0.11",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:45:00+00:00",
+                        "client_order_id": "backtest-4",
+                        "grid_level_sequence": 4
+                    }
+                ],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "9969.76"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "10129.65"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 3,
+                        "last_fill_side": "sell",
+                        "fill_count": 4,
+                        "last_fill_price": "110",
+                        "disarmed_levels": {
+                            "110": {
+                                "side": "sell",
+                                "pair": "90"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "label": "unaffordable_buy",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "5",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "80",
+                    "high": "80",
+                    "low": "80",
+                    "close": "80",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "90",
+                    "high": "90",
+                    "low": "90",
+                    "close": "90",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "range_end",
+                    "final_equity": "5",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "unrealized_pnl": "0",
+                    "fees": "0",
+                    "return_percent": "0",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "final_base_inventory": "0",
+                    "final_quote_inventory": "5",
+                    "final_price": "90",
+                    "fill_count": 0,
+                    "buy_count": 0,
+                    "sell_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "5"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "5"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "5"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "last_fill_side": null,
+                        "fill_count": 0
+                    }
+                }
+            }
+        },
+        {
+            "label": "position_limit_blocks_buy",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "50",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "80",
+                    "high": "80",
+                    "low": "80",
+                    "close": "80",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "90",
+                    "high": "90",
+                    "low": "90",
+                    "close": "90",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "range_end",
+                    "final_equity": "10000",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "unrealized_pnl": "0",
+                    "fees": "0",
+                    "return_percent": "0",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "final_base_inventory": "0",
+                    "final_quote_inventory": "10000",
+                    "final_price": "90",
+                    "fill_count": 0,
+                    "buy_count": 0,
+                    "sell_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "10000"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "last_fill_side": null,
+                        "fill_count": 0
+                    }
+                }
+            }
+        },
+        {
+            "label": "open_order_limit_blocks_second_order",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 1,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "80",
+                    "high": "80",
+                    "low": "80",
+                    "close": "80",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "90",
+                    "high": "90",
+                    "low": "90",
+                    "close": "90",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "range_end",
+                    "final_equity": "10009.83",
+                    "net_pnl": "9.83",
+                    "realized_pnl": "-0.17",
+                    "unrealized_pnl": "10",
+                    "fees": "0.17",
+                    "return_percent": "0.0983",
+                    "max_drawdown": "0.08",
+                    "max_drawdown_percent": "0.0008",
+                    "final_base_inventory": "2",
+                    "final_quote_inventory": "9829.83",
+                    "final_price": "90",
+                    "fill_count": 2,
+                    "buy_count": 2,
+                    "sell_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [
+                    {
+                        "sequence": 1,
+                        "side": "buy",
+                        "price": "80",
+                        "quantity": "1",
+                        "fee": "0.08",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "client_order_id": "backtest-1",
+                        "grid_level_sequence": 1
+                    },
+                    {
+                        "sequence": 2,
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:45:00+00:00",
+                        "client_order_id": "backtest-2",
+                        "grid_level_sequence": 2
+                    }
+                ],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "9999.92"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "10009.83"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "last_fill_side": "buy",
+                        "fill_count": 2,
+                        "last_fill_price": "90",
+                        "disarmed_levels": {
+                            "90": {
+                                "side": "buy",
+                                "pair": "110"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "label": "daily_loss_pause",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "5"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "90",
+                    "high": "90",
+                    "low": "90",
+                    "close": "90",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "80",
+                    "high": "80",
+                    "low": "80",
+                    "close": "80",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "risk_pause",
+                    "final_equity": "9989.91",
+                    "net_pnl": "-10.09",
+                    "realized_pnl": "-0.09",
+                    "unrealized_pnl": "-10",
+                    "fees": "0.09",
+                    "return_percent": "-0.1009",
+                    "max_drawdown": "10.09",
+                    "max_drawdown_percent": "0.1009",
+                    "final_base_inventory": "1",
+                    "final_quote_inventory": "9909.91",
+                    "final_price": "80",
+                    "fill_count": 1,
+                    "buy_count": 1,
+                    "sell_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [
+                    {
+                        "sequence": 1,
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "client_order_id": "backtest-2",
+                        "grid_level_sequence": 2
+                    }
+                ],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "9999.91"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "9989.91"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "last_fill_side": "buy",
+                        "fill_count": 1,
+                        "last_fill_price": "90",
+                        "disarmed_levels": {
+                            "90": {
+                                "side": "buy",
+                                "pair": "110"
+                            }
+                        },
+                        "last_canceled_client_order_id": "backtest-3"
+                    }
+                }
+            }
+        },
+        {
+            "label": "stop_loss_before_daily_loss",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "1"
+                },
+                "exit": {
+                    "stop_loss_percent": "5",
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "90",
+                    "high": "90",
+                    "low": "90",
+                    "close": "90",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "80",
+                    "high": "80",
+                    "low": "80",
+                    "close": "80",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "stop_loss",
+                    "final_equity": "9989.91",
+                    "net_pnl": "-10.09",
+                    "realized_pnl": "-0.09",
+                    "unrealized_pnl": "-10",
+                    "fees": "0.09",
+                    "return_percent": "-0.1009",
+                    "max_drawdown": "10.09",
+                    "max_drawdown_percent": "0.1009",
+                    "final_base_inventory": "1",
+                    "final_quote_inventory": "9909.91",
+                    "final_price": "80",
+                    "fill_count": 1,
+                    "buy_count": 1,
+                    "sell_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [
+                    {
+                        "sequence": 1,
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "client_order_id": "backtest-2",
+                        "grid_level_sequence": 2
+                    }
+                ],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "9999.91"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "9989.91"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "last_fill_side": "buy",
+                        "fill_count": 1,
+                        "last_fill_price": "90",
+                        "disarmed_levels": {
+                            "90": {
+                                "side": "buy",
+                                "pair": "110"
+                            }
+                        },
+                        "last_canceled_client_order_id": "backtest-3"
+                    }
+                }
+            }
+        },
+        {
+            "label": "take_profit",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": "5",
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "90",
+                    "high": "90",
+                    "low": "90",
+                    "close": "90",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "take_profit",
+                    "final_equity": "10009.91",
+                    "net_pnl": "9.91",
+                    "realized_pnl": "-0.09",
+                    "unrealized_pnl": "10",
+                    "fees": "0.09",
+                    "return_percent": "0.0991",
+                    "max_drawdown": "0.09",
+                    "max_drawdown_percent": "0.0009",
+                    "final_base_inventory": "1",
+                    "final_quote_inventory": "9909.91",
+                    "final_price": "100",
+                    "fill_count": 1,
+                    "buy_count": 1,
+                    "sell_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [
+                    {
+                        "sequence": 1,
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "client_order_id": "backtest-2",
+                        "grid_level_sequence": 2
+                    }
+                ],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "9999.91"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "10009.91"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "last_fill_side": "buy",
+                        "fill_count": 1,
+                        "last_fill_price": "90",
+                        "disarmed_levels": {
+                            "90": {
+                                "side": "buy",
+                                "pair": "110"
+                            }
+                        },
+                        "last_canceled_client_order_id": "backtest-3"
+                    }
+                }
+            }
+        },
+        {
+            "label": "range_exit_without_inventory",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": "95",
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "90",
+                    "high": "90",
+                    "low": "90",
+                    "close": "90",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "range_exit",
+                    "final_equity": "10000",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "unrealized_pnl": "0",
+                    "fees": "0",
+                    "return_percent": "0",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "final_base_inventory": "0",
+                    "final_quote_inventory": "10000",
+                    "final_price": "90",
+                    "fill_count": 0,
+                    "buy_count": 0,
+                    "sell_count": 0,
+                    "candles_processed": 2,
+                    "duration_ms": 0
+                },
+                "fills": [],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "10000"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "last_fill_side": null,
+                        "fill_count": 0,
+                        "last_canceled_client_order_id": "backtest-2"
+                    }
+                }
+            }
+        },
+        {
+            "label": "stop_loss_precedes_range_exit",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "simple-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": "5",
+                    "take_profit_percent": null,
+                    "range_low": "85",
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "90",
+                    "high": "90",
+                    "low": "90",
+                    "close": "90",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "80",
+                    "high": "80",
+                    "low": "80",
+                    "close": "80",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "stop_loss",
+                    "final_equity": "9989.91",
+                    "net_pnl": "-10.09",
+                    "realized_pnl": "-0.09",
+                    "unrealized_pnl": "-10",
+                    "fees": "0.09",
+                    "return_percent": "-0.1009",
+                    "max_drawdown": "10.09",
+                    "max_drawdown_percent": "0.1009",
+                    "final_base_inventory": "1",
+                    "final_quote_inventory": "9909.91",
+                    "final_price": "80",
+                    "fill_count": 1,
+                    "buy_count": 1,
+                    "sell_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [
+                    {
+                        "sequence": 1,
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "client_order_id": "backtest-2",
+                        "grid_level_sequence": 2
+                    }
+                ],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "9999.91"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "9989.91"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "last_fill_side": "buy",
+                        "fill_count": 1,
+                        "last_fill_price": "90",
+                        "disarmed_levels": {
+                            "90": {
+                                "side": "buy",
+                                "pair": "110"
+                            }
+                        },
+                        "last_canceled_client_order_id": "backtest-3"
+                    }
+                }
+            }
+        },
+        {
+            "label": "martingale_increases_after_fill",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "martingale-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2,
+                        "base_order_quantity": "1",
+                        "size_multiplier": "2",
+                        "max_order_quantity": "10",
+                        "max_increases": 10
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "90",
+                    "high": "90",
+                    "low": "90",
+                    "close": "90",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "110",
+                    "high": "110",
+                    "low": "110",
+                    "close": "110",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "range_end",
+                    "final_equity": "10019.8",
+                    "net_pnl": "19.8",
+                    "realized_pnl": "19.8",
+                    "unrealized_pnl": "0",
+                    "fees": "0.2",
+                    "return_percent": "0.198",
+                    "max_drawdown": "0.09",
+                    "max_drawdown_percent": "0.0009",
+                    "final_base_inventory": "0",
+                    "final_quote_inventory": "10019.8",
+                    "final_price": "110",
+                    "fill_count": 2,
+                    "buy_count": 1,
+                    "sell_count": 1,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [
+                    {
+                        "sequence": 1,
+                        "side": "buy",
+                        "price": "90",
+                        "quantity": "1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "client_order_id": "backtest-2",
+                        "grid_level_sequence": 2
+                    },
+                    {
+                        "sequence": 2,
+                        "side": "sell",
+                        "price": "110",
+                        "quantity": "1",
+                        "fee": "0.11",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:45:00+00:00",
+                        "client_order_id": "backtest-3",
+                        "grid_level_sequence": 3
+                    }
+                ],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "9999.91"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "10019.8"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "current_quantity": "4",
+                        "increase_count": 2,
+                        "cap_reached": false,
+                        "fill_count": 2,
+                        "last_fill_side": "sell",
+                        "disarmed_levels": {
+                            "110": {
+                                "side": "sell",
+                                "pair": "90"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "label": "dynamic_grid_recalculates",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "dynamic-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2,
+                        "min_spacing": "0.5",
+                        "max_spacing": "20",
+                        "volatility_multiplier": "1",
+                        "initial_spacing": "1",
+                        "recalculation_interval_seconds": 0
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "101",
+                    "high": "101",
+                    "low": "101",
+                    "close": "101",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "102",
+                    "high": "102",
+                    "low": "102",
+                    "close": "102",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "range_end",
+                    "final_equity": "10000",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "unrealized_pnl": "0",
+                    "fees": "0",
+                    "return_percent": "0",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "final_base_inventory": "0",
+                    "final_quote_inventory": "10000",
+                    "final_price": "102",
+                    "fill_count": 0,
+                    "buy_count": 0,
+                    "sell_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "10000"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_value": "1.98019801980198",
+                        "levels_per_side": 2,
+                        "last_recalculated_at": "2026-11-23T00:45:00+00:00",
+                        "recalculation_count": 5,
+                        "fill_count": 0,
+                        "last_canceled_client_order_id": "backtest-4"
+                    }
+                }
+            }
+        },
+        {
+            "label": "trailing_grid_recenters",
+            "snapshot": {
+                "bot": {
+                    "id": 1,
+                    "name": "Golden replay bot",
+                    "exchange": "binance",
+                    "symbol": "BTC/USDT",
+                    "strategy_key": "simple-grid",
+                    "capital_allocation": "10000",
+                    "fee_rate": "0.001"
+                },
+                "strategy": {
+                    "key": "trailing-grid",
+                    "configuration": {
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "order_quantity": "1",
+                        "levels_per_side": 2,
+                        "trailing_distance": "10"
+                    }
+                },
+                "risk": {
+                    "max_position_notional": "100000",
+                    "max_open_orders": 20,
+                    "daily_loss_limit": "100000"
+                },
+                "exit": {
+                    "stop_loss_percent": null,
+                    "take_profit_percent": null,
+                    "range_low": null,
+                    "range_high": null
+                },
+                "period": {
+                    "timeframe": "15m",
+                    "start_at": "2026-11-23T00:00:00+00:00",
+                    "end_at": "2026-11-23T06:00:00+00:00"
+                }
+            },
+            "candles": [
+                {
+                    "open_time": "2026-11-23T00:00:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:15:00+00:00",
+                    "open": "120",
+                    "high": "120",
+                    "low": "120",
+                    "close": "120",
+                    "volume": "1"
+                },
+                {
+                    "open_time": "2026-11-23T00:30:00+00:00",
+                    "open": "100",
+                    "high": "100",
+                    "low": "100",
+                    "close": "100",
+                    "volume": "1"
+                }
+            ],
+            "expected": {
+                "metrics": {
+                    "end_reason": "range_end",
+                    "final_equity": "10000",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "unrealized_pnl": "0",
+                    "fees": "0",
+                    "return_percent": "0",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "final_base_inventory": "0",
+                    "final_quote_inventory": "10000",
+                    "final_price": "100",
+                    "fill_count": 0,
+                    "buy_count": 0,
+                    "sell_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0
+                },
+                "fills": [],
+                "equity_curve": [
+                    {
+                        "at": "2026-11-23T00:15:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:30:00+00:00",
+                        "equity": "10000"
+                    },
+                    {
+                        "at": "2026-11-23T00:45:00+00:00",
+                        "equity": "10000"
+                    }
+                ],
+                "final_state": {
+                    "version": 1,
+                    "data": {
+                        "initialized": true,
+                        "center_price": "100",
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10",
+                        "levels_per_side": 2,
+                        "trailing_distance": "10",
+                        "recenter_count": 2,
+                        "last_fill_side": null,
+                        "fill_count": 0,
+                        "last_recenter_price": "100",
+                        "last_canceled_client_order_id": "backtest-4"
+                    }
+                }
+            }
+        }
+    ],
+    "errors": {
+        "no_candles": "No historical data available.",
+        "max_fills": "Backtest produced more than 1 fills; choose a shorter range or a larger timeframe."
+    }
+}

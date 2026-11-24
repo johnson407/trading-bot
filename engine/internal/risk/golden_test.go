@@ -501,7 +501,11 @@ func TestLiveModeGuardStartGolden(t *testing.T) {
 				"balance_calls": balanceCalls,
 			}
 
-			assertExpected(t, testCase.Label, expectedCases[index], actual)
+			// Phase 7 made Laravel write desired_status only; the engine still
+			// owns the runtime status, which the regenerated fixture preserves.
+			expected := expectedCases[index]
+
+			assertExpected(t, testCase.Label, expected, actual)
 		})
 	}
 }

@@ -1,23 +1,26 @@
 # Runtime Runbook
 
-> The hybrid Go engine contract (Redis Stream commands/events, heartbeat,
-> `desired_status` ownership) is documented in [engine.md](engine.md). In this
-> phase Laravel still owns the tick/order runtime; the Go service implements the
-> contract and health only.
+> The hybrid runtime is documented in [engine.md](engine.md). Laravel owns the UI,
+> configuration, `desired_status`, and command publishing. The Go engine owns
+> bot runtime status, due-check ticks, grids, paper orders/fills, risk and exit
+> guards, backtest execution, and heartbeat. Live exchange execution remains
+> intentionally disabled in the Go engine; Laravel keeps the live gate and the
+> emergency `CancelBotOrders` safety net.
 
 ## Components
 
 | Process | Command | Purpose |
 | --- | --- | --- |
 | Web | `php-fpm` behind Nginx | Inertia/Vue dashboard and API endpoints |
-| Queue worker | `php artisan horizon` | Runs `RunBotTick`, `PlaceOrder`, and `SyncOrders` |
-| Scheduler | `php artisan schedule:work` | Runs the one-second bot due-check plus scheduled health, order, and balance work |
-| PostgreSQL | `postgres` | Durable bots, orders, fills, inventory, risk, and activity data |
-| Redis | `redis-server` | Queues, cache, unique locks, and Horizon metrics |
+| Queue worker | `php artisan horizon` | Alert email and other default-queue jobs only |
+| Scheduler | `php artisan schedule:work` | Analytics and alert maintenance |
+| Go engine | `engine` image | Bot ticks, orders, fills, risk, reconciliation, backtests |
+| PostgreSQL | `postgres` | Shared durable state for Laravel and the engine |
+| Redis | `redis-server` | `engine.commands`/`engine.events` streams, heartbeat, cache, Horizon |
 
-The scheduler and Horizon must each run as a single supervised process. Do not scale
-`schedule:work` horizontally: Laravel's scheduler is designed to run once per
-application, and the per-bot locks are the second line of defence.
+Laravel is no longer the tick, order, or backtest worker. The PHP classes for
+those paths were removed in phase 8; only the preview-only PHP strategies remain
+for the create/edit ladder preview.
 
 ## First start
 
@@ -33,6 +36,10 @@ php artisan horizon
 php artisan schedule:work
 ```
 
+Run the Go engine separately from `engine/` when working outside Compose. It
+needs the same PostgreSQL and Redis endpoints plus its own `ENGINE_*` settings;
+see [engine/README.md](../engine/README.md).
+
 `.env` holds database and exchange settings, so keep it owner-readable only
 (mode `600`) when non-Docker processes run as your host user.
 
@@ -40,102 +47,91 @@ php artisan schedule:work
 
 In Docker Compose these commands are wired into the entrypoint. Every service
 waits for PostgreSQL and Redis, but only `app` has `RUN_MIGRATIONS=true`, so only
-it runs `migrate --force` and `storage:link`. Horizon and the scheduler start
-after `app` is healthy and never migrate concurrently. The same gate applies to
-the production stack; production additionally refuses to start without a runtime
-`APP_KEY`.
+it runs `migrate --force` and `storage:link`. Horizon, the scheduler, and the
+engine start after `app` is healthy and never migrate concurrently.
 
 Under the bind-mounted Docker Compose setup, leave `.env` at mode `644`. PHP-FPM,
 Horizon, and the scheduler run as Alpine `www-data` rather than your host user,
 so a `600` file owned by your host user is unreadable inside the container.
-Laravel then falls back to defaults (for example, Application Name and debug
-settings, plus any keys Compose does not inject). Do not run `chmod 600 .env` on
-a running Docker deployment; host-side environment injection was considered for
-this setup and dropped for this change.
+Laravel then falls back to defaults. Do not run `chmod 600 .env` on a running
+Docker deployment.
 
-## Tick loop
+## Command and heartbeat flow
 
-1. `bots:dispatch` runs every second as a cheap due-check. It selects `running`
-   bots, skips a bot whose `last_tick_at` is newer than its
-   `tick_interval_seconds`, and dispatches `RunBotTick` with uniqueness key
-   `bot-tick:{botId}`. New bots default their interval to
-   `TRADING_TICK_INTERVAL` (60 seconds).
-2. `RunBotTick` is unique for 10 seconds and carries a `WithoutOverlapping` lock
-   (`bot-tick:{botId}`) that expires after 30 seconds. A duplicate delivery or a
-   slow worker drops the tick rather than overlapping it.
-3. `BotTickPipeline` records `last_tick_at`, enforces the live gate, fetches market
-   data, evaluates daily loss with the current mark price (realized plus
-   unrealized), evaluates the strategy, applies risk checks, places orders,
-   persists strategy state, and writes an execution log.
-4. A successful tick updates `last_successful_tick_at` and resets consecutive
-   failures. A failure increments the failure counter and is logged as
-   `bot.tick_failed`; at the configured threshold the bot pauses and its open
-   orders are cancelled.
+1. A dashboard action writes `desired_status` and publishes one envelope to
+   `engine.commands` (`bot.start`, `bot.pause`, `bot.stop`, `order.cancel`,
+   `kill_switch`). Backtests publish to `engine.backtests` so a long replay cannot
+   delay control commands.
+2. The engine consumes each stream independently, applies the command, and owns
+   the runtime `status`, `last_error`, grids, orders, and fills. Duplicate command
+   ids are ignored.
+3. The engine writes `engine:heartbeat` every five seconds with a ten-second TTL.
+   Laravel reads it for the dashboard warning and for stop/kill-switch emergency
+   decisions. An expired heartbeat is a warning; it never pauses a bot or cancels
+   an order automatically.
+4. Laravel never writes runtime `status` or `last_error` after creation, and it
+   does not write engine-owned activity types or `grids`/`grid_levels` rows.
 
-There is no unbounded queue growth: an in-flight unique tick suppresses newer
-dispatches, and stale ticks are skipped by the dispatcher.
+## Bot controls
 
-## Cadences and tick-time latency
+- **Start** writes `desired_status=running` and publishes `bot.start`. The live
+  gate and exact `<bot name> on <exchange>` confirmation still run in Laravel
+  before the command is published.
+- **Pause** writes `desired_status=paused` and publishes `bot.pause`. Open orders
+  are retained.
+- **Stop** writes `desired_status=stopped` and publishes `bot.stop`. If the
+  heartbeat is missing/expired or publishing fails, Laravel cancels open orders on
+  that user's **live** bots through `CancelBotOrders` in the same request. Paper
+  bots need only `desired_status` while the engine is down.
+- **Single order cancel** publishes `order.cancel`; the dashboard row stays as-is
+  until the engine confirms the cancellation.
+- **Kill switch** writes `desired_status=paused` for every non-stopped bot and
+  publishes `kill_switch`. If the heartbeat is missing/expired or publishing
+  fails, Laravel cancels open live orders through `CancelBotOrders`. It does not
+  wait for a tick.
 
-Four cadences are distinct:
+A retried control action republishes when the runtime status disagrees with
+`desired_status`; the UI shows the desired state while the engine catches up.
 
-- `bots:dispatch` runs every second, but only as a due-check; it does not mean
-  every bot evaluates every second.
-- Each bot evaluates at its stored `tick_interval_seconds`, which defaults to
-  `TRADING_TICK_INTERVAL` (60 seconds) for new bots. The one-second minimum is
-  unchanged.
-- Health checks run every 30 seconds (`trading.health.check_interval_seconds`),
-  order sync every 10 seconds, and balance sync every 60 seconds
-  (`trading.balances.sync_interval_seconds`). These schedules are unchanged.
-- The dashboard polls every five seconds. The poll only reads persisted state; it
-  does not trigger a tick.
+## Trading runtime status
 
-Paper fills and daily-loss evaluation happen only when a tick runs. At the
-60-second default, a price that crosses and recrosses a paper order's limit
-between ticks is not guaranteed to fill, and a daily-loss breach may be acted on
-up to about one interval late. Consecutive-failure pausing also takes longer in
-wall-clock time because failures are counted per tick; the failure threshold
-itself is unchanged. The kill switch still takes effect immediately.
+The PHP tick and backtest engine has been removed and the Go trading runtime is
+wired: control commands, the due-check scheduler, grid sync, paper fills,
+strategy state, daily-loss and exit guards, and runtime status all run in the
+engine. Live exchange execution is deliberately not implemented yet: a live bot
+start is paused with a clear error. Live stops/kill-switch use Laravel's local
+`CancelBotOrders` safety net only when the heartbeat is unavailable or the
+command publish fails; single live-order cancellation goes through Laravel's
+retained exchange path. Public prices and candle backfill currently support
+Binance only; starting a bot on another exchange pauses it with a clear error.
 
-## Recovery
+There is no PHP-to-Go drain, adopt, or no-overlap runbook; the cutover is a
+direct swap. Open orders written by the engine are durable in PostgreSQL and are
+reconciled by the next tick after a restart.
 
-On a fresh host, run:
+A risk or exit-guard breach pauses the bot and cancels its orders. Nothing resumes
+automatically; an operator must start it again.
 
-```bash
-php artisan bots:reconcile
-```
+## Backtests
 
-The command resumes `running` bots, reloads strategy state, and compares local
-orders and balances with the exchange. Pending orders without an exchange id are
-matched by client order id. Matching orders are retained; partial and full remote
-fills are applied through the normal fill pipeline and strategy handler, so paired
-orders are placed; canceled orders are updated; extra remote orders and balance
-differences outside `trading.reconciliation.tolerance` pause the bot and record
-`risk.reconciliation_conflict`. A paused bot requires an explicit start and never
-resumes automatically.
+Laravel inserts `backtest_runs` / `backtest_sweeps` and publishes `backtest.run` or
+`backtest.sweep`. The engine claims a pending run atomically, reads cached
+`market_candles`, writes progress/status/metrics/equity/`backtest_fills`, and fails
+a running run whose worker disappears or exceeds `BACKTEST_JOB_TIMEOUT + 60s`.
+Pending runs are not failed for age alone because their commands remain durable in
+the Redis stream; a 24-hour orphan guard catches rows that never received a
+command. Laravel no longer schedules `backtests:fail-stale`.
 
-Paper bots are skipped by reconciliation because their ledger is authoritative.
+## Cadences and latency
 
-## Health and balances
-
-```bash
-php artisan bots:sync-orders
-php artisan bots:health
-php artisan bots:sync-balances
-```
-
-`bots:sync-orders` runs every 10 seconds and resolves live pending/open orders
-against the exchange. An ambiguous placement is adopted by client order id;
-new fills are applied through `FillProcessor`, then the strategy receives
-`onFill`, the grid is synchronized, and the paired opposite order is placed.
-`bots:health` pauses running bots whose last successful tick is older than the
-effective stale threshold: `max(trading.tick.stale_after_seconds,
-tick_interval_seconds + trading.health.check_interval_seconds)`, with
-`tick_interval_seconds` floored at one second. The default threshold is 180
-seconds. It records `bot.stale` plus `risk.stale_bot`. `bots:sync-balances` refreshes live-bot base/quote inventory from
-the exchange. The scheduler runs health checks every
-`trading.health.check_interval_seconds` (30s) and balance sync every
-`trading.balances.sync_interval_seconds` (60s). When more than one live bot shares an exchange account, balance sync is skipped for those bots: per-bot inventory stays authoritative and a single `bot.balance_sync_skipped` activity is written per bot per day.
+- Each bot evaluates at its stored `tick_interval_seconds`, default 60 seconds.
+- The dashboard polls every five seconds for persisted state and heartbeat; the
+  poll never triggers a tick.
+- Paper fills and daily-loss evaluation happen when a tick runs. A price that
+  crosses and recrosses a paper limit between ticks is not guaranteed to fill.
+- The kill switch does not wait for a tick; it publishes immediately and falls
+  back to local live-order cancellation when the engine is unreachable.
+- Analytics snapshots and alert pruning remain Laravel scheduled jobs.
 
 ## Queue operations
 
@@ -148,63 +144,19 @@ php artisan queue:flush              # only after reviewing failed jobs
 php artisan queue:monitor redis:default
 ```
 
-Horizon is configured in `config/horizon.php`. Keep the `default` supervisor
-running with enough processes for ten concurrent bots; each tick performs one
-small exchange call and several short database transactions. For a small
-deployment, 2–4 workers are sufficient because the per-bot lock prevents overlap.
-
-Use `php artisan horizon:snapshot` on a schedule if you retain Horizon metrics
-outside Redis. Failed jobs should be inspected before retrying: exchange errors
-may already have been retried with backoff inside the CCXT client.
-
-## Reference capacity profile
-
-The capacity harness stress target is ten bots at a one-second tick interval.
-This is an execution-budget load test, not the production default; new bots ship
-on a 60-second interval.
-
-Reference profile used for the capacity harness:
-
-- 2 vCPU, 2 GB RAM, Linux x86_64
-- PHP 8.4 CLI (static build) with OPcache disabled in the harness
-- PostgreSQL 18 and Redis 8 on localhost
-- Fake exchange client (no network latency), paper mode
-- 10 running bots, 3 rounds, 30 ticks per harness run
-
-Result: 30 ticks completed with 0 errors; the slowest round remained under the
-1,000 ms budget (`CapacityReport::withinBudget` true). The harness intentionally
-does not sleep between rounds, so round elapsed time is the schedule-drift signal.
-
-This is a deterministic domain/runtime harness, not a production exchange
-benchmark. Real CCXT latency and rate limits dominate live performance; size the
-worker pool from production metrics and keep the harness's one-second cadence
-best-effort. If a round exceeds the budget, the dispatcher skips stale ticks
-instead of building a backlog.
-
-Run the harness in tests:
-
-```bash
-php artisan test tests/Feature/CapacityHarnessTest.php
-```
+Horizon now serves alert email and other default-queue jobs, not ticks or
+backtests. The `backtests` supervisor was removed in phase 7; do not add it back.
 
 ## Logs and observability
 
-- Structured ticks: `bot.tick` with bot id, symbol, price, orders, fills,
-  rejected orders, and duration.
-- Failures: `bot.tick_failed` with the exception message and trace; secrets are
-  scrubbed by `App\Logging\RedactSecrets`.
-- Activity log: bot lifecycle, orders, fills, reconciliation, health, and risk
-  events are queryable per bot and per user.
-- Horizon metrics: queue wait, throughput, and failed jobs.
-
-## Upgrading an existing deployment
-
-The 60-second interval and 180-second stale threshold are new defaults, not
-overrides of a live `.env`. If an existing `.env` pins `TRADING_TICK_INTERVAL=1`
-or `TRADING_STALE_TICK_SECONDS=60`, edit those two keys in the running
-environment yourself, then restart the scheduler and Horizon workers so the
-cached config and worker processes pick up the change. Do not edit `.env`
-automatically as part of a deploy.
+- Engine logs include tick, order, fill, risk, reconciliation, and backtest
+  events; Laravel redacts secrets in its own logs.
+- Activity log: user acknowledgements (`bot.started`, `bot.paused`, `bot.stopped`,
+  `kill_switch.activated`, etc.) are written by Laravel; engine events such as
+  `bot.stale`, `order.filled`, and `orders.synced` are written by the engine.
+- `GET /health/engine` returns the heartbeat JSON with HTTP 200 when fresh and 503
+  when missing/expired.
+- Horizon metrics cover the remaining default queue only.
 
 ## Deployment checklist
 
@@ -216,20 +168,12 @@ php artisan migrate --force
 php artisan horizon:terminate
 ```
 
-Restart Horizon and the scheduler after every deploy. Confirm
+Restart Horizon, the scheduler, and the engine after every deploy. Confirm
 `TRADING_LIVE_ENABLED=false` unless live trading has been explicitly approved.
 
+## Release gate
 
-## Startup and dispatch guards
-
-The scheduler container runs `php artisan bots:reconcile` before `schedule:work`,
-so a restart reconciles running bots before any new tick is dispatched. If
-reconciliation reports conflicts the scheduler still starts; each affected bot
-remains paused.
-
-`bots:dispatch` writes a short-lived `bot-dispatch:{id}` cache key for the bot's
-interval before queueing, so queue latency cannot produce duplicate ticks for
-the same second. Exchange clients are reused per exchange and credential within
-a worker. The stale-tick threshold defaults to 180 seconds
-(`TRADING_STALE_TICK_SECONDS`), or to the bot's interval plus the health-check
-interval when that is longer, so a slow initial live grid is not paused mid-work.
+Phase 8 lands on the `hybrid-engine` branch/tag. Do **not** merge to the
+QNAP-deployable `origin/main` until the follow-up `add-qnap-ci-deploy` change adds
+the engine to `docker-compose.prod.yml`, GHCR publishing, QNAP health/rollback,
+and CI `go test`. The current production stack does not include the engine.

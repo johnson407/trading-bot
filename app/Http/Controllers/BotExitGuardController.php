@@ -36,7 +36,7 @@ class BotExitGuardController extends Controller
 
             $after = $this->snapshot($locked->refresh());
 
-            $activity->record(
+            $activity->recordUser(
                 'bot.exit_guard_updated',
                 "Protective exits updated for {$locked->name}.",
                 $locked,

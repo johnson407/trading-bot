@@ -26,7 +26,7 @@ docker compose exec -u www-data \
   -e APP_ENV=testing -e DB_DATABASE=trading_bot_test \
   -e CACHE_STORE=array -e QUEUE_CONNECTION=sync \
   -e SESSION_DRIVER=array -e CONCURRENCY_DRIVER=sync \
-  app php artisan test --filter=BotTickPipelineTest
+  app php artisan test --filter=BacktestDashboardTest
 
 # static analysis (level 5, app/ only)
 docker compose exec -u www-data app vendor/bin/phpstan analyse --memory-limit=1G --no-progress
@@ -53,16 +53,17 @@ docker compose exec -u www-data app npm run test:js
 
 Single Laravel application, no monorepo.
 
-- `app/Domain/` — trading engine: Bot, Grid, Order, Portfolio, Risk, Strategy, Exchange, Backtest, Alerts, Analytics, Exit.
-- `app/Strategies/` — the four built-in strategies. Strategies are pure: no database or exchange access; they receive immutable `StrategyInput` and return `StrategyDecision`.
-- `app/Services/Exchange/` — CCXT and paper exchange adapters.
-- `app/Jobs/`, `app/Domain/Bot/BotTickPipeline.php` — queued tick and order/fill pipeline.
+- `app/Domain/` — Laravel-side trading domain: Bot, Order, Portfolio, Risk, Strategy preview, Exchange, Backtest value objects, Alerts, Analytics, Exit.
+- `app/Strategies/` — the four built-in strategies, retained only for the create/edit ladder preview. Runtime strategies live in `engine/internal/strategy`; changes must be mirrored.
+- `app/Services/Exchange/` — CCXT and paper exchange adapters used by previews and emergency cancellation.
+- `app/Jobs/` — `SendAlertEmail` only; the PHP tick/order/fill and backtest pipelines were removed in phase 8.
+- `app/Services/Engine/` — Redis command publisher and heartbeat reader.
 - `app/Http/` + `resources/js/Pages/` — Inertia controllers and Vue pages.
 - `app/Models/`, `database/migrations/` — Eloquent persistence.
 
-Scheduling lives in `routes/console.php` (there is no `app/Console/Kernel.php`). `bots:dispatch` runs every second only as a due-check; each bot evaluates at its stored `tick_interval_seconds` (default 60). Run exactly one `schedule:work` and at least one Horizon worker.
+Scheduling lives in `routes/console.php` (there is no `app/Console/Kernel.php`). After phase 7, Laravel schedules only `analytics:capture-equity`, `alerts:prune`, and `analytics:prune-equity`; `bots:dispatch` and the other PHP tick/backtest commands are no longer the runtime path. Run exactly one `schedule:work`; Horizon remains for alerts and other default-queue jobs.
 
-To add a strategy, implement `App\Domain\Strategy\Contracts\StrategyInterface` and register it in `AppServiceProvider::boot()`. The `key()` is persisted in `strategy_configs.strategy_key`, so renaming it requires a data migration.
+To add a strategy for preview, implement `App\Domain\Strategy\Contracts\StrategyInterface` and register it in `AppServiceProvider::boot()`. A runtime strategy must also be added to the Go strategy factory and fixture tests. The `key()` is persisted in `strategy_configs.strategy_key`, so renaming it requires a data migration.
 
 ## Money and precision
 

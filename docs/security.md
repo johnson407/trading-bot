@@ -34,6 +34,9 @@ names the code that implements it and the test or command used to verify it.
 
 - [x] API key, secret, and passphrase use Laravel's `encrypted` cast and are
   `$hidden` from serialization. `app/Models/ExchangeCredential.php`.
+  The payload is the `Crypt::encryptString` format: AES-256-CBC with a base64
+  JSON envelope (`iv`, `value`, `mac`, `tag`) keyed from `APP_KEY`, not
+  PHP-serialized `Crypt::encrypt()` output.
 - [x] Credentials are stored in `exchange_credentials` and never returned raw;
   the dashboard uses `toMaskedArray()` (`abcd****5678`).
 - [x] Replacing a credential updates the existing `(user, exchange)` row rather
@@ -82,17 +85,19 @@ Evidence: `tests/Feature/RateLimitTest.php`.
   confirmation, and starting also requires a free quote balance at least equal to
   the capital allocation.
   `app/Domain/Risk/LiveModeGuard.php`.
-- [x] Live failures pause the bot and cancel open orders; there is no silent
-  fallback to paper. `app/Domain/Exchange/ConsecutiveFailureTracker.php`.
-- [x] Kill switch pauses every user bot and cancels open orders, reporting
-  per-bot failures. `app/Actions/ActivateKillSwitch.php`.
+- [x] Live failures pause the bot and cancel open orders in the Go engine; there
+  is no silent fallback to paper.
+- [x] The kill switch writes `desired_status=paused`, publishes `kill_switch`, and
+  cancels open live orders locally when the engine heartbeat is expired or the
+  command cannot be published. `app/Actions/ActivateKillSwitch.php`.
 
 ## Transport and deployment
 
 - [ ] HTTPS termination is a deployment responsibility. Nginx must redirect
   HTTP to HTTPS and set HSTS in production.
 - [x] `docker/nginx/default.conf` proxies only the application and exposes the
-  health endpoint.
+  health endpoints. `GET /health/engine` reports the Go engine heartbeat as
+  informational JSON (503 when stale); it never pauses bots or cancels orders.
 - [x] Secrets are supplied through environment variables, not committed files;
   `.env` is ignored and `.env.example` contains placeholders.
 - [ ] `.env` permissions follow a split policy. Non-Docker setups should keep
@@ -112,6 +117,8 @@ Evidence: `tests/Feature/RateLimitTest.php`.
   full test suite remain the enforced gates.
 - Rate limiting is per application instance and uses the configured cache store;
   use Redis in production so all web workers share counters.
+- Phase 8 is released on the `hybrid-engine` branch/tag until `add-qnap-ci-deploy`
+  adds the engine to production Compose, GHCR, QNAP rollback, and CI `go test`.
 
 ## Review commands
 

@@ -1,13 +1,14 @@
 # PHP engine golden fixtures
 
-These fixtures are a deterministic snapshot of the **current committed PHP
-engine**, captured before the phase-4 Go ports. They are inputs for the Go
-tests in later tasks (4.2–4.8) and are not used by the runtime.
+These files are a frozen deterministic snapshot of the PHP engine captured
+before the phase 4–6 Go ports. The PHP tick pipeline, strategies runtime, and
+backtest engine have since been removed, so the fixtures are **not regenerated**
+and the capture harnesses no longer exist in `tests/Support`.
 
 The Go parity tests read these committed files directly from the repository
-root (via `engine/internal/goldenfixture`). Do not copy them into `engine/`:
-the files here remain authoritative. Run the Go suite with the repository root
-mounted, for example:
+root via `engine/internal/goldenfixture`. They are the compatibility authority
+for the ported engine behaviour. Do not copy them into `engine/` and do not
+edit them by hand. Run the Go suite with the repository root mounted:
 
 ```bash
 docker run --rm -v "$PWD:/src" -w /src/engine \
@@ -15,136 +16,51 @@ docker run --rm -v "$PWD:/src" -w /src/engine \
   golang:1.24-alpine go test ./...
 ```
 
-The capture harness calls the production classes directly. It does not
-reimplement, wrap, or change engine behaviour:
+The snapshot was captured from the production classes before deletion:
 
-- `app/Console/Commands/DispatchBotTicks.php`, `app/Jobs/RunBotTick.php`,
-  `app/Domain/Bot/BotHealthMonitor.php` — tick due-check, overlap/uniqueness,
-  and stale threshold.
-- `app/Domain/Grid/GridGenerator.php`, `app/Domain/Grid/GridDerivation.php`,
-  and `BotTickPipeline::syncGrid()` — grid generation and sync.
-- `app/Services/Exchange/PaperExchangeClient::qualifyingFills()` and
-  `BotTickPipeline` tick-time fill processing — paper fills.
-- `app/Strategies/{Simple,Dynamic,Martingale,Trailing}GridStrategy.php` — the
-  four strategies.
+- `DispatchBotTicks`, `RunBotTick`, and `BotHealthMonitor` — tick due-check,
+  overlap/uniqueness, and stale threshold.
+- `GridGenerator`, `GridDerivation`, and `BotTickPipeline::syncGrid` — grid
+  generation and sync.
+- `PaperExchangeClient::qualifyingFills` and the tick fill path — paper fills.
+- The four PHP strategies.
+- `BacktestEngine` with `SimulatedOrderBook`, `InMemoryPortfolio`,
+  `BacktestRiskGuard`, `MetricsCalculator`, `ExitRules`, and
+  `BacktestConfiguration` — deterministic replay.
+- `CreateBacktestSweep` and `BacktestSnapshotBuilder` — sweep grouping.
+- `StartBot` / `LiveModeGuard`, `RiskGuard`, `DailyLossMonitor`,
+  `ExitGuardMonitor`, `ConsecutiveFailureTracker`, and request validation —
+  risk and credentials.
 
-The harness lives in `tests/Support/GoldenEngineFixtures.php`; the verification
-test is `tests/Feature/GoldenEngineFixturesTest.php`
-(`it matches the committed PHP golden engine fixtures`).
-
-The phase-5 risk harness lives in `tests/Support/GoldenRiskFixtures.php`; its
-verification test is `tests/Feature/GoldenRiskFixturesTest.php`. It calls the
-production `StartBot`/`LiveModeGuard`, `RiskGuard`, `DailyLossMonitor`,
-`ExitRules`/`ExitGuardMonitor`, `ConsecutiveFailureTracker`, and the
-`StoreBotRequest` allowlist validation directly. No PHP engine behaviour is
-changed for these fixtures.
+Phase 7 moved runtime `status` and `last_error` ownership to the engine. The
+risk fixture reflects engine-owned status in its assertions; the PHP capture
+normalized successful start status to `desired_status`. Runtime-only activity
+types are likewise mapped to their contractual engine names in that fixture.
 
 ## Files
 
-| File | Covers | Later task |
-| --- | --- | --- |
-| `tests/golden/engine/tick_loop.json` | `bots:dispatch` due-check (60s default, 1s minimum, paused/stopped skip), dispatcher cache guard, `RunBotTick` uniqueness/overlap, `BotHealthMonitor` stale threshold | 4.2 |
-| `tests/golden/engine/grid_generation.json` | `GridGenerator` arithmetic/geometric/dynamic ladders and validation failures; `GridDerivation` percent/quantity helpers and failures | 4.3 |
-| `tests/golden/engine/grid_sync.json` | `BotTickPipeline` grid creation, level matching, fill-driven sync, and trailing recenter (old grid stopped, orders canceled, new grid/orders) | 4.3 |
-| `tests/golden/engine/paper_fills.json` | `qualifyingFills` buy/sell crossing, closest-first, tie-break, partial remaining quantity, fees; tick-time cross-and-recross for both sides | 4.4 |
-| `tests/golden/engine/strategies.json` | Initialize, on-tick, on-fill, on-cancel, `getGridLevels`, `shouldStop`, and validation errors for all four strategies | 4.5–4.8 |
-| `tests/golden/engine/risk.json` | `LiveModeGuard` gate/confirmation/balance and no live-to-paper fallback; `RiskGuard` position/open-order/inventory paths; `DailyLossMonitor` per-bot/account pause, cancel, reset, baseline isolation, and no auto-resume; protective exit rules/precedence/cancel failure; `ConsecutiveFailureTracker` threshold/reset/cancel failure; `TRADING_EXCHANGES` creation validation plus the current-PHP runtime gap | 5.1–5.6 |
-| `tests/golden/engine/credentials_ciphertext.json` | `Crypt::encryptString` payload shape (AES-256-CBC, base64 JSON `iv/value/mac/tag`, not PHP-serialized) and previous-key rotation for in-memory decryption. Contains a hardcoded **test-only** key and fake plaintexts, never `.env` or `APP_KEY` | 5.7 |
+| File | Covers |
+| --- | --- |
+| `tests/golden/engine/credentials_ciphertext.json` | `Crypt::encryptString` / Eloquent `encrypted` round-trip and previous-key handling |
+| `tests/golden/engine/grid_generation.json` | Grid generation for each strategy and spacing type |
+| `tests/golden/engine/grid_sync.json` | Level preservation, replacement, and cancel events |
+| `tests/golden/engine/paper_fills.json` | Close-only paper fills, ordering, partial quantities, fees |
+| `tests/golden/engine/risk.json` | Live gate, risk guard, daily loss, exit guard, consecutive failures, credentials allowlist |
+| `tests/golden/engine/strategies.json` | Initialize, on-tick, on-fill, on-cancel, grid levels, validation errors |
+| `tests/golden/engine/tick_loop.json` | Due-check, overlap, stale threshold |
+| `tests/golden/engine/backtest_replay.json` | Replay lifecycle, fills, fees, risk/exit replay, metrics, equity, exact errors |
+| `tests/golden/engine/backtest_sweep.json` | Cartesian grouping, overrides, preserved fields, 160-character labels |
 
 ## Determinism
 
-- Clock: `Carbon::setTestNow('2026-11-23T00:00:00+00:00')`. Timestamps in
-  strategy inputs are explicit `DateTimeImmutable` values, never the native
-  wall clock.
-- Fee rate: fixed `0.001` for paper-fill and pipeline scenarios.
-- Decimal scale: `App\Domain\Support\Decimal::SCALE` = `16`; all monetary and
-  quantity values are decimal strings, never JSON floats. The only deliberate
-  float values are the `GridDerivation` rejection cases that prove floats are
-  refused.
-- No database IDs, random client order IDs, exchange order IDs, wall-clock
-  timestamps, or tick durations are recorded. Grids are indexed by creation
-  order; orders are recorded by grid index, level sequence, side, price,
-  quantity, and status.
-- The files are pretty-printed JSON with unescaped slashes and a trailing
-  newline. Regenerating them must produce no diff.
-
-`risk.json` uses a fresh user/bot per case, deterministic `client_order_id`
-values, and a fixed clock. Database order IDs are stripped from event contexts,
-bot IDs in exception messages are normalized to `{bot_id}`, and tick durations
-are not recorded. The current-PHP allowlist gap is captured explicitly:
-creation validation rejects a non-allowlisted exchange, while a directly
-inserted row can still start and place in current PHP. Go task 5.6 adds the
-runtime blocking check.
-
-`credentials_ciphertext.json` is generated once with `Crypt::encryptString`
-using the hardcoded test-only key in `GoldenRiskFixtures`; it is not derived
-from `.env` or `APP_KEY`. IVs are random, so regenerating the file intentionally
-produces different bytes. The test verifies decryption, payload shape, the
-absence of the PHP serialization prefix, and previous-key rotation instead of
-byte-for-byte equality. Do not regenerate it on every capture.
-
-`grid_sync.json` seeds paper bots with `base_inventory = 2` so current
-`RiskGuard` can place both buy and sell orders. The recorded inventory, fees,
-and P&L values are whatever current PHP produces; no risk behaviour is changed
-for these fixtures.
-
-## Regenerate
-
-Run inside the Compose `app` service with the README testing environment. The
-harness writes a temporary file and renames it over the target, so only the
-fixture directory (not the existing files) must be writable by `www-data`.
-On a fresh checkout, make that directory writable once:
-
-```bash
-mkdir -p tests/golden/engine
-chmod 0777 tests/golden/engine
-```
-
-Then capture:
-
-```bash
-docker compose exec -u www-data \
-  -e APP_ENV=testing -e DB_DATABASE=trading_bot_test \
-  -e CACHE_STORE=array -e QUEUE_CONNECTION=sync \
-  -e SESSION_DRIVER=array -e CONCURRENCY_DRIVER=sync \
-  -e GOLDEN_CAPTURE=1 \
-  app php artisan test --filter=GoldenEngineFixturesTest
-```
-
-Then confirm a second run is stable:
-
-```bash
-docker compose exec -u www-data \
-  -e APP_ENV=testing -e DB_DATABASE=trading_bot_test \
-  -e CACHE_STORE=array -e QUEUE_CONNECTION=sync \
-  -e SESSION_DRIVER=array -e CONCURRENCY_DRIVER=sync \
-  -e GOLDEN_CAPTURE=1 \
-  app php artisan test --filter=GoldenEngineFixturesTest
-
-git diff --exit-code -- tests/golden/engine
-```
-
-The risk fixtures use the same command with the risk filter:
-
-```bash
-docker compose exec -u www-data \
-  -e APP_ENV=testing -e DB_DATABASE=trading_bot_test \
-  -e CACHE_STORE=array -e QUEUE_CONNECTION=sync \
-  -e SESSION_DRIVER=array -e CONCURRENCY_DRIVER=sync \
-  -e GOLDEN_CAPTURE=1 \
-  app php artisan test --filter=GoldenRiskFixturesTest
-
-git diff --exit-code -- tests/golden/engine/risk.json
-```
-
-`GOLDEN_CAPTURE=1` rewrites `risk.json` but only creates
-`credentials_ciphertext.json` when it is missing, so the committed ciphertext
-stays stable. To intentionally regenerate the credential stub, delete it and
-rerun with `GOLDEN_CAPTURE=1` (or use `GOLDEN_CAPTURE_CIPHERTEXT=1`).
-Without `GOLDEN_CAPTURE=1` the tests only verify the committed files.
+The capture fixed the clock at `2026-11-23T00:00:00+00:00`, fee rate `0.001`,
+decimal scale 16, and no wall-clock durations. Backtest `duration_ms` is
+normalized to `0`; sweep bot IDs are normalized to `0`. Database IDs, random
+IDs, and tick durations are not recorded. The credential stub uses a hardcoded
+test-only key and is never generated from `.env` or `APP_KEY`.
 
 ## Safety
 
-These fixtures are paper-only. The harness uses `FakeExchangeClient` and
-`PaperExchangeClient`, never the live exchange client, credentials, signed
-endpoints, or `TRADING_LIVE_ENABLED=true`. It does not read or change `.env`.
+Fixtures contain no secrets. They must not be used to configure a live bot or
+to infer exchange credentials. The live gate remains independent of fixture
+contents.

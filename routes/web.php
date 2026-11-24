@@ -10,9 +10,16 @@ use App\Http\Controllers\ExchangeCredentialController;
 use App\Http\Controllers\KillSwitchController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RiskLimitController;
+use App\Services\Engine\EngineHeartbeat;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+
+Route::get('/health/engine', function (EngineHeartbeat $heartbeat) {
+    $status = $heartbeat->status();
+
+    return response()->json($status, $status['available'] ? 200 : 503);
+})->name('health.engine');
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -33,6 +40,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('bots/{bot}/start', [BotController::class, 'start'])->name('bots.start')->middleware('throttle:bot-control');
     Route::post('bots/{bot}/pause', [BotController::class, 'pause'])->name('bots.pause')->middleware('throttle:bot-control');
     Route::post('bots/{bot}/stop', [BotController::class, 'stop'])->name('bots.stop')->middleware('throttle:bot-control');
+    Route::post('bots/{bot}/orders/{order}/cancel', [BotController::class, 'cancelOrder'])->name('bots.orders.cancel')->middleware('throttle:bot-control');
     Route::get('bots/{bot}/activity', [BotController::class, 'activity'])->name('bots.activity');
     Route::get('bots/{bot}/edit', [BotController::class, 'edit'])->name('bots.edit')->middleware('throttle:bot-control');
     Route::patch('bots/{bot}', [BotController::class, 'update'])->name('bots.update')->middleware('throttle:bot-control');

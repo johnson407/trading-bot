@@ -125,7 +125,7 @@ services:
     image: trading-bot-app
     restart: unless-stopped
     working_dir: /var/www/html
-    command: ["sh", "-c", "php artisan bots:reconcile || true; exec php artisan schedule:work"]
+    command: ["php", "artisan", "schedule:work"]
     volumes:
       - ./:/var/www/html
     environment:

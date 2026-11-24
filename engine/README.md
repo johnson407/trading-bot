@@ -1,19 +1,21 @@
 # Trading engine (Go)
 
 This directory is the Go trading engine for the hybrid layout described in
-`openspec/changes/adopt-hybrid-go-engine/`. **Phase 5 adds the blocking risk
-gates and in-memory credential decryption as libraries; there are still:**
+`openspec/changes/adopt-hybrid-go-engine/`. **Phase 8 wires the bot runtime:
+control commands, due-check ticks, grids, paper fills, risk/exit guards, and
+backtests run here. Live exchange execution is deliberately not implemented:**
 
-- no order placement and no runtime wiring of the risk gates;
+- paper orders and fills are simulated and persisted by the engine;
 - no private, signed, or user-data exchange calls and no API keys;
-- **no exchange connection by default** — the Compose service sets no market
-  data endpoints, so the feed stays idle;
-- **no runtime wiring**: the Go tick scheduler and grid sync are libraries only,
-  not started by `main`.
+- a live bot start is paused with a clear `last_error`; Laravel keeps the live
+  gate and the emergency `CancelBotOrders` path;
+- **public market data is enabled** — the runtime polls Binance's public REST
+  ticker for paper ticks and backtest backfill by default; no private endpoints
+  or credentials are used.
 
-Laravel remains the only trading runtime until the later apply phases land. The
-phase-2 command processor rejects commands it receives (`handler_not_available`)
-and never applies a trading effect.
+The command processor handles `bot.start`, `bot.pause`, `bot.stop`,
+`bot.config`, `order.cancel`, `kill_switch`, `backtest.run`, and
+`backtest.sweep`.
 
 The full protocol, ordering, dead-letter, kill-switch, heartbeat, and status
 ownership contract is documented in [`../docs/engine.md`](../docs/engine.md).
@@ -34,9 +36,9 @@ On start the process:
 
 1. writes `engine:heartbeat` (JSON `ts`, `revision`, `running_bots`) and
    refreshes it every five seconds with a ten-second TTL;
-2. ensures the `engine.commands` consumer group, auto-claims pending entries
-   idle for at least 30 seconds, and consumes the stream with at-least-once
-   delivery;
+2. ensures the `engine.commands` and `engine.backtests` consumer groups,
+   auto-claims pending entries idle for at least 30 seconds, and consumes each
+   stream with at-least-once delivery;
 3. stores `engine:cmd:{id}` after durable effects (or a definitive rejection)
    and only then sends `XACK`;
 4. dead-letters an entry to `engine.commands.dlq` after five failed attempts and
@@ -162,8 +164,55 @@ committed stub ciphertext fixture, not `Crypt::encrypt()` and not an
 environment value.
 
 All risk and credential packages are proven against `risk.json` and
-`credentials_ciphertext.json`. They are not wired into the Compose tick or
-order dispatch, and `/healthz` is unchanged.
+`credentials_ciphertext.json`. The runtime uses the risk package for daily-loss
+and protective exits; paper order placement also applies its own open-order
+inventory and position reservations. Live order dispatch remains disabled.
+
+### Backtest replay (phase 6.1–6.4)
+
+`internal/backtest` ports the PHP replay engine and runs it from the dedicated
+backtest consumer:
+
+- Laravel creates the queued `backtest_runs` / `backtest_sweeps` rows and
+  publishes `backtest.run` / `backtest.sweep`; the engine never creates sweep
+  rows or the strategy snapshot. `PlanSweep` exists only as the parity helper
+  used by the committed sweep golden fixture; production sweeps execute the
+  runs Laravel already inserted.
+- A run is claimed with `pending → running` in one atomic update. A duplicate
+  command for an already running or finished run is ignored.
+- The replay has a hard `BACKTEST_JOB_TIMEOUT` deadline. Exceeding it fails the
+  run with the stale-worker message, matching the PHP job timeout followed by
+  `backtests:fail-stale`. A panic in replay is recovered and recorded as a
+  failed run rather than crashing the engine.
+- Candles are read from the engine-owned `market_candles` cache, restricted to
+  timestamps aligned to the timeframe. A missing candle inside the range fails
+  the run with `Historical data gap at <time> (<n> candle missing).` (or
+  `candles`); an empty range fails with `No historical data available.` If the
+  cache is empty or the range is incomplete, the engine fetches the public
+  kline range, stores it in `market_candles`, and retries the read.
+- Replay is deterministic and side-effect free: initialization, tick, fill,
+  cancel, and stop are reported to the same strategy ports used by live
+  execution, and no bot, order, fill, risk, or activity row is written outside
+  `backtest_runs`, `backtest_fills`, and `market_candles` reads.
+- A successful run writes `completed`, metrics, the downsampled equity curve,
+  and `backtest_fills` in one transaction. A failed run keeps a trimmed,
+  500-character non-secret error.
+- A sweep command executes the sweep's runs in creation order. Runs stay
+  `pending` until each is claimed, so a sweep can wait on its stream without
+  ageing out.
+- Backtest commands are consumed from a dedicated `engine.backtests` stream and
+  consumer group, so a long replay cannot delay bot, order, or kill-switch
+  commands on `engine.commands`.
+- A stale sweeper runs every five minutes. It fails `running` runs whose last
+  update is older than `BACKTEST_JOB_TIMEOUT + 60s` with
+  `The backtest worker stopped before the run finished.` Pending runs are
+  protected while they wait in the Redis PEL; only a pending run older than 24
+  hours is failed as an orphan. Laravel no longer schedules
+  `backtests:fail-stale`.
+
+The 14 committed replay cases and two sweep cases in
+`../tests/golden/engine/backtest_*.json` are asserted by `make test`, including
+errors, fees, risk/exit-guard replay, and final strategy state.
 
 ## Configuration
 
@@ -188,6 +237,10 @@ All values come from the environment, mirroring the `app` service:
 | `ENGINE_MARKET_DATA_REST_POLL_INTERVAL` | `5s` | REST ticker period while the socket is unavailable |
 | `ENGINE_MARKET_DATA_RECONNECT_MIN` / `_MAX` | `500ms` / `30s` | Exponential reconnect backoff bounds |
 | `ENGINE_MARKET_DATA_REQUEST_TIMEOUT` | `10s` | Dial and HTTP request timeout |
+| `BACKTEST_JOB_TIMEOUT` | `600s` | Hard per-run replay deadline and stale cutoff base; stale failures start after timeout + 60s |
+| `BACKTEST_MAX_FILLS` | `25000` | Maximum fills before a run fails, mirroring `config/backtest.php` |
+| `BACKTEST_EQUITY_POINTS` | `1000` | Maximum persisted equity points, mirroring `config/backtest.php` |
+| `BACKTEST_PROGRESS_INTERVAL` | `500` | Candles between progress writes, mirroring `config/backtest.php` |
 
 Both market-data URLs must be set together; setting only one is a startup
 error. Leaving both empty is the default and keeps `marketdata.Run` idle, so
@@ -217,6 +270,7 @@ engine/
   internal/strategy/          pure simple/dynamic/martingale/trailing strategy ports
   internal/risk/              live gate, risk/loss/exit/failure gates, exchange allowlist
   internal/credentials/       AES-256-CBC Crypt::encryptString-compatible decryption
+  internal/backtest/          deterministic replay, sweep plans, Postgres runner, stale failer
   internal/goldenfixture/     locates tests/golden/engine for parity tests
   internal/health/            /healthz and /livez handlers
   internal/healthcheck/       in-container Compose probe
@@ -279,6 +333,50 @@ tick-time cross-and-recross for both sides, and every simple-grid,
 dynamic-grid, martingale-grid, and trailing-grid strategy case (including the
 exact decimal state, levels, order intents, cancels, cap events, trailing
 recenters, and validation errors).
+
+The backtest parity tests read `backtest_replay.json` and `backtest_sweep.json`.
+They compare all 14 replay cases (metrics, fills, equity curve, final state,
+fees, risk/exit-guard behavior) and both sweep cases semantically through the
+fixture decoder, plus the exact no-candle, max-fill, gap, and stale-run
+messages. `TestStoreExecuteRunIntegration` is opt-in and exercises the real
+PostgreSQL claim/read/write path:
+
+```bash
+REPO_ROOT=$(git rev-parse --show-toplevel)
+BACKTEST_TEST_DSN='postgres://user:pass@host:5432/trading_bot_test?sslmode=disable' \
+  docker run --rm --network <compose-network> -v "$REPO_ROOT:/src" -w /src/engine \
+  -e BACKTEST_TEST_DSN -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod \
+  golang:1.24-alpine go test ./internal/backtest -run TestStoreExecuteRunIntegration
+```
+
+The runtime control/tick path has its own opt-in PostgreSQL test:
+
+```bash
+REPO_ROOT=$(git rev-parse --show-toplevel)
+RUNTIME_TEST_DSN='postgres://user:pass@host:5432/trading_bot_test?sslmode=disable' \
+  docker run --rm --network <compose-network> -v "$REPO_ROOT:/src" -w /src/engine \
+  -e RUNTIME_TEST_DSN -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod \
+  golang:1.24-alpine go test ./internal/runtime -run TestRuntimeControlAndTickIntegration
+```
+
+It covers start, due tick, grid/order persistence, paper fills, single-order
+cancel, stop, restart, and kill switch.
+
+The default `make test` gate has no PostgreSQL service, so the DB runner,
+stale-run, candle-backfill, and runtime paths are covered by those opt-in tests.
+CI still needs a database service before those tests can become a merge gate.
+
+## Current limitations
+
+- Live execution is intentionally disabled. Starting a live bot pauses it with
+  a clear error; Laravel's live gate and emergency `CancelBotOrders` path remain.
+- Public market data and candle backfill support Binance only. Starting a bot on
+  another exchange pauses it instead of retrying every tick forever.
+- Live order placement, exchange order reconciliation, and live balance sync
+  are not implemented. Single live-order cancellation stays on Laravel's
+  retained exchange path.
+- The runtime owns paper orders and fills. It does not write Laravel's user
+  acknowledgement activity types.
 
 ## Docker
 

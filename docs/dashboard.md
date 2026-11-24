@@ -15,6 +15,9 @@ redirects, owner access, and cross-user denial.
 
 Shows bot counts by state, aggregate realized and unrealized P&L, the account
 equity history, and the ten most recent activity rows for the signed-in owner.
+It also shows a warning when the Go engine heartbeat is missing or expired. The
+warning is informational only: it never pauses bots, cancels orders, or activates
+the kill-switch, and it refreshes with the same five-second partial reload.
 
 The equity section accepts `?range=7`, `?range=30`, or `?range=90`; an omitted or
 unknown range falls back to the configured 30-day default. It renders the selected
@@ -85,6 +88,10 @@ unrealized P&L is the bot's stored mark (latest tick), otherwise the average ent
 price — the same source the bot list and dashboard use. The page polls every five seconds for
 `bot, grid, openOrders, recentFills, inventory, pnl`; a new fill appears on the
 next poll.
+
+Open orders have a **Cancel** action (`bots.orders.cancel`). It publishes
+`order.cancel` to the engine and leaves the order row unchanged until the engine
+confirms the cancellation.
 
 Feature test: `tests/Feature/BotDetailTest.php`.
 

@@ -22,7 +22,7 @@ The system SHALL support multiple exchanges through one connectivity boundary, S
 
 ### Requirement: Market data access
 
-The system SHALL provide current price, order book or ticker data, and trading-rule information for the selected exchange and symbol through a normalized interface. Market data SHALL be retrievable without private credentials.
+The engine SHALL provide current price, ticker or book-ticker data, and trading-rule information for the selected exchange and symbol through a normalized interface. Public market data SHALL be retrievable without private credentials. For Binance trading data the engine SHALL use a WebSocket feed with reconnect, gap recovery via a REST snapshot, and REST fallback when the socket cannot be established, recorded without secrets.
 
 #### Scenario: Fetch market price
 
@@ -33,6 +33,21 @@ The system SHALL provide current price, order book or ticker data, and trading-r
 
 - **WHEN** a bot prepares an order
 - **THEN** the system can read the symbol's minimum quantity, price precision, and minimum notional from the exchange
+
+#### Scenario: WebSocket reconnects
+
+- **WHEN** the Binance market WebSocket disconnects while bots are running
+- **THEN** the engine reconnects with backoff and resumes a normalized price feed
+
+#### Scenario: Gap is recovered from REST
+
+- **WHEN** the engine detects a gap or unexpected quiet period on the WebSocket
+- **THEN** it takes a REST ticker snapshot, resubscribes, and continues without requiring private credentials
+
+#### Scenario: REST fallback when the socket cannot connect
+
+- **WHEN** the WebSocket cannot be established
+- **THEN** the engine uses periodic REST tickers and records the degraded state without secrets
 
 ### Requirement: Paper trading is the default
 
@@ -50,7 +65,7 @@ New bots SHALL run in paper mode unless the user explicitly enables live mode. P
 
 ### Requirement: Paper fill simulation
 
-Paper mode SHALL simulate a limit order fill when the market price reaches or crosses the order price. Simulated fills SHALL be recorded and processed through the same order and inventory behavior as live fills. Paper fills SHALL be evaluated from the market last observed when a tick runs, so a price that crosses and recrosses between ticks is not guaranteed to fill.
+Paper mode SHALL simulate a limit order fill when the market price reaches or crosses the order price. Simulated fills SHALL be recorded and processed through the same order and inventory behavior as live fills. Paper fills SHALL be evaluated from the market last observed when a tick runs, matching `PaperExchangeClient::qualifyingFills`. A price that crosses and recrosses between ticks is not guaranteed to fill.
 
 #### Scenario: Simulate a buy fill
 
@@ -83,7 +98,7 @@ In live mode the system SHALL place and cancel limit orders through the selected
 
 ### Requirement: Credential protection
 
-Exchange credentials SHALL be encrypted at rest, SHALL never be included in logs or rendered back to the user after saving, and SHALL be supplied to the exchange client only at runtime.
+Exchange credentials SHALL be encrypted at rest by Laravel using the Eloquent `encrypted` cast (`Crypt::encryptString`: AES-256-CBC, HMAC-SHA256, JSON `iv`, `value`, `mac`, `tag`, base64; values are not PHP-serialized). The engine SHALL decrypt in memory with `APP_KEY` (optional `base64:` prefix) and `previous_keys` as Laravel does, SHALL NOT persist a decrypted copy, and SHALL NOT log `APP_KEY`, API keys, secrets, or signatures.
 
 #### Scenario: Store credentials
 
@@ -94,6 +109,16 @@ Exchange credentials SHALL be encrypted at rest, SHALL never be included in logs
 
 - **WHEN** the system logs an exchange request or error
 - **THEN** API keys, secrets, and signatures are redacted
+
+#### Scenario: Engine decrypts only in memory
+
+- **WHEN** a live bot needs a private exchange client
+- **THEN** the engine decrypts the stored payload in memory and does not write the secret to disk, events, or logs
+
+#### Scenario: Decrypt matches Laravel encryptString
+
+- **WHEN** the engine decrypts a stub value produced by Laravel `Crypt::encryptString`
+- **THEN** it recovers the original plaintext and does not require PHP serialized payload wrapping
 
 ### Requirement: Rate limiting and normalized errors
 
@@ -181,7 +206,7 @@ Paper-mode market data SHALL be fetched from the bot's selected exchange using p
 
 ### Requirement: Historical market data access
 
-The system SHALL retrieve historical OHLCV candles for a supported symbol, timeframe, and time range through public exchange endpoints without credentials. Retrieval SHALL honor exchange rate limits, SHALL normalize exchange failures into the existing error set, and SHALL return candles in ascending open time.
+The engine SHALL retrieve historical OHLCV candles for a supported symbol, timeframe, and time range through public exchange endpoints without credentials. Retrieval SHALL honor exchange rate limits, SHALL normalize exchange failures into the existing error set, and SHALL return candles in ascending open time.
 
 #### Scenario: Fetch candles without credentials
 

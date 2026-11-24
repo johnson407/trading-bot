@@ -152,6 +152,12 @@ class BacktestSweepController extends Controller
             ]);
         }
 
+        if ($sweep->runs()->where('status', BacktestStatus::Failed->value)->exists()) {
+            return redirect()
+                ->route('backtest-sweeps.show', $sweep)
+                ->withErrors(['backtest' => 'The backtest job could not be queued.']);
+        }
+
         return redirect()
             ->route('backtest-sweeps.show', $sweep)
             ->with('status', 'Sweep queued. Each combination is running as a backtest.');

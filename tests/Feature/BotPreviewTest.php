@@ -1,8 +1,5 @@
 <?php
 
-use App\Actions\StartBot;
-use App\Domain\Bot\BotTickPipeline;
-use App\Domain\Support\Decimal;
 use App\Models\Bot;
 use App\Models\Grid;
 use App\Models\Order;
@@ -123,69 +120,6 @@ it('derives concrete values from a quick-setup preset', function () {
         ->assertJsonPath('values.order_quantity', '0.0026666666666667')
         ->assertJsonPath('plan.order_count', 12)
         ->assertJsonPath('plan.errors', []);
-});
-
-it('saves the grid that the preview described', function () {
-    $user = User::factory()->create();
-    fakeMarket();
-
-    $payload = previewPayload([
-        'level_count' => 4,
-        'order_quantity' => '0.002',
-    ]);
-
-    $response = $this->actingAs($user)
-        ->postJson(route('bots.preview'), $payload)
-        ->assertOk();
-
-    $preview = $response->json('plan');
-    $warnings = $response->json('warnings');
-
-    expect(array_column($warnings, 'code'))->toContain('plan.unfunded_sells');
-
-    $this->actingAs($user)
-        ->post(route('bots.store'), $payload + ['name' => 'Preview agreement'])
-        ->assertRedirect();
-
-    $bot = Bot::query()->firstOrFail();
-    app(StartBot::class)->handle($bot->fresh());
-    app(BotTickPipeline::class)->tick($bot->fresh());
-
-    $grid = $bot->fresh()->activeGrid;
-    $levels = $grid->levels->sortBy('sequence')->values();
-    $orders = Order::query()->where('bot_id', $bot->id)->get();
-    $ordersBySequence = $orders->keyBy(
-        fn (Order $order) => $grid->levels->firstWhere('id', $order->grid_level_id)?->sequence,
-    );
-
-    $placedLevels = array_values(array_filter(
-        $preview['levels'],
-        fn (array $level) => $level['side'] === 'buy',
-    ));
-
-    expect($levels)->toHaveCount(count($preview['levels']))
-        ->and($orders)->toHaveCount(count($placedLevels));
-
-    $buyNotional = Decimal::zero();
-
-    foreach ($preview['levels'] as $level) {
-        $order = $ordersBySequence[$level['sequence']] ?? null;
-
-        if ($level['side'] === 'sell') {
-            expect($order)->toBeNull();
-
-            continue;
-        }
-
-        expect($order)->not->toBeNull()
-            ->and($order->side->value)->toBe($level['side'])
-            ->and(Decimal::of($order->price)->equals($level['price']))->toBeTrue()
-            ->and(Decimal::of($order->quantity)->equals($level['quantity']))->toBeTrue();
-
-        $buyNotional = $buyNotional->add(Decimal::of($level['notional']));
-    }
-
-    expect($buyNotional->equals($preview['buy_notional']))->toBeTrue();
 });
 
 it('throttles preview requests', function () {

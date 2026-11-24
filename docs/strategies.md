@@ -4,6 +4,12 @@ The bot engine is strategy-agnostic. A strategy decides what grid to build and w
 request; the engine owns persistence, exchange calls, risk checks, and order/fill bookkeeping.
 Strategies never read the database and never call an exchange.
 
+In the hybrid runtime the executing strategies live in
+`engine/internal/strategy`. The PHP classes under `app/Strategies` remain only
+for the Laravel create/edit ladder preview (`POST /bots/preview`) and are not the
+tick runtime. Changes to a built-in rule must be made in both places until the
+preview is served from the engine; the Go fixture suite is the runtime authority.
+
 For the full list of bot fields, their validation rules, and their runtime effects, see
 [Bot parameters](bot-parameters.md).
 
@@ -37,6 +43,11 @@ interface StrategyInterface
 to place, an optional `stop` flag, domain `events`, and `cancelClientOrderIds`.
 
 ## Registration
+
+The PHP preview strategies are registered in `AppServiceProvider` for
+`StrategyRegistry` and the preview evaluator. A new runtime strategy must also be
+added to the Go engine's strategy factory and fixture tests; the PHP registration
+alone does not make it tradable.
 
 Register a strategy with the `StrategyRegistry` singleton, normally in
 `AppServiceProvider::boot()`:
@@ -142,8 +153,10 @@ class DocumentedCustomStrategy implements StrategyInterface
 }
 ```
 
-Register it and select `documented-custom` when creating a bot. The test suite resolves the same
-class through `StrategyRegistry`, so the documented example is verified against the live contract.
+Register it and select `documented-custom` when creating a bot for a preview, and
+add the equivalent Go implementation before relying on it at runtime. The test
+suite resolves the same class through `StrategyRegistry`, so the documented
+example is verified against the preview contract.
 
 
 ## Market history

@@ -1,19 +1,14 @@
 <?php
 
-use App\Domain\Backtest\Engine\BacktestEngine;
-use App\Domain\Backtest\ValueObjects\Candle;
-use App\Jobs\RunBacktest;
 use App\Models\BacktestRun;
 use App\Models\BacktestSweep;
 use App\Models\Bot;
 use App\Models\StrategyConfig;
 use App\Models\User;
-use App\Services\Backtest\CandleStore;
+use App\Services\Engine\CommandPublisher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
-use Tests\Support\FakeCandleProvider;
 
 uses(RefreshDatabase::class);
 
@@ -64,7 +59,27 @@ it('creates a sweep from the dashboard and redirects to its detail page', functi
         ->and($sweep->runs()->count())->toBe(8)
         ->and($sweep->runs()->where('user_id', $user->id)->count())->toBe(8);
 
-    Queue::assertPushed(RunBacktest::class, 8);
+    $published = app(CommandPublisher::class)->ofType('backtest.sweep');
+    expect($published)->toHaveCount(1)
+        ->and($published[0]['payload']['backtest_sweep_id'])->toBe($sweep->id);
+});
+
+it('reports a sweep publish failure instead of claiming it was queued', function () {
+    $user = User::factory()->create();
+    $bot = sweepDashboardBot($user);
+    app(CommandPublisher::class)->fail = true;
+
+    $response = $this->actingAs($user)->post(
+        route('backtest-sweeps.store'),
+        sweepDashboardPayload($bot),
+    );
+
+    $sweep = BacktestSweep::query()->firstOrFail();
+
+    $response->assertRedirect(route('backtest-sweeps.show', $sweep))
+        ->assertSessionHasErrors('backtest');
+
+    expect($sweep->runs()->where('status', 'failed')->count())->toBe(8);
 });
 
 it('rejects invalid or foreign sweep requests without creating rows', function () {
@@ -88,7 +103,7 @@ it('rejects invalid or foreign sweep requests without creating rows', function (
     expect(BacktestSweep::query()->count())->toBe(0)
         ->and(BacktestRun::query()->count())->toBe(0);
 
-    Queue::assertNothingPushed();
+    expect(app(CommandPublisher::class)->ofType('backtest.sweep'))->toHaveCount(0);
 });
 
 it('lists only the owner sweeps newest first with derived counts and status', function () {
@@ -440,83 +455,4 @@ it('redirects guests away from every sweep route', function () {
     $this->get(route('backtest-sweeps.create'))->assertRedirect(route('login'));
     $this->get(route('backtest-sweeps.show', $sweep))->assertRedirect(route('login'));
     $this->post(route('backtest-sweeps.store'), [])->assertRedirect(route('login'));
-});
-
-it('runs a sweep end to end through completed and failed outcomes', function () {
-    Queue::fake();
-    $user = User::factory()->create();
-    $bot = sweepDashboardBot($user);
-
-    $this->actingAs($user)->post(route('backtest-sweeps.store'), sweepDashboardPayload($bot, [
-        'timeframe' => '4h',
-        'center_prices' => ['50000', '51000'],
-        'spacing_values' => ['100', '200'],
-        'level_counts' => [4],
-    ]))->assertRedirect();
-
-    $sweep = BacktestSweep::query()->firstOrFail();
-    $runs = $sweep->runs()->orderBy('id')->get();
-
-    expect($runs)->toHaveCount(4);
-
-    $start = $runs->first()->start_at->toDateTimeImmutable();
-    $candles = [];
-
-    foreach (range(0, 5) as $index) {
-        $close = $index % 2 === 0 ? '49000' : '51000';
-        $candles[] = Candle::make(
-            $start->modify('+'.($index * 4).' hours'),
-            $close,
-            $close,
-            $close,
-            $close,
-            '1',
-        );
-    }
-
-    $engine = app(BacktestEngine::class);
-
-    foreach ($runs->take(3) as $run) {
-        (new RunBacktest($run->id))->handle(
-            new CandleStore(new FakeCandleProvider($candles)),
-            $engine,
-        );
-    }
-
-    DB::table('market_candles')->delete();
-
-    (new RunBacktest($runs->last()->id))->handle(
-        new CandleStore(new FakeCandleProvider),
-        $engine,
-    );
-
-    expect($sweep->runs()->where('status', 'completed')->count())->toBe(3)
-        ->and($sweep->runs()->where('status', 'failed')->count())->toBe(1);
-
-    $response = $this->actingAs($user)
-        ->get(route('backtest-sweeps.show', $sweep))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('Backtests/Sweeps/Show')
-            ->where('sweep.status', 'failed')
-            ->where('sweep.completed_runs_count', 3)
-            ->where('sweep.failed_runs_count', 1)
-            ->where('sweep.active_runs_count', 0)
-            ->has('runs', 4)
-            ->where('active', false)
-            ->etc()
-        );
-
-    $compareUrl = $response->viewData('page')['props']['compareUrl'];
-
-    expect($compareUrl)->toBeString();
-
-    $this->actingAs($user)
-        ->get($compareUrl)
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('Backtests/Compare')
-            ->has('runs', 3)
-            ->etc()
-        );
 });

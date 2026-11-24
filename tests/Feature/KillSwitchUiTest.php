@@ -3,6 +3,7 @@
 use App\Models\Bot;
 use App\Models\Order;
 use App\Models\User;
+use App\Services\Engine\EngineHeartbeat;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -34,7 +35,7 @@ it('requires the exact kill-switch phrase', function () {
     expect($bot->fresh()->status->value)->toBe('running');
 });
 
-it('pauses every bot and cancels open orders when confirmed', function () {
+it('pauses every bot and queues the engine kill-switch when confirmed', function () {
     $user = User::factory()->create();
     $first = Bot::factory()->for($user)->running()->create();
     $second = Bot::factory()->for($user)->running()->create();
@@ -43,7 +44,22 @@ it('pauses every bot and cancels open orders when confirmed', function () {
     $this->actingAs($user)->post(route('kill-switch.store'), ['confirmation' => 'KILL SWITCH'])
         ->assertRedirect(route('dashboard'));
 
-    expect($first->fresh()->status->value)->toBe('paused')
-        ->and($second->fresh()->status->value)->toBe('paused')
+    expect($first->fresh()->desired_status->value)->toBe('paused')
+        ->and($second->fresh()->desired_status->value)->toBe('paused')
+        ->and($first->fresh()->status->value)->toBe('running')
+        ->and($order->fresh()->status->value)->toBe('open');
+});
+
+it('cancels live orders when the engine heartbeat is unavailable', function () {
+    app(EngineHeartbeat::class)->available = false;
+
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->live()->running()->create();
+    $order = Order::factory()->for($bot)->create(['status' => 'open']);
+
+    $this->actingAs($user)->post(route('kill-switch.store'), ['confirmation' => 'KILL SWITCH'])
+        ->assertRedirect(route('dashboard'));
+
+    expect($bot->fresh()->desired_status->value)->toBe('paused')
         ->and($order->fresh()->status->value)->toBe('canceled');
 });

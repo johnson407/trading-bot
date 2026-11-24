@@ -77,14 +77,18 @@ func (m MarketData) Configured() bool {
 
 // Config is the full engine configuration.
 type Config struct {
-	Addr                   string
-	AppEnv                 string
-	Database               Database
-	Redis                  Redis
-	LiveTrading            bool
-	TradingExchanges       []string
-	TradingDefaultExchange string
-	MarketData             MarketData
+	Addr                     string
+	AppEnv                   string
+	Database                 Database
+	Redis                    Redis
+	LiveTrading              bool
+	TradingExchanges         []string
+	TradingDefaultExchange   string
+	MarketData               MarketData
+	BacktestJobTimeout       time.Duration
+	BacktestMaxFills         int
+	BacktestEquityPoints     int
+	BacktestProgressInterval int
 }
 
 // Load reads configuration from the supplied environment lookup (usually
@@ -158,6 +162,23 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	if cfg.BacktestJobTimeout, err = parseDuration("BACKTEST_JOB_TIMEOUT", getenv("BACKTEST_JOB_TIMEOUT"), 600*time.Second); err != nil {
+		return Config{}, err
+	}
+	if cfg.BacktestJobTimeout <= 0 {
+		return Config{}, fmt.Errorf("BACKTEST_JOB_TIMEOUT must be a positive duration")
+	}
+
+	if cfg.BacktestMaxFills, err = parsePositiveInt("BACKTEST_MAX_FILLS", envOr(getenv, "BACKTEST_MAX_FILLS", "25000")); err != nil {
+		return Config{}, err
+	}
+	if cfg.BacktestEquityPoints, err = parsePositiveInt("BACKTEST_EQUITY_POINTS", envOr(getenv, "BACKTEST_EQUITY_POINTS", "1000")); err != nil {
+		return Config{}, err
+	}
+	if cfg.BacktestProgressInterval, err = parsePositiveInt("BACKTEST_PROGRESS_INTERVAL", envOr(getenv, "BACKTEST_PROGRESS_INTERVAL", "500")); err != nil {
+		return Config{}, err
+	}
+
 	if err := validateEndpoint("ENGINE_MARKET_DATA_WS_URL", cfg.MarketData.WSURL, "ws", "wss"); err != nil {
 		return Config{}, err
 	}
@@ -198,6 +219,15 @@ func parseNonNegativeInt(key, value string) (int, error) {
 	number, err := strconv.Atoi(value)
 	if err != nil || number < 0 {
 		return 0, fmt.Errorf("%s %q must be a non-negative integer", key, value)
+	}
+
+	return number, nil
+}
+
+func parsePositiveInt(key, value string) (int, error) {
+	number, err := strconv.Atoi(value)
+	if err != nil || number < 1 {
+		return 0, fmt.Errorf("%s %q must be a positive integer", key, value)
 	}
 
 	return number, nil

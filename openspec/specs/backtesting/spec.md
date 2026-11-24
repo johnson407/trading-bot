@@ -8,7 +8,7 @@ Lets a user replay an existing bot's strategy against historical candles, review
 
 ### Requirement: Backtest from an existing bot
 
-The system SHALL let a user start a backtest from a bot they own and SHALL snapshot the bot, strategy, effective risk limits, protective exit rules, and period at creation. The snapshot SHALL be immutable, and a run SHALL remain readable after the source bot is deleted.
+The system SHALL let a user start a backtest from a bot they own and SHALL snapshot the bot, strategy, effective risk limits, protective exit rules, and period at creation. Laravel SHALL store the immutable snapshot, insert a queued run, and publish a `backtest.run` command. The snapshot SHALL remain readable after the source bot is deleted. The Go engine SHALL execute the queued run.
 
 #### Scenario: Create a run from an owned bot
 
@@ -61,7 +61,7 @@ The system SHALL retrieve historical OHLCV for the run's exchange, symbol, timef
 
 ### Requirement: Deterministic strategy replay
 
-The system SHALL replay the snapshotted strategy through the same lifecycle used for live execution — initialization, tick, fill, cancel, and stop — in a side-effect-free simulation that does not write bot, order, fill, risk, or activity records.
+The Go engine SHALL replay the snapshotted strategy through the same lifecycle used for live execution — initialization, tick, fill, cancel, and stop — in a side-effect-free simulation that does not write bot, order, fill, risk, or activity records. Laravel SHALL NOT replay strategies after cutover.
 
 #### Scenario: Strategy lifecycle is honored
 
@@ -203,7 +203,7 @@ The system SHALL record a run outcome of range end, risk pause, strategy stop, s
 
 ### Requirement: Run lifecycle and failure reporting
 
-The system SHALL expose pending, running, completed, and failed run states, SHALL record progress while running, SHALL prevent a duplicate job from executing the same run twice, and SHALL report a failed run with a concise non-secret error.
+The system SHALL expose pending, running, completed, and failed run states, record progress, and ignore a duplicate command for the same run. A failed run SHALL have a concise non-secret error. The engine SHALL write status, metrics, and fills, and SHALL fail a run whose worker disappears or exceeds the timeout. Laravel SHALL display results and SHALL NOT schedule `backtests:fail-stale` after cutover.
 
 #### Scenario: Successful run transitions
 
@@ -212,7 +212,7 @@ The system SHALL expose pending, running, completed, and failed run states, SHAL
 
 #### Scenario: Duplicate job is ignored
 
-- **WHEN** a second job attempts to execute an already-running or completed run
+- **WHEN** a second command or job attempts to execute an already-running or completed run
 - **THEN** it does not process the run again
 
 #### Scenario: Run fails
@@ -220,9 +220,14 @@ The system SHALL expose pending, running, completed, and failed run states, SHAL
 - **WHEN** candle retrieval or simulation raises an error
 - **THEN** the run is marked failed with a concise message and the error is logged
 
+#### Scenario: Stale run is failed by the engine
+
+- **WHEN** a backtest run's worker disappears or exceeds the documented timeout
+- **THEN** the engine marks that run failed with a concise message
+
 ### Requirement: Backtest dashboard
 
-The system SHALL provide authenticated, owner-scoped pages to create, list, inspect, and delete backtest runs. Creation SHALL accept a bot, timeframe, and past date range, reject a range yielding more than 200,000 candles, and list and detail pages SHALL refresh while a run is active.
+The system SHALL provide authenticated, owner-scoped pages to create, list, inspect, and delete backtest runs. Creation SHALL accept a bot, timeframe, and past date range, reject a range yielding more than 200,000 candles, and list and detail pages SHALL refresh while a run is active. The dashboard SHALL submit runs to the engine and read results from Postgres; it SHALL NOT execute the replay in Laravel.
 
 #### Scenario: Create a run from the dashboard
 
@@ -268,17 +273,21 @@ The system SHALL display the close-only fill policy, flat starting state, capita
 - **THEN** the page states the fill policy, starting state, capital bound, precision simplification, and the limitation of the results
 
 ### Requirement: Parameter sweep creation
-The system SHALL create a parameter sweep that runs one backtest for every combination of selected center prices, spacing values, and level counts against one bot, timeframe, and date range. A sweep SHALL create between 2 and the configured maximum runs, SHALL reject duplicate or invalid values, and SHALL apply only those three parameters over each run's immutable configuration snapshot.
+
+The system SHALL create a parameter sweep that runs one backtest for every combination of selected center prices, spacing values, and level counts against one bot, timeframe, and date range. Laravel SHALL create the sweep and queued runs and publish a `backtest.sweep` command; the Go engine SHALL execute the runs. A sweep SHALL create between 2 and the configured maximum runs and SHALL apply only those three parameters over each run's snapshot.
 
 #### Scenario: Creates the cartesian product
+
 - **WHEN** an owner submits two center prices, two spacing values, and two level counts for one bot
 - **THEN** the system creates eight pending backtest runs grouped under one sweep
 
 #### Scenario: Overrides only swept fields
+
 - **WHEN** a sweep run is created from a bot whose strategy sets different values
 - **THEN** the run snapshot uses the swept center price, spacing value, and level count while preserving every other strategy, risk, exit, and period field
 
 #### Scenario: Rejects a set with one combination
+
 - **WHEN** an owner submits values that produce only one run
 - **THEN** the request is rejected without creating a sweep or any run
 

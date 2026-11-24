@@ -34,9 +34,10 @@ Each bot SHALL enforce a configured maximum position size and maximum number of 
 
 - **WHEN** two ticks attempt to sell against the same unreserved base inventory at the same time
 - **THEN** only one order is created and the other intent is deferred
+
 ### Requirement: Daily loss limit
 
-Each bot SHALL enforce a configured daily loss limit, and the account SHALL support a global daily loss limit. When realized plus unrealized loss for the current day reaches the applicable limit, the affected bot SHALL pause automatically, cancel its open orders, and record a risk event.
+Each bot SHALL enforce a configured daily loss limit, and the account SHALL support a global daily loss limit. Enforcement SHALL run in the Go engine when a tick is evaluated. When realized plus unrealized loss for the current day reaches the applicable limit, the engine SHALL pause the affected bot, cancel its open orders, and record a risk event. Laravel SHALL store the configured limits and SHALL NOT compute or apply daily-loss pauses after cutover.
 
 #### Scenario: Per-bot daily limit reached
 
@@ -57,9 +58,10 @@ Each bot SHALL enforce a configured daily loss limit, and the account SHALL supp
 
 - **WHEN** a bot has no explicit risk-limit override and the UTC day resets
 - **THEN** that bot stores its own daily-loss baseline in its settings without overwriting the account baseline
+
 ### Requirement: Kill-switch
 
-The system SHALL provide an account-wide kill-switch that cancels all open orders for all of the user's bots and pauses those bots. The kill-switch SHALL take effect without waiting for the next scheduled tick.
+The system SHALL provide an account-wide kill-switch that cancels the user's open orders and pauses those bots. Laravel SHALL write `desired_status` paused and publish `kill_switch`. The engine SHALL cancel without waiting for a tick and honor paused desired status at least once per second if the stream is down. If publish fails or the heartbeat is missing or expired, Laravel SHALL cancel live open orders in the same action via `CancelBotOrders` and SHALL NOT write `status` or `last_error`.
 
 #### Scenario: Activate the kill-switch
 
@@ -70,9 +72,20 @@ The system SHALL provide an account-wide kill-switch that cancels all open order
 
 - **WHEN** an open order cannot be canceled during a kill-switch
 - **THEN** the failure is recorded per bot and surfaced to the user without stopping the rest of the cancellation work
+
+#### Scenario: Kill-switch does not wait for a tick
+
+- **WHEN** a user activates the kill-switch in the middle of a bot's tick interval
+- **THEN** the engine begins cancellation immediately rather than waiting for the next tick
+
+#### Scenario: Kill-switch cancels live orders when the engine is unavailable
+
+- **WHEN** a user activates the kill-switch and the engine heartbeat is missing or expired, or publishing the command fails
+- **THEN** Laravel still marks the bots' desired status paused and, in the same action, cancels open orders on that user's live bots, recording per-order failures without stopping the rest of the work
+
 ### Requirement: Live-mode safeguards
 
-Live mode SHALL require an explicit confirmation that names the bot and the exchange. Before a live bot starts or places its first order, the system SHALL verify that the exchange reports sufficient balance for the configured capital allocation; insufficient balance SHALL prevent the start.
+Live mode SHALL require an explicit confirmation that names the bot and the exchange, enforced by Laravel before a command is published. Before a live bot starts or places its first order, the engine SHALL verify that `TRADING_LIVE_ENABLED` is true and that the exchange reports sufficient balance; a closed gate or shortfall SHALL prevent the start. A closed live gate SHALL pause a live bot and SHALL NOT run it as paper.
 
 #### Scenario: Confirm live mode
 
@@ -83,6 +96,12 @@ Live mode SHALL require an explicit confirmation that names the bot and the exch
 
 - **WHEN** a live bot is started but the exchange reports a balance below the configured capital allocation
 - **THEN** the bot does not start and the shortfall is reported
+
+#### Scenario: Closed live gate does not fall back to paper
+
+- **WHEN** a live bot is running or is started and `TRADING_LIVE_ENABLED` is false
+- **THEN** the engine does not place live orders and does not convert the bot to paper mode
+
 ### Requirement: Paper mode default
 
 The system SHALL default every new bot to paper mode and SHALL require an explicit user action to enable live trading. No automated process SHALL promote a bot from paper to live mode.
@@ -91,6 +110,7 @@ The system SHALL default every new bot to paper mode and SHALL require an explic
 
 - **WHEN** a paper bot meets its strategy conditions and runs successfully
 - **THEN** it remains in paper mode until a user explicitly changes its mode
+
 ### Requirement: Risk events
 
 Every limit breach, automatic pause, kill-switch action, and live-mode rejection SHALL be recorded as a risk event with the bot, the rule, the observed value, and the configured limit. Risk events SHALL be visible in the activity log. An expected inventory deferral SHALL NOT be recorded as a risk event.
@@ -104,6 +124,7 @@ Every limit breach, automatic pause, kill-switch action, and live-mode rejection
 
 - **WHEN** a sell is deferred because its base inventory is not yet available
 - **THEN** no risk event is recorded
+
 ### Requirement: Live confirmation names bot and exchange
 
 Creating or starting a live bot SHALL require an explicit confirmation phrase containing both the bot name and the exchange. The exact required phrase SHALL be `<bot name> on <exchange>`. The system SHALL reject a missing or mismatched phrase at creation and at start.
@@ -127,6 +148,7 @@ Creating or starting a live bot SHALL require an explicit confirmation phrase co
 
 - **WHEN** a user starts a live bot with a confirmation that names only the bot
 - **THEN** the start is rejected and the confirmation error is displayed
+
 ### Requirement: Live fill fees
 
 Live fills SHALL record the fee reported by the exchange, prorated across partial fills without double-counting a cumulative fee. An unreported fee SHALL fall back to the bot's configured fee rate, an explicit zero fee SHALL remain zero, and a negative fee SHALL be credited as a rebate. Fees increase the bot's recorded fees paid and reduce realized profit and loss in quote-equivalent terms.
@@ -160,6 +182,7 @@ Live fills SHALL record the fee reported by the exchange, prorated across partia
 
 - **WHEN** the exchange reports a fee in an asset other than the base or quote asset
 - **THEN** the fee is valued at the fill price for quote accounting and fees paid
+
 ### Requirement: Risk limit configuration
 
 Account-scope risk limits SHALL apply to every bot that does not have an explicit per-bot override. A user SHALL be able to view and update the account limits from the dashboard. Legacy bot-scope rows created automatically for every bot SHALL be removed.
@@ -178,6 +201,7 @@ Account-scope risk limits SHALL apply to every bot that does not have an explici
 
 - **WHEN** a user submits a non-positive position or daily-loss limit, or an out-of-range open-order limit
 - **THEN** the form reports validation errors and the stored limits are unchanged
+
 ### Requirement: Shared-account balance safety
 
 When more than one live bot uses the same exchange credential, or the same user has multiple live bots without a credential, the system SHALL skip refreshing per-bot inventory from the whole-wallet balance and SHALL record why the sync was skipped. Reconciliation SHALL skip the whole-wallet balance comparison on the same condition.
@@ -194,7 +218,7 @@ When more than one live bot uses the same exchange credential, or the same user 
 
 ### Requirement: Per-bot protective exits
 
-Each bot SHALL support optional stop-loss, take-profit, and price-range exit rules. A running bot SHALL evaluate them on every tick after its mark price is updated and before the daily-loss check and strategy tick. A trigger SHALL pause the bot, cancel its open and pending orders, record a risk event, and leave base inventory unchanged.
+Each bot SHALL support optional stop-loss, take-profit, and price-range exit rules. The Go engine SHALL evaluate them on every tick after the mark is updated and before daily-loss and strategy evaluation. A trigger SHALL pause the bot, cancel open and pending orders, record a risk event, and leave base inventory unchanged. Laravel SHALL store the configuration and SHALL NOT evaluate exits after cutover.
 
 #### Scenario: Stop-loss triggers
 
@@ -240,6 +264,11 @@ Each bot SHALL support optional stop-loss, take-profit, and price-range exit rul
 
 - **WHEN** an open order cannot be canceled while pausing for a protective exit
 - **THEN** a `risk.exit_cancel_failed` risk event is recorded and the remaining orders are still canceled
+
+#### Scenario: Resume while still beyond the threshold
+
+- **WHEN** a user resumes a bot that is still beyond its protective-exit threshold
+- **THEN** the engine pauses it again on the next tick
 
 ### Requirement: Protective exit configuration
 

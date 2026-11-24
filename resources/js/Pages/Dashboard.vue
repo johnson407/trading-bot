@@ -18,6 +18,10 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    engine: {
+        type: Object,
+        required: true,
+    },
 });
 
 const percent = (value) => `${Number(value ?? 0).toFixed(2)}%`;
@@ -51,7 +55,7 @@ let equityPoller = null;
 onMounted(() => {
     poller = setInterval(() => {
         router.reload({
-            only: ['summary', 'recentActivity'],
+            only: ['summary', 'recentActivity', 'engine'],
             preserveScroll: true,
             preserveState: true,
         });
@@ -87,6 +91,11 @@ onBeforeUnmount(() => {
 
         <div class="py-12">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+                <div v-if="!engine.available" class="rounded-lg border border-amber-500/40 bg-amber-950/40 p-4 text-sm text-amber-100">
+                    <span class="font-semibold">Trading engine heartbeat is unavailable.</span>
+                    Bots will not be paused automatically. Check the engine container and Redis before relying on bot control.
+                    <span v-if="engine.last_seen_at" class="text-amber-200"> Last seen {{ new Date(engine.last_seen_at).toLocaleString() }}.</span>
+                </div>
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <div class="bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
                         <div class="text-sm text-slate-300">Bots</div>

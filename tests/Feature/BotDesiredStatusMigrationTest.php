@@ -32,14 +32,21 @@ it('adds desired_status with an idle default and a status backfill', function ()
     expect(Schema::hasColumn('bots', 'desired_status'))->toBeFalse();
 
     $user = User::factory()->create();
-    $running = Bot::factory()->create([
+    $runningAttributes = Bot::factory()->make([
         'user_id' => $user->id,
         'status' => BotStatus::Running,
-    ]);
-    $paused = Bot::factory()->create([
+    ])->getAttributes();
+    unset($runningAttributes['desired_status']);
+    $pausedAttributes = Bot::factory()->make([
         'user_id' => $user->id,
         'status' => BotStatus::Paused,
-    ]);
+    ])->getAttributes();
+    unset($pausedAttributes['desired_status']);
+
+    $runningId = DB::table('bots')->insertGetId($runningAttributes);
+    $pausedId = DB::table('bots')->insertGetId($pausedAttributes);
+    $running = Bot::query()->findOrFail($runningId);
+    $paused = Bot::query()->findOrFail($pausedId);
 
     $this->artisan('migrate', [
         '--path' => botDesiredStatusMigrationPath(),

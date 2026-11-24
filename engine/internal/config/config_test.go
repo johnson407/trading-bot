@@ -45,6 +45,15 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.TradingDefaultExchange != "binance" {
 		t.Errorf("TradingDefaultExchange = %q, want binance", cfg.TradingDefaultExchange)
 	}
+
+	if cfg.BacktestJobTimeout != 600*time.Second {
+		t.Errorf("BacktestJobTimeout = %s, want 600s", cfg.BacktestJobTimeout)
+	}
+
+	if cfg.BacktestMaxFills != 25000 || cfg.BacktestEquityPoints != 1000 || cfg.BacktestProgressInterval != 500 {
+		t.Errorf("backtest caps = %d/%d/%d, want 25000/1000/500",
+			cfg.BacktestMaxFills, cfg.BacktestEquityPoints, cfg.BacktestProgressInterval)
+	}
 }
 
 func TestLoadReadsExchangeAllowlist(t *testing.T) {
@@ -136,11 +145,15 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]map[string]string{
-		"port":    {"DB_PORT": "not-a-port"},
-		"range":   {"REDIS_PORT": "70000"},
-		"address": {"ENGINE_LISTEN_ADDR": "8080"},
-		"bool":    {"TRADING_LIVE_ENABLED": "maybe"},
-		"redisDB": {"REDIS_DB": "-1"},
+		"port":     {"DB_PORT": "not-a-port"},
+		"range":    {"REDIS_PORT": "70000"},
+		"address":  {"ENGINE_LISTEN_ADDR": "8080"},
+		"bool":     {"TRADING_LIVE_ENABLED": "maybe"},
+		"redisDB":  {"REDIS_DB": "-1"},
+		"timeout":  {"BACKTEST_JOB_TIMEOUT": "abc"},
+		"maxFills": {"BACKTEST_MAX_FILLS": "0"},
+		"equity":   {"BACKTEST_EQUITY_POINTS": "-1"},
+		"progress": {"BACKTEST_PROGRESS_INTERVAL": "nope"},
 	}
 
 	for name, env := range cases {

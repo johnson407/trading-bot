@@ -82,6 +82,7 @@ watch(
 const start = () => router.post(route('bots.start', props.bot.id), { confirmation: confirmation.value }, { preserveScroll: true });
 const pause = () => router.post(route('bots.pause', props.bot.id), {}, { preserveScroll: true });
 const stop = () => router.post(route('bots.stop', props.bot.id), {}, { preserveScroll: true });
+const cancelOrder = (order) => router.post(route('bots.orders.cancel', [props.bot.id, order.id]), {}, { preserveScroll: true });
 const levelState = (state) => ({
     idle: 'bg-slate-700 text-slate-300',
     open: 'bg-blue-950 text-blue-200',
@@ -118,6 +119,7 @@ const levelState = (state) => ({
                     <div class="rounded-lg bg-slate-800 p-4 shadow">
                         <p class="text-xs uppercase text-slate-300">Status</p>
                         <p class="mt-1 text-lg font-semibold capitalize">{{ bot.status }}</p>
+                        <p class="mt-1 text-xs capitalize text-slate-400">Desired: {{ bot.desired_status }}</p>
                     </div>
                     <div class="rounded-lg bg-slate-800 p-4 shadow">
                         <p class="text-xs uppercase text-slate-300">Realized P&amp;L</p>
@@ -213,7 +215,7 @@ const levelState = (state) => ({
                         <div v-if="openOrders.length === 0" class="mt-3 text-sm text-slate-300">No open orders.</div>
                         <table v-else class="mt-3 min-w-full text-sm">
                             <thead class="text-left text-xs uppercase text-slate-300">
-                                <tr><th class="py-2">Side</th><th>Price</th><th>Quantity</th><th>Status</th></tr>
+                                <tr><th class="py-2">Side</th><th>Price</th><th>Quantity</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr>
                             </thead>
                             <tbody class="divide-y">
                                 <tr v-for="order in openOrders" :key="order.id">
@@ -221,6 +223,9 @@ const levelState = (state) => ({
                                     <td class="font-mono">{{ formatMoney(order.price) }}</td>
                                     <td class="font-mono">{{ order.quantity }}</td>
                                     <td class="capitalize text-slate-300">{{ order.status }}</td>
+                                    <td class="py-2 text-right">
+                                        <button type="button" class="rounded bg-rose-700 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-600" @click="cancelOrder(order)">Cancel</button>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>

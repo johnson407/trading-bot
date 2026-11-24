@@ -34,7 +34,6 @@ class CreateBot
                 'symbol' => (string) $data['symbol'],
                 'strategy_key' => (string) $data['strategy_key'],
                 'mode' => $mode,
-                'status' => 'idle',
                 'capital_allocation' => (string) $data['capital_allocation'],
                 'quote_inventory' => (string) $data['capital_allocation'],
                 'base_inventory' => '0',
@@ -55,7 +54,7 @@ class CreateBot
             ]);
 
             $this->riskLimits->forUser($user);
-            $this->activity->record('bot.created', "Bot {$bot->name} created", $bot, $user, [
+            $this->activity->recordUser('bot.created', "Bot {$bot->name} created", $bot, $user, [
                 'mode' => $mode,
                 'strategy' => $bot->strategy_key,
                 'symbol' => $bot->symbol,

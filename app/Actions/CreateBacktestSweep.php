@@ -5,12 +5,12 @@ namespace App\Actions;
 use App\Domain\Backtest\Enums\BacktestStatus;
 use App\Domain\Backtest\Enums\Timeframe;
 use App\Domain\Support\Decimal;
-use App\Jobs\RunBacktest;
 use App\Models\BacktestRun;
 use App\Models\BacktestSweep;
 use App\Models\Bot;
 use App\Models\User;
 use App\Services\Backtest\BacktestSnapshotBuilder;
+use App\Services\Engine\CommandPublisher;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -21,11 +21,12 @@ class CreateBacktestSweep
 {
     public function __construct(
         private readonly BacktestSnapshotBuilder $snapshots,
+        private readonly CommandPublisher $commands,
     ) {}
 
     /**
      * Create a sweep and one pending run per cartesian combination, then
-     * dispatch the runs after the transaction commits.
+     * publish one engine command after the transaction commits.
      *
      * @param  array<string, mixed>  $parameters
      */
@@ -124,16 +125,17 @@ class CreateBacktestSweep
             return [$sweep, $runs];
         });
 
-        foreach ($runs as $run) {
-            try {
-                RunBacktest::dispatch($run->id);
-            } catch (Throwable $exception) {
-                Log::error('backtest.sweep_dispatch_failed', [
-                    'backtest_sweep_id' => $sweep->id,
-                    'backtest_run_id' => $run->id,
-                    'exception' => $exception,
-                ]);
+        try {
+            $this->commands->publish('backtest.sweep', $user->id, $bot->id, [
+                'backtest_sweep_id' => $sweep->id,
+            ]);
+        } catch (Throwable $exception) {
+            Log::error('backtest.sweep_publish_failed', [
+                'backtest_sweep_id' => $sweep->id,
+                'exception' => $exception,
+            ]);
 
+            foreach ($runs as $run) {
                 $run->forceFill([
                     'status' => BacktestStatus::Failed,
                     'error' => 'The backtest job could not be queued.',

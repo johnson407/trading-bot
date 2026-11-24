@@ -8,13 +8,13 @@ ownership, and the heartbeat.
 
 > **Current phase:** the Go engine under `engine/` implements the contract,
 > consumer, idempotency, heartbeat, public market data, `/healthz` readiness,
-> and the phase-4.2/4.3/4.4 tick-loop, grid, and paper-fill libraries. The tick
-> scheduler, grid sync, and paper-fill selection are **not wired into the
-> process**: this build does **not** run ticks, strategies, orders, or
-> backtests, and it makes no exchange calls.
-> Laravel is still the trading runtime until the later apply phases. Any
-> command received by this build is rejected with an `engine.command_failed`
-> event and never executed.
+> the tick loop, grid and paper-fill runtime, strategies, risk/exit guards, and
+> deterministic backtest replay with PostgreSQL persistence. Laravel publishes
+> user commands and backtest commands, writes only `desired_status`, shows an
+> expired heartbeat as a warning, and has trimmed the PHP bot/backtest schedule
+> and Horizon queue. Live exchange execution remains disabled in the engine; a
+> live start is paused with a clear error and Laravel retains the emergency
+> `CancelBotOrders` path.
 
 ## Streams
 
@@ -98,6 +98,10 @@ should use `envelope`.
 `bot.tick_completed`, `bot.error`, `kill_switch.completed`,
 `backtest.progress`, `backtest.completed`, `backtest.failed`.
 
+The backtest event names are part of the v1 contract but this build does not
+publish them; backtest results are read from Postgres. Event emission remains a
+later follow-up.
+
 The list is non-exhaustive. This build also emits `engine.command_failed` for
 definitive contract rejections and dead-letters; its payload carries
 `correlation_id` (the command `id`), `command_id`, `command_type`, `reason`, and
@@ -106,7 +110,10 @@ a command set `correlation_id` to the command `id`.
 
 ## Delivery: at-least-once, ACK, PEL, dead-letter
 
-1. The engine reads `engine.commands` with the `engine` consumer group.
+1. The engine reads `engine.commands` with the `engine` consumer group, and
+   `engine.backtests` with the `engine-backtests` group. Backtests use a
+   separate stream so a replay cannot delay bot, order, or kill-switch
+   commands.
 2. It applies the command's durable Postgres effects, writes
    `engine:cmd:{id}`, and only then sends `XACK`. A failed effect or a failed
    idempotency write leaves the entry pending and is retried.
@@ -114,10 +121,10 @@ a command set `correlation_id` to the command `id`.
    **30 seconds** and reprocesses them. If `engine:cmd:{id}` is already present,
    the entry is acknowledged with no second effect; otherwise it is retried.
 4. After **five failed attempts** the command is written to
-   `engine.commands.dlq`, an `engine.command_failed` event is written without
-   secrets, the id is recorded, and the original entry is `XACK`ed so the group
-   is not blocked. Operators can inspect or replay the dead-letter stream
-   manually.
+   `engine.commands.dlq` (or `engine.backtests.dlq`), an
+   `engine.command_failed` event is written without secrets, the id is recorded,
+   and the original entry is `XACK`ed so the group is not blocked. Operators can
+   inspect or replay the dead-letter stream manually.
 5. Laravel event consumers follow the same ACK, PEL auto-claim, and dead-letter
    rules on `engine.events` / `engine.events.dlq`.
 
@@ -125,13 +132,12 @@ a command set `correlation_id` to the command `id`.
 
 Commands are applied in stream order. Commands that share an ordering key are
 therefore serial:
-
 - bot commands and `kill_switch` use the envelope `user_id` key when present,
   so a user's kill-switch is serialized against that user's bot commands;
 - a command without `user_id` falls back to its `bot_id`.
 
 A later command for the same bot cannot run before an earlier one. v1 consumes
-the stream with a single worker, so different users also wait for each other;
+each stream with a single worker, so different users also wait for each other;
 the ordering key above is the contract a later concurrent executor must honour.
 That optimization can run different keys in parallel without changing this
 serialization rule.
@@ -158,8 +164,13 @@ writing `desired_status` is enough while the engine is down. Stop of a live bot
 uses the same emergency cancel under the same conditions. `CancelBotOrders` is
 retained after the PHP engine is deleted.
 
-The Go engine's phase-2 command processor does not place or cancel orders yet;
-the wiring above belongs to the later Laravel/engine phases.
+The Laravel side of this wiring is implemented: start, pause, stop, single-order
+cancel, and the kill-switch write `desired_status` and publish their command.
+The Go engine executes those commands. Live execution is disabled in this
+build, so starting a live bot pauses it; stop and kill-switch use the emergency
+local cancel only when the heartbeat is unavailable or the publish fails.
+Single live-order cancellation uses Laravel's retained exchange path, while
+paper order cancellation goes through `order.cancel`.
 
 ## Heartbeat
 
@@ -184,6 +195,8 @@ above).
 
 `GET /healthz` includes a `heartbeat` readiness check that reads this key and
 accepts a timestamp no older than the TTL. It never calls an exchange.
+Laravel exposes the same freshness check at `GET /health/engine`, returning
+`200` when fresh and `503` when missing or expired.
 `GET /livez` remains dependency-free.
 
 ## Status ownership
@@ -194,9 +207,10 @@ accepts a timestamp no older than the TTL. It never calls an exchange.
 | `bots.status` | Go engine | Runtime state. The engine applies `desired_status` and must not set running over a pause, stop, or kill-switch. |
 | `bots.last_error` | Go engine | Runtime failure text. Laravel does not write it after the ownership migration. |
 
-Until the later Laravel wiring phase, the existing start/pause/stop actions
-still write `status` and the PHP tick pipeline still runs. The column exists so
-the cutover and the Go engine have a single source of user intent.
+Laravel now writes only `desired_status` on start, pause, stop, and kill-switch;
+it no longer writes `status` or `last_error`, and the PHP tick pipeline is no
+longer scheduled. The column exists so the cutover and the Go engine have a
+single source of user intent.
 
 ## Audit and receipts
 
@@ -234,16 +248,13 @@ layout, coverage mapping, determinism rules (fixed clock, fixed paper fee,
 
 `internal/tick`, `internal/grid`, and `internal/paperfill` are pure libraries
 proven against `tick_loop.json`, `grid_generation.json`, `grid_sync.json`, and
-`paper_fills.json`. They are not started by `main`; the tick scheduler needs a
-PostgreSQL bot source and the grid sync and paper fills need a persistence layer
-before later phases can wire them in.
-`internal/decimal` matches PHP bcmath at scale 16 (truncating multiply/add,
+`paper_fills.json`. They are now used by the runtime: `main` starts the tick scheduler and grid sync,
+and paper fills are persisted by `internal/runtime`. `internal/decimal` matches PHP bcmath at scale 16 (truncating multiply/add,
 17-digit divide rounded half-up to 16) and rejects floats.
 
 ## Risk gates and credential decryption (phase 5)
 
-`internal/risk` ports the current PHP blocking guards without wiring them into
-tick or order dispatch:
+`internal/risk` provides the blocking guards used by the paper runtime:
 
 - live gate and start checks (`TRADING_LIVE_ENABLED` defaults false, exact
   confirmation, free quote balance, no live-to-paper fallback);

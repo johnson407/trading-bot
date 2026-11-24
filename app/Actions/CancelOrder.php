@@ -35,8 +35,8 @@ class CancelOrder
                     ->cancelOrder($bot, $bot->symbol, $order->exchange_order_id);
             } catch (ExchangeException $exception) {
                 if ($exception->type !== ExchangeErrorType::NotFound) {
-                    $this->activity->record(
-                        'order.cancel_failed',
+                    $this->activity->recordUser(
+                        'order.local_cancel_failed',
                         "Order {$order->client_order_id} could not be canceled on the exchange.",
                         $bot,
                         context: [
@@ -55,8 +55,8 @@ class CancelOrder
 
         $canceled = $this->stateMachine->transition($order, OrderStatus::Canceled);
 
-        $this->activity->record(
-            'order.canceled',
+        $this->activity->recordUser(
+            'order.local_canceled',
             "Order {$order->client_order_id} canceled",
             $bot,
             context: [

@@ -22,7 +22,7 @@ it('rejects a live start when live trading is disabled', function () {
         new FakeExchangeClient,
     ))->toThrow(LiveTradingDisabledException::class);
 
-    expect($bot->fresh()->status)->toBe(BotStatus::Idle);
+    expect($bot->fresh()->desired_status)->toBe(BotStatus::Idle);
 });
 
 it('requires confirmation text matching the bot name', function () {
@@ -38,7 +38,7 @@ it('requires confirmation text matching the bot name', function () {
         new FakeExchangeClient,
     ))->toThrow(LiveConfirmationRequiredException::class);
 
-    expect($bot->fresh()->status)->toBe(BotStatus::Idle);
+    expect($bot->fresh()->desired_status)->toBe(BotStatus::Idle);
 });
 
 it('starts a live bot when confirmed and the balance is sufficient', function () {
@@ -51,7 +51,7 @@ it('starts a live bot when confirmed and the balance is sufficient', function ()
         new FakeExchangeClient(quoteBalance: '1000'),
     );
 
-    expect($bot->fresh()->status)->toBe(BotStatus::Running);
+    expect($bot->fresh()->desired_status)->toBe(BotStatus::Running);
 });
 
 it('rejects a live start when the quote balance is short', function () {
@@ -64,7 +64,7 @@ it('rejects a live start when the quote balance is short', function () {
         new FakeExchangeClient(quoteBalance: '999.99'),
     ))->toThrow(InsufficientLiveBalanceException::class);
 
-    expect($bot->fresh()->status)->toBe(BotStatus::Idle);
+    expect($bot->fresh()->desired_status)->toBe(BotStatus::Idle);
 });
 
 it('does not require live safeguards in paper mode', function () {
@@ -73,5 +73,5 @@ it('does not require live safeguards in paper mode', function () {
 
     app(StartBot::class)->handle($bot);
 
-    expect($bot->fresh()->status)->toBe(BotStatus::Running);
+    expect($bot->fresh()->desired_status)->toBe(BotStatus::Running);
 });

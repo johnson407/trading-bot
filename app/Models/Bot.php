@@ -4,11 +4,13 @@ namespace App\Models;
 
 use App\Domain\Bot\Enums\BotMode;
 use App\Domain\Bot\Enums\BotStatus;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -34,32 +36,33 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property numeric|null $range_high
  * @property int $tick_interval_seconds
  * @property int $consecutive_failures
- * @property \Illuminate\Support\Carbon|null $last_tick_at
- * @property \Illuminate\Support\Carbon|null $last_successful_tick_at
+ * @property Carbon|null $last_tick_at
+ * @property Carbon|null $last_successful_tick_at
  * @property string|null $last_error
  * @property array<array-key, mixed>|null $settings
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\Grid|null $activeGrid
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ActivityLog> $activityLogs
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Grid|null $activeGrid
+ * @property-read Collection<int, ActivityLog> $activityLogs
  * @property-read int|null $activity_logs_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Alert> $alerts
+ * @property-read Collection<int, Alert> $alerts
  * @property-read int|null $alerts_count
- * @property-read \App\Models\ExchangeCredential|null $credential
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Fill> $fills
+ * @property-read ExchangeCredential|null $credential
+ * @property-read Collection<int, Fill> $fills
  * @property-read int|null $fills_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Grid> $grids
+ * @property-read Collection<int, Grid> $grids
  * @property-read int|null $grids_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\InventoryLedgerEntry> $inventoryLedgerEntries
+ * @property-read Collection<int, InventoryLedgerEntry> $inventoryLedgerEntries
  * @property-read int|null $inventory_ledger_entries_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Order> $orders
+ * @property-read Collection<int, Order> $orders
  * @property-read int|null $orders_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\RiskEvent> $riskEvents
+ * @property-read Collection<int, RiskEvent> $riskEvents
  * @property-read int|null $risk_events_count
- * @property-read \App\Models\RiskLimit|null $riskLimit
- * @property-read \App\Models\StrategyConfig|null $strategyConfig
- * @property-read \App\Models\User $user
+ * @property-read RiskLimit|null $riskLimit
+ * @property-read StrategyConfig|null $strategyConfig
+ * @property-read User $user
  * @property string|null $unrealized_pnl
+ *
  * @method static \Database\Factories\BotFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot newQuery()
@@ -89,11 +92,24 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot whereTickIntervalSeconds($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot whereUserId($value)
+ *
  * @mixin \Eloquent
  */
 class Bot extends Model
 {
     use HasFactory;
+
+    /**
+     * Settings owned by the Go engine. Laravel merges around these keys and
+     * never overwrites them with user-editable values.
+     *
+     * @var list<string>
+     */
+    public const ENGINE_SETTINGS = [
+        'mark_price',
+        'recent_prices',
+        'daily_loss_baseline',
+    ];
 
     protected $fillable = [
         'user_id',
@@ -147,6 +163,26 @@ class Bot extends Model
             'last_successful_tick_at' => 'datetime',
             'settings' => 'array',
         ];
+    }
+
+    /**
+     * Merge non-engine settings without clobbering engine-owned keys.
+     *
+     * @param  array<string, mixed>  $settings
+     */
+    public function mergeSettings(array $settings): void
+    {
+        $current = $this->settings ?? [];
+
+        foreach ($settings as $key => $value) {
+            if (in_array($key, self::ENGINE_SETTINGS, true)) {
+                continue;
+            }
+
+            $current[$key] = $value;
+        }
+
+        $this->settings = $current;
     }
 
     /** @return BelongsTo<User, $this> */

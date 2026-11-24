@@ -9,9 +9,9 @@ The implementation lives in four layers:
 
 | Layer | Location |
 | --- | --- |
-| Historical candles | `App\Services\Backtest\CcxtCandleProvider`, `CandleStore`, `market_candles` |
-| Side-effect-free replay | `App\Domain\Backtest` |
-| Saved runs and dashboard | `App\Models\BacktestRun`, `RunBacktest`, `BacktestController` |
+| Historical candles | `market_candles` cache, read by the Go engine |
+| Side-effect-free replay | `engine/internal/backtest` |
+| Saved runs and dashboard | `App\Models\BacktestRun`, Go runner, `BacktestController` |
 | Parameter sweeps | `App\Models\BacktestSweep`, `CreateBacktestSweep`, `BacktestSweepController` |
 
 ## Creating a run
@@ -26,9 +26,8 @@ form shows the approximate candle count before submitting.
 - The range must end in the past and end after it starts. The end date is
   interpreted as 00:00 UTC, so it is exclusive; choose the following day to
   include a full final day.
-- Cached candles are read lazily and fetched/written in bounded chunks, so a
-  long range does not hydrate every candle row at once. The saved equity curve
-  is capped at 1,000 points.
+- Cached candles are read in one ordered query for the range; the saved equity
+  curve is capped at 1,000 points.
 - A run is stopped with a clear failure if it produces more than 25,000 fills.
   This protects the worker from pathological fill-heavy configurations; use a
   shorter range or larger timeframe instead.
@@ -41,26 +40,24 @@ an existing run. If the bot is deleted, the run remains readable.
 
 ## Historical candles
 
-Candles come from the exchange's **public** OHLCV endpoint. No API key is read or
-sent. The provider pages through `fetch_ohlcv` in chunks of up to 1,000, waits
-between requests according to `trading.exchange.rate_limit_ms`, and retries only
-transient connection and rate-limit failures with the same exponential backoff as
-the live CCXT client.
+Candles are read from the shared `market_candles` table, keyed by exchange,
+symbol, timeframe, and open time. No API key is read or sent. The engine:
 
-Candles are cached in `market_candles`, keyed by exchange, symbol, timeframe, and
-open time. A run:
-
-1. Reads the requested range from the cache.
-2. Fetches only missing spans, including interior gaps.
-3. Re-reads the merged range and checks that every interval is present.
-4. Fails with a data-gap error rather than simulating across a hole.
+1. Computes the expected open times for the requested range, including the
+   timeframe alignment used by the old PHP cache.
+2. Reads the range from the cache in one ordered query.
+3. Fails with `Historical data gap at <time> (<n> candles missing).` rather than
+   simulating across a hole, including when the cache is empty.
+4. Fails with `No historical data available.` when the range contains no candles.
 
 Only fully closed candles are used. A candle is included only when its close time
 is at or before the requested end and at or before the current time, so a candle
-still forming at the end of the range is trimmed. If the exchange returns no
-candles for a range, the run fails with `No historical data available.`
+still forming at the end of the range is trimmed.
 
-Cached rows are safe to reuse across bots and runs. There is no retention
+The engine fetches missing candles from the public Binance kline endpoint,
+stores them in `market_candles`, and retries the read. Only public data is used;
+no credentials or private endpoints are involved. Cached rows are safe to reuse
+across bots and runs. There is no retention
 policy yet; delete old `market_candles` rows if cache size becomes a concern.
 
 ## What the replay does
@@ -179,20 +176,24 @@ while preserving the first and last samples. The full fill list is retained in
 
 Runs move through `pending → running → completed` or `pending → running → failed`.
 
-- `RunBacktest` is queued on the dedicated `backtests` queue with one attempt and
-  a 600-second job timeout.
-- `WithoutOverlapping` is keyed by run id, and the pending-to-running update is
-  conditional, so a duplicate job cannot execute a run twice.
+- Laravel inserts a pending run and publishes `backtest.run` to
+  `engine.backtests`. A publish failure marks the run failed with
+  `The backtest job could not be queued.`
+- The engine atomically claims `pending → running`; a duplicate command is
+  ignored because the update matches no row.
 - Progress and candles processed update every 500 candles.
-- Redis redelivery is configured above the job timeout, and a scheduled
-  `backtests:fail-stale` sweep fails runs whose worker disappeared.
+- The engine fails a running run whose worker disappears or whose replay exceeds
+  `BACKTEST_JOB_TIMEOUT` (default 600 seconds) plus a 60-second grace. Pending
+  runs are not failed for age alone because their commands remain durable in
+  Redis; a 24-hour orphan guard catches rows that never received a command.
+- Laravel no longer schedules `backtests:fail-stale`; stale failure is owned by
+  the engine so per-stream state and active work are visible to the decider.
 - Failures store a short, non-secret message and log the exception with the run
   id. Raw traces are not shown in the dashboard.
 
 The list and detail pages poll every three seconds only while a run is pending or
-running; polling stops when the run finishes. Horizon must be running for queued
-backtests to execute, and the `backtests` supervisor uses a larger memory limit
-and a longer timeout than bot ticks.
+running; polling stops when the run finishes. Backtests run in the Go engine, not
+on Horizon.
 
 ## Comparing runs
 
@@ -235,11 +236,11 @@ combination count before submission.
   setting come from the bot.
 
 Creation is atomic: the sweep and all of its runs are inserted in one transaction,
-then one `RunBacktest` job is dispatched per run after the commit. If a dispatch
-fails, the failure is logged and that run is immediately marked `failed` with
+then one `backtest.sweep` command is published after the commit. The engine runs
+the sweep's pending runs in order. If the publish fails, the failure is logged and
+the runs are immediately marked `failed` with
 `The backtest job could not be queued.`, so the sweep reaches a terminal state
-instead of waiting forever. The scheduled `backtests:fail-stale` command also
-fails stale running runs and pending runs that never started.
+instead of waiting forever.
 
 Each generated run stores `sweep_id` and a name describing its combination, and
 behaves like a normal backtest: it has its own snapshot, status, progress, end
@@ -279,48 +280,54 @@ Every run detail page repeats these limitations:
 
 ## Operational notes
 
-- Candle fetching is public and does not require an exchange credential.
+- Candle reading is public and does not require an exchange credential.
 - Backtest tables are additive and never read by live trading code.
 - Deleting a user removes their runs and fills. Deleting a bot sets the run's
   `bot_id` to null without deleting the run.
 - The source bot, strategy configuration, and risk limit rows are not modified.
-- Queue workers and the database must be healthy; a run that cannot fetch data
-  fails visibly rather than silently completing with no trades.
-- The Redis queue `retry_after` default is 660 seconds so it exceeds the
-  backtest job timeout. Deployments with their own queue configuration should
-  keep that invariant.
+- The engine and database must be healthy; a run that cannot read data fails
+  visibly rather than silently completing with no trades.
+- Backtest commands use the dedicated `engine.backtests` stream and consumer
+  group, so a long replay cannot delay `bot.*`, `order.cancel`, or `kill_switch`.
 
 ## Verification
 
-Run the focused checks with Docker:
+Run the Go parity and runner tests with Docker:
 
 ```bash
-docker compose exec -T -e APP_ENV=testing -e CACHE_STORE=array app php artisan test \
-  tests/Unit/BacktestEngineTest.php \
-  tests/Unit/BacktestComponentsTest.php \
-  tests/Unit/CcxtCandleProviderTest.php \
-  tests/Feature/CandleStoreTest.php \
-  tests/Feature/BacktestParityTest.php \
-  tests/Feature/BacktestExitGuardTest.php \
-  tests/Feature/RunBacktestTest.php \
+cd engine
+make test
+```
+
+Run the Laravel backtest surface tests:
+
+```bash
+docker compose exec -u www-data \
+  -e APP_ENV=testing -e DB_DATABASE=trading_bot_test \
+  -e CACHE_STORE=array -e QUEUE_CONNECTION=sync \
+  -e SESSION_DRIVER=array -e CONCURRENCY_DRIVER=sync \
+  app php artisan test \
   tests/Feature/BacktestDashboardTest.php \
   tests/Feature/BacktestSweepTest.php \
   tests/Feature/BacktestSweepDashboardTest.php \
   tests/Feature/StoreBacktestSweepRequestTest.php
 ```
 
-The parity tests compare portfolio arithmetic with `InventoryLedger` and the fill
-rule with `PaperExchangeClient::qualifyingFills`. If either production rule
-changes, update both sides and rerun those tests.
+The Go fixtures under `tests/golden/engine/backtest_replay.json` and
+`backtest_sweep.json` are frozen from the removed PHP engine and are asserted by
+`engine/internal/backtest`. They are not regenerated from PHP anymore.
 
 ## Test map
 
 | Flow | Test |
 | --- | --- |
+| Replay parity and errors | `engine/internal/backtest/golden_test.go` |
+| Sweep grouping and labels | `engine/internal/backtest/golden_test.go` |
+| Stale and orphan runs | `engine/internal/backtest/stale_test.go`, opt-in DB test |
 | Sweep schema and run link | `BacktestSweepMigrationTest` |
 | Sweep model relations and cascade behavior | `BacktestSweepModelTest` |
 | Sweep configuration cap | `BacktestSweepConfigTest` |
-| Cartesian creation, overrides, rollback, dispatch failure | `BacktestSweepTest` |
+| Cartesian creation, overrides, rollback, publish failure | `BacktestSweepTest` |
 | Snapshot strategy overrides | `BacktestSnapshotBuilderTest` |
 | Sweep request validation and ownership | `StoreBacktestSweepRequestTest` |
-| Sweep pages, derived counts, compare link, end-to-end | `BacktestSweepDashboardTest` |
+| Sweep pages and derived counts | `BacktestSweepDashboardTest` |

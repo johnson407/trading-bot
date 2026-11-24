@@ -23,6 +23,7 @@ class BotFactory extends Factory
             'strategy_key' => 'simple-grid',
             'mode' => BotMode::Paper,
             'status' => BotStatus::Idle,
+            'desired_status' => BotStatus::Idle,
             'capital_allocation' => '1000',
             'base_inventory' => '0',
             'quote_inventory' => '0',
