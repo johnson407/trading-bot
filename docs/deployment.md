@@ -18,7 +18,7 @@ The OpenSpec change is `add-qnap-ci-deploy`.
   `ghcr.io/johnson407/trading-bot-engine`, tagged with `sha-<commit>` and
   `latest`.
 - **GHCR** stores all three private images. The NAS needs only `read:packages`.
-- **QNAP NAS** runs the six containers from `docker-compose.prod.yml`. It polls
+- **QNAP NAS** runs the seven containers from `docker-compose.prod.yml`. It polls
   outbound on a five-minute cron and never accepts an inbound deployment
   connection.
 
