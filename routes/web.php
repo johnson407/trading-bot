@@ -12,7 +12,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RiskLimitController;
 use App\Http\Controllers\SettingsController;
 use App\Services\Engine\EngineHeartbeat;
-use Illuminate\Foundation\Application;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -22,12 +22,14 @@ Route::get('/health/engine', function (EngineHeartbeat $heartbeat) {
     return response()->json($status, $status['available'] ? 200 : 503);
 })->name('health.engine');
 
-Route::get('/', function () {
+Route::get('/', function (Request $request) {
+    if ($request->user()) {
+        return redirect()->route('dashboard');
+    }
+
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
     ]);
 });
 
