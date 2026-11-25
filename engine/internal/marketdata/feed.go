@@ -129,8 +129,10 @@ type Feed struct {
 	changed     chan struct{}
 	requestID   int
 
-	decodeWarnings    int
-	lastDecodeWarning time.Time
+	// warningCount and lastWarning are guarded by mu. They aggregate malformed
+	// frame warnings so a bad stream cannot flood the log.
+	warningCount int
+	lastWarning  time.Time
 }
 
 // New returns a feed. The caller must call Run to open any connection. New
@@ -501,7 +503,6 @@ func (f *Feed) applyMessage(payload []byte) (bool, bool) {
 		Stream string          `json:"stream"`
 		Data   json.RawMessage `json:"data"`
 		ID     *int64          `json:"id"`
-		Result json.RawMessage `json:"result"`
 	}
 
 	if err := json.Unmarshal(payload, &envelope); err != nil {
@@ -543,8 +544,17 @@ func (f *Feed) applyMessage(payload []byte) (bool, bool) {
 	bidRaw := fields["b"]
 	askRaw := fields["a"]
 
-	if event == "trade" || (event == "" && hasTradeID && hasTradePrice) {
-		return f.applyTrade(symbol, tradeID, hasTradeID, tradePrice)
+	if event == "trade" {
+		if !hasTradeID || !hasTradePrice {
+			f.warnThrottled("market data trade is missing a numeric id or text price", "symbol", symbol)
+			return false, false
+		}
+
+		return f.applyTrade(symbol, tradeID, tradePrice)
+	}
+
+	if event == "" && hasTradeID && hasTradePrice {
+		return f.applyTrade(symbol, tradeID, tradePrice)
 	}
 
 	if event == "bookTicker" || (event == "" && (len(bidRaw) > 0 || len(askRaw) > 0)) {
@@ -583,13 +593,13 @@ func jsonInt64(raw json.RawMessage) (int64, bool) {
 	return value, true
 }
 
-func (f *Feed) applyTrade(symbol string, tradeID int64, hasTradeID bool, price string) (bool, bool) {
-	if !hasTradeID || tradeID <= 0 || price == "" {
+func (f *Feed) applyTrade(symbol string, tradeID int64, price string) (bool, bool) {
+	if tradeID <= 0 || price == "" {
 		return false, false
 	}
 
 	if !validDecimal(price) {
-		f.logger.Warn("market data trade has an invalid price", "symbol", symbol)
+		f.warnThrottled("market data trade has an invalid price", "symbol", symbol)
 		return false, false
 	}
 
@@ -623,12 +633,12 @@ func (f *Feed) applyBookTicker(symbol, bid, ask string) bool {
 	}
 
 	if bid != "" && !validDecimal(bid) {
-		f.logger.Warn("market data book has an invalid bid", "symbol", symbol)
+		f.warnThrottled("market data book has an invalid bid", "symbol", symbol)
 		return false
 	}
 
 	if ask != "" && !validDecimal(ask) {
-		f.logger.Warn("market data book has an invalid ask", "symbol", symbol)
+		f.warnThrottled("market data book has an invalid ask", "symbol", symbol)
 		return false
 	}
 
@@ -652,29 +662,32 @@ func (f *Feed) applyBookTicker(symbol, bid, ask string) bool {
 	return true
 }
 
-// warnDecodeFailure records malformed frames without flooding the log. The
-// first failure is logged, later failures within a minute are counted and
-// reported with the next visible warning.
+// warnDecodeFailure records malformed frames without flooding the log.
 func (f *Feed) warnDecodeFailure(err error) {
+	f.warnThrottled("market data message could not be decoded", "error_type", fmt.Sprintf("%T", err))
+}
+
+// warnThrottled logs the first warning and then at most one per minute,
+// reporting how many matching warnings were suppressed in between.
+func (f *Feed) warnThrottled(message string, attributes ...any) {
 	f.mu.Lock()
 	now := f.now()
-	if !f.lastDecodeWarning.IsZero() && now.Sub(f.lastDecodeWarning) < time.Minute {
-		f.decodeWarnings++
+	if !f.lastWarning.IsZero() && now.Sub(f.lastWarning) < time.Minute {
+		f.warningCount++
 		f.mu.Unlock()
 		return
 	}
 
-	suppressed := f.decodeWarnings
-	f.decodeWarnings = 0
-	f.lastDecodeWarning = now
+	suppressed := f.warningCount
+	f.warningCount = 0
+	f.lastWarning = now
 	f.mu.Unlock()
 
-	attributes := []any{"error_type", fmt.Sprintf("%T", err)}
 	if suppressed > 0 {
 		attributes = append(attributes, "suppressed", suppressed)
 	}
 
-	f.logger.Warn("market data message could not be decoded", attributes...)
+	f.logger.Warn(message, attributes...)
 }
 
 func (f *Feed) fetchREST(ctx context.Context) {

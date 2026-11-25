@@ -3,6 +3,7 @@ package marketdata
 import (
 	"bytes"
 	"log/slog"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -88,7 +89,7 @@ func TestApplyMessageDecodesBinanceTradeAndBookTickerFrames(t *testing.T) {
 		},
 		{
 			name:  "unknown event is ignored",
-			frame: `{"e":"aggTrade","s":"BTCUSDT","p":"100.50"}`,
+			frame: `{"e":"aggTrade","E":123456789,"s":"BTCUSDT","a":5933014,"p":"100.50","q":"1.0","f":100,"l":105,"T":123456785,"m":true}`,
 		},
 	}
 
@@ -157,6 +158,89 @@ func TestDecodeWarningsAreAggregated(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "suppressed=2") {
 		t.Errorf("logs do not include the suppressed count: %s", logs.String())
+	}
+}
+
+func TestApplyMessageIgnoresAcknowledgementWithoutChangingQuote(t *testing.T) {
+	t.Parallel()
+
+	feed, _ := newInternalFeed()
+	feed.applyMessage([]byte(`{"e":"trade","s":"BTCUSDT","t":1,"p":"100.00","q":"1","b":1,"a":2}`))
+	before, ok := feed.Snapshot("BTCUSDT")
+	if !ok {
+		t.Fatal("trade frame was not cached")
+	}
+
+	changed, gap := feed.applyMessage([]byte(`{"result":null,"id":1}`))
+	if changed || gap {
+		t.Fatalf("acknowledgement changed=%t gap=%t, want false false", changed, gap)
+	}
+
+	after, ok := feed.Snapshot("BTCUSDT")
+	if !ok || after != before {
+		t.Errorf("acknowledgement changed the quote: before=%+v after=%+v", before, after)
+	}
+}
+
+func TestApplyTradeSequenceGapAndBookTickerFreshness(t *testing.T) {
+	t.Parallel()
+
+	feed, _ := newInternalFeed()
+	base := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
+	clock := base
+	feed.now = func() time.Time { return clock }
+
+	trade := func(id int, price string) (bool, bool) {
+		return feed.applyMessage([]byte(`{"e":"trade","s":"BTCUSDT","t":` + strconv.Itoa(id) + `,"p":"` + price + `"}`))
+	}
+
+	if changed, gap := trade(5, "100.00"); !changed || gap {
+		t.Fatalf("first trade changed=%t gap=%t, want true false", changed, gap)
+	}
+
+	ticker, _ := feed.Snapshot("BTCUSDT")
+	tradeAt := ticker.TradeAt
+	if tradeAt != base {
+		t.Fatalf("trade TradeAt = %s, want %s", tradeAt, base)
+	}
+
+	if changed, gap := trade(5, "100.00"); changed || gap {
+		t.Fatalf("duplicate trade changed=%t gap=%t, want false false", changed, gap)
+	}
+
+	if changed, gap := trade(4, "99.00"); changed || gap {
+		t.Fatalf("stale trade changed=%t gap=%t, want false false", changed, gap)
+	}
+
+	if changed, gap := trade(8, "101.00"); !changed || !gap {
+		t.Fatalf("gapped trade changed=%t gap=%t, want true true", changed, gap)
+	}
+
+	clock = base.Add(time.Second)
+	if changed, gap := feed.applyMessage([]byte(`{"s":"BTCUSDT","b":"101.10","B":"1","a":"101.20","A":"2"}`)); !changed || gap {
+		t.Fatalf("book update changed=%t gap=%t, want true false", changed, gap)
+	}
+
+	ticker, _ = feed.Snapshot("BTCUSDT")
+	if ticker.TradeAt != tradeAt {
+		t.Errorf("book update changed TradeAt from %s to %s", tradeAt, ticker.TradeAt)
+	}
+	if !ticker.UpdatedAt.Equal(clock) {
+		t.Errorf("book update UpdatedAt = %s, want %s", ticker.UpdatedAt, clock)
+	}
+}
+
+func TestApplyMessageWarnsWhenRecognizedTradeFieldsAreMalformed(t *testing.T) {
+	t.Parallel()
+
+	feed, logs := newInternalFeed()
+
+	changed, _ := feed.applyMessage([]byte(`{"e":"trade","s":"BTCUSDT","t":2,"p":100.50}`))
+	if changed {
+		t.Error("malformed trade was applied")
+	}
+	if !strings.Contains(logs.String(), "missing a numeric id or text price") {
+		t.Errorf("malformed trade did not warn: %s", logs.String())
 	}
 }
 
