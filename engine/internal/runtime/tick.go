@@ -43,9 +43,18 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 		return err
 	}
 
-	if bot.live() {
+	if bot.live() && !r.liveTrading {
 		r.pause(ctx, bot, liveDisabledMessage, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
 		return nil
+	}
+
+	// Apply exchange fills before the exit guard and daily-loss checks so a fill
+	// that happened since the last tick informs those gates immediately.
+	// Reconcile only reads/cancels; it never places an order.
+	if bot.live() {
+		if err := r.syncLiveOrdersLocked(ctx, bot, false); err != nil {
+			return r.tickFailure(ctx, bot, err)
+		}
 	}
 
 	if r.market == nil {
@@ -94,13 +103,26 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 		return r.tickFailure(ctx, bot, err)
 	}
 
-	open, err := r.openOrders(ctx, bot.ID)
-	if err != nil {
-		return err
-	}
 	market := strategy.MarketSnapshot{
 		Symbol: bot.Symbol, Price: price, Bid: &price, Ask: &price,
 		RecentPrices: recentPrices(bot.Settings), Timestamp: &tickStart,
+	}
+
+	// Reconciliation applies live inventory; OnFill applies the same fill to
+	// strategy state (disarmed levels, martingale sizing). Without this the
+	// strategy would re-emit a level that just filled.
+	var liveApplied []int64
+	var liveStop bool
+	if bot.live() {
+		state, liveApplied, liveStop, err = r.applyLiveFills(ctx, bot, impl, config, market, state)
+		if err != nil {
+			return r.tickFailure(ctx, bot, err)
+		}
+	}
+
+	open, err := r.openOrders(ctx, bot.ID)
+	if err != nil {
+		return err
 	}
 	input := strategy.Input{Market: market, Bot: bot.snapshot(open), Config: config, State: state}
 
@@ -108,6 +130,7 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 	if err != nil {
 		return r.tickFailure(ctx, bot, err)
 	}
+	decision.Stop = decision.Stop || liveStop
 
 	active, err := r.activeGrid(ctx, bot.ID)
 	if err != nil {
@@ -154,9 +177,15 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 		}
 	}
 
-	fills, err := r.processPaperFills(ctx, bot, gridAfter, tickStart)
-	if err != nil {
-		return r.tickFailure(ctx, bot, err)
+	var fills []appliedFill
+	if bot.live() {
+		// Live fills are applied by syncLiveOrders before the strategy decision.
+		fills = nil
+	} else {
+		fills, err = r.processPaperFills(ctx, bot, gridAfter, tickStart)
+		if err != nil {
+			return r.tickFailure(ctx, bot, err)
+		}
 	}
 
 	for _, fill := range fills {
@@ -191,7 +220,7 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 		return nil
 	}
 
-	if err := r.persistStrategy(ctx, bot.ID, decision.State); err != nil {
+	if err := r.persistStrategy(ctx, bot.ID, decision.State, liveApplied); err != nil {
 		return r.tickFailure(ctx, bot, err)
 	}
 
@@ -481,8 +510,24 @@ func (r *Runtime) cancelOpenOrders(ctx context.Context, userID, botID int64, rea
 		return nil, err
 	}
 
+	var bot *Bot
+	if len(orders) > 0 {
+		bot, err = r.loadBot(ctx, botID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var failures []error
 	for _, order := range orders {
+		if bot != nil && bot.live() {
+			if err := r.cancelLiveOrder(ctx, bot, order); err != nil {
+				failures = append(failures, fmt.Errorf("cancel live order %d: %w", order.ID, err))
+				r.riskEvent(ctx, userID, botID, "risk.cancel_failed", "critical", "A live order could not be canceled.", map[string]any{"order_id": order.ID, "client_order_id": order.ClientOrderID})
+				continue
+			}
+		}
+
 		_, err := r.pool.Exec(ctx,
 			`UPDATE orders SET status = 'canceled', closed_at = now(), updated_at = now()
 			 WHERE id = $1 AND status IN ('pending','open','partially_filled')`,
@@ -494,7 +539,7 @@ func (r *Runtime) cancelOpenOrders(ctx context.Context, userID, botID int64, rea
 			continue
 		}
 		if order.GridLevelID != nil {
-			_, _ = r.pool.Exec(ctx, `UPDATE grid_levels SET state = 'canceled', updated_at = now() WHERE id = $1`, *order.GridLevelID)
+			_, _ = r.pool.Exec(ctx, `UPDATE grid_levels SET state = 'canceled', updated_at = now() WHERE id = $1 AND state IN ('idle','open')`, *order.GridLevelID)
 		}
 	}
 
@@ -548,17 +593,127 @@ func (r *Runtime) loadStrategy(ctx context.Context, bot *Bot) (strategy.State, s
 	return state, strategy.Config{Key: bot.StrategyKey, Values: values}, nil
 }
 
-func (r *Runtime) persistStrategy(ctx context.Context, botID int64, state strategy.State) error {
+type liveFill struct {
+	ID             int64
+	ExchangeFillID string
+	ClientOrderID  string
+	Side           string
+	Price          decimal.Decimal
+	Quantity       decimal.Decimal
+	Fee            decimal.Decimal
+	Sequence       *int
+}
+
+// unappliedLiveFills returns exchange fills that were reconciled into
+// inventory but have not yet been seen by the strategy. Paper fills are
+// processed inline and are never part of this queue.
+func (r *Runtime) unappliedLiveFills(ctx context.Context, botID int64) ([]liveFill, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT f.id, f.exchange_fill_id, COALESCE(o.client_order_id, ''), f.side,
+		        f.price::text, f.quantity::text, COALESCE(f.fee::text, '0'), gl.sequence
+		 FROM fills f
+		 JOIN orders o ON o.id = f.order_id
+		 LEFT JOIN grid_levels gl ON gl.id = o.grid_level_id
+		 WHERE f.bot_id = $1 AND f.strategy_applied_at IS NULL AND f.exchange <> 'paper'
+		 ORDER BY f.filled_at, f.id`,
+		botID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var fills []liveFill
+	for rows.Next() {
+		var fill liveFill
+		var price, quantity, fee string
+		if err := rows.Scan(&fill.ID, &fill.ExchangeFillID, &fill.ClientOrderID, &fill.Side, &price, &quantity, &fee, &fill.Sequence); err != nil {
+			return nil, err
+		}
+		fill.Price = mustDecimal(price)
+		fill.Quantity = mustDecimal(quantity)
+		fill.Fee = mustDecimal(fee)
+		fills = append(fills, fill)
+	}
+
+	return fills, rows.Err()
+}
+
+// applyLiveFills feeds reconciled exchange fills through OnFill before the
+// next strategy decision. The returned fill IDs are marked applied in the same
+// transaction as the strategy state, so a crash cannot skip OnFill.
+func (r *Runtime) applyLiveFills(ctx context.Context, bot *Bot, impl strategy.Strategy, config strategy.Config, market strategy.MarketSnapshot, state strategy.State) (strategy.State, []int64, bool, error) {
+	fills, err := r.unappliedLiveFills(ctx, bot.ID)
+	if err != nil {
+		return state, nil, false, err
+	}
+
+	ids := make([]int64, 0, len(fills))
+	stop := false
+
+	for _, fill := range fills {
+		refreshed, err := r.loadBot(ctx, bot.ID)
+		if err != nil {
+			return state, nil, false, err
+		}
+		orders, err := r.openOrders(ctx, bot.ID)
+		if err != nil {
+			return state, nil, false, err
+		}
+
+		clientID := fill.ClientOrderID
+		decision, err := impl.OnFill(
+			strategy.Input{Market: market, Bot: refreshed.snapshot(orders), Config: config, State: state},
+			strategy.FillEvent{
+				ExchangeFillID:    fill.ExchangeFillID,
+				Side:              strategy.Side(fill.Side),
+				Price:             fill.Price,
+				Quantity:          fill.Quantity,
+				Fee:               fill.Fee,
+				ClientOrderID:     &clientID,
+				GridLevelSequence: fill.Sequence,
+			},
+		)
+		if err != nil {
+			return state, nil, false, err
+		}
+		state = decision.State
+		stop = stop || decision.Stop
+		ids = append(ids, fill.ID)
+	}
+
+	return state, ids, stop, nil
+}
+
+func (r *Runtime) persistStrategy(ctx context.Context, botID int64, state strategy.State, appliedFillIDs []int64) error {
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("encode strategy state: %w", err)
 	}
 
-	_, err = r.pool.Exec(ctx,
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("persist strategy state: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx,
 		`UPDATE strategy_configs SET state = $2::jsonb, state_version = $3, updated_at = now() WHERE bot_id = $1`,
 		botID, string(encoded), state.Version,
-	)
-	if err != nil {
+	); err != nil {
+		return fmt.Errorf("persist strategy state: %w", err)
+	}
+
+	if len(appliedFillIDs) > 0 {
+		if _, err := tx.Exec(ctx,
+			`UPDATE fills SET strategy_applied_at = now() WHERE bot_id = $1 AND id = ANY($2::bigint[])`,
+			botID, appliedFillIDs,
+		); err != nil {
+			return fmt.Errorf("mark live fills applied: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("persist strategy state: %w", err)
 	}
 
@@ -590,6 +745,18 @@ func (r *Runtime) syncGrid(ctx context.Context, bot *Bot, levels []strategy.Grid
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if active != nil {
+		if bot.live() {
+			open, err := r.openOrders(ctx, bot.ID)
+			if err != nil {
+				return nil, false, err
+			}
+			for _, order := range open {
+				if err := r.cancelLiveOrder(ctx, bot, order); err != nil {
+					return nil, false, err
+				}
+			}
+		}
+
 		if _, err := tx.Exec(ctx,
 			`UPDATE orders SET status = 'canceled', closed_at = now(), updated_at = now()
 			 WHERE bot_id = $1 AND status IN ('pending','open','partially_filled')`,
@@ -660,18 +827,25 @@ func (r *Runtime) applyCancels(ctx context.Context, bot *Bot, impl strategy.Stra
 	for _, clientID := range clientIDs {
 		var orderID, levelID int64
 		var levelSequence *int
+		var exchangeOrderID, filled string
 		err := r.pool.QueryRow(ctx,
-			`SELECT o.id, COALESCE(o.grid_level_id, 0), gl.sequence
+			`SELECT o.id, COALESCE(o.grid_level_id, 0), gl.sequence, COALESCE(o.exchange_order_id, ''), o.filled_quantity::text
 			 FROM orders o LEFT JOIN grid_levels gl ON gl.id = o.grid_level_id
 			 WHERE o.bot_id = $1 AND o.client_order_id = $2 AND o.status IN ('pending','open','partially_filled')`,
 			bot.ID, clientID,
-		).Scan(&orderID, &levelID, &levelSequence)
+		).Scan(&orderID, &levelID, &levelSequence, &exchangeOrderID, &filled)
 		if err != nil {
 			continue
 		}
-		_, _ = r.pool.Exec(ctx, `UPDATE orders SET status = 'canceled', closed_at = now(), updated_at = now() WHERE id = $1`, orderID)
+		if bot.live() {
+			liveOrder := openOrder{ID: orderID, ClientOrderID: clientID, ExchangeOrderID: exchangeOrderID, FilledQuantity: mustDecimal(filled)}
+			if err := r.cancelLiveOrder(ctx, bot, liveOrder); err != nil {
+				return err
+			}
+		}
+		_, _ = r.pool.Exec(ctx, `UPDATE orders SET status = 'canceled', closed_at = now(), updated_at = now() WHERE id = $1 AND status IN ('pending','open','partially_filled')`, orderID)
 		if levelID > 0 {
-			_, _ = r.pool.Exec(ctx, `UPDATE grid_levels SET state = 'canceled', updated_at = now() WHERE id = $1`, levelID)
+			_, _ = r.pool.Exec(ctx, `UPDATE grid_levels SET state = 'canceled', updated_at = now() WHERE id = $1 AND state IN ('idle','open')`, levelID)
 		}
 		decision, err := impl.OnCancel(r.strategyInput(ctx, bot, *state), strategy.CancelEvent{ClientOrderID: clientID, GridLevelSequence: levelSequence, Reason: "strategy"})
 		if err != nil {
@@ -698,6 +872,10 @@ func (r *Runtime) strategyInput(ctx context.Context, bot *Bot, state strategy.St
 func (r *Runtime) placeOrders(ctx context.Context, bot *Bot, active *gridState, intents []strategy.OrderIntent) (int, error) {
 	if active == nil {
 		return 0, nil
+	}
+
+	if bot.live() {
+		return r.placeLiveOrders(ctx, bot, active, intents)
 	}
 
 	open, err := r.openOrders(ctx, bot.ID)

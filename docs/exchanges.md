@@ -67,18 +67,27 @@ Paper is the default mode for every bot.
   limit. Fills happen at the limit price and fees use `trading.paper.fee_rate`.
   Fills are evaluated at engine tick time, so a price that crosses and recrosses
   a limit between ticks is not guaranteed to fill.
-- Live mode is intended to use the bot's encrypted credential and place real
-  limit orders from the Go engine. Live execution is deliberately disabled in
-  the Go runtime: a live start is paused with a clear error. See
-  [runtime.md](runtime.md).
-- Live execution requires both `TRADING_LIVE_ENABLED=true` and per-bot
-  confirmation with a passing balance check. There is no automatic fallback
-  from live to paper.
+- Live mode uses the bot's encrypted credential and places real limit orders
+  from the Go engine. `TRADING_LIVE_ENABLED` defaults to `false`; a closed gate
+  pauses the live bot and records a risk event. See [runtime.md](runtime.md).
+- The first rollout target is Binance testnet with `TRADING_EXCHANGE_SANDBOX=true`
+  or a credential marked `testnet`. Testnet requests must use
+  `https://testnet.binance.vision`; a custom relay or production host is refused.
+- Live execution also requires per-bot confirmation with a passing free-quote
+  balance check. There is no automatic fallback from live to paper.
+- Production real-money live trading requires Johnson's explicit yes for that
+  exact action. The code path exists, but do not enable it locally or in CI.
+- MAX has the same adapter interface but is proven against fakes only in this
+  change. Adding `max` to `TRADING_EXCHANGES` registers the adapter for form
+  selection; its live client stays blocked until a separate MAX proof. There is
+  no MAX live or testnet approval and no MAX soak in this change.
 
-Laravel publishes the control command and keeps the live gate; the engine owns
-order placement, fills, reconciliation, and failure handling. If the engine is
-unreachable during stop or kill-switch, Laravel cancels open live orders locally
-through `CancelBotOrders` as an emergency measure.
+Laravel publishes the control command; the engine owns live order placement,
+idempotent client order IDs, reconciliation, partial fills, and failure
+handling. If the engine is unreachable during stop or kill-switch, Laravel
+cancels open live orders locally through `CancelBotOrders` as an emergency
+measure. The engine still consumes in-band `order.cancel` and `kill_switch`
+commands when healthy.
 
 ## Rate limiting and retries
 
@@ -86,6 +95,10 @@ CCXT's built-in rate limiter is enabled. The wrapper retries only transient
 `connection` and `rate_limit` errors using exponential backoff
 (`retry_delay_ms * 2^(attempt-1)`). Rejected orders, authentication failures,
 insufficient balance, and not-found errors are not retried.
+
+The Go engine has its own private-call path. It honors a venue's `Retry-After`
+per bot and blocks both placement and reconciliation until that instant. A
+rate-limited reconcile is therefore not retried on the next scheduler pass.
 
 ## Failure handling
 
@@ -132,6 +145,22 @@ composer test:testnet
 immediately. Use a testnet key with spot-trading permission and no withdrawal
 permission. The suite skips itself unless `CCXT_TESTNET=1` and both credentials
 are present.
+
+The Go engine has its own opt-in proof for the private adapter it now owns:
+
+```bash
+BINANCE_TESTNET=1 \
+BINANCE_TESTNET_API_KEY=... \
+BINANCE_TESTNET_API_SECRET=... \
+  go test -tags binance_testnet ./internal/exchange -run TestBinanceTestnetPlaceCancelReconcile -v
+```
+
+It places, looks up, reconciles, and cancels one resting Binance testnet order.
+It hard-fails before any private request unless the keys are present and the
+resolved base URL is `https://testnet.binance.vision`; it refuses
+`ENGINE_EXCHANGE_BASE_URL` and production hosts. Default CI and verify never set
+`BINANCE_TESTNET`. MAX remains fake-only in this change; there is no MAX testnet
+or live suite.
 
 
 ## Numeric normalization and trading rules

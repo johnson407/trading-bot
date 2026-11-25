@@ -283,3 +283,17 @@ A protective exit rule SHALL be optional and SHALL be disabled when its value is
 
 - **WHEN** a user submits a stop-loss of one hundred percent or more, a non-positive percentage or range bound, or a range low at or above its high
 - **THEN** the request reports validation errors and the stored rules are unchanged
+
+### Requirement: Per-order live risk gates
+
+The engine SHALL apply the same runtime risk limits immediately before every live order place, not only at bot start. Default and production configuration SHALL leave `TRADING_LIVE_ENABLED` false unless an operator explicitly enables it for a named environment.
+
+#### Scenario: Risk gates apply to each live place
+
+- **WHEN** a running live bot attempts to place an order that would breach a risk limit
+- **THEN** the engine blocks the place, does not send it to the exchange, and records a risk event
+
+#### Scenario: Default live gate is closed
+
+- **WHEN** the default or production composition starts without an explicit operator override
+- **THEN** `TRADING_LIVE_ENABLED` is false

@@ -57,8 +57,8 @@ func (r Redis) Addr() string {
 
 // MarketData configures the public exchange feed. Both URLs are empty by
 // default, which keeps the feed idle: the engine process opens no exchange
-// connection until an operator explicitly opts in. Phase 3 has no running-bot
-// tick loop, so Symbols is also empty by default.
+// connection until an operator explicitly opts in. Symbols is an optional
+// operator-pinned watchlist; running bots' symbols are added dynamically.
 type MarketData struct {
 	WSURL            string
 	RESTURL          string
@@ -68,6 +68,10 @@ type MarketData struct {
 	ReconnectMin     time.Duration
 	ReconnectMax     time.Duration
 	RequestTimeout   time.Duration
+	// StaleAfter is the maximum age of a cached quote a tick may use. The
+	// default is 15 seconds or half of TRADING_TICK_INTERVAL, whichever is
+	// larger, and ENGINE_MARKET_DATA_STALE_AFTER overrides it.
+	StaleAfter time.Duration
 }
 
 // Configured reports whether both public endpoints are set.
@@ -79,11 +83,18 @@ func (m MarketData) Configured() bool {
 type Config struct {
 	Addr                     string
 	AppEnv                   string
+	AppKey                   string
+	AppPreviousKeys          []string
 	Database                 Database
 	Redis                    Redis
 	LiveTrading              bool
 	TradingExchanges         []string
 	TradingDefaultExchange   string
+	TradingTickInterval      time.Duration
+	TradingOrderSync         time.Duration
+	TradingExchangeSandbox   bool
+	TradingExchangeBaseURL   string
+	InternalToken            string
 	MarketData               MarketData
 	BacktestJobTimeout       time.Duration
 	BacktestMaxFills         int
@@ -98,6 +109,7 @@ func Load(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		Addr:   envOr(getenv, "ENGINE_LISTEN_ADDR", DefaultListenAddr),
 		AppEnv: envOr(getenv, "APP_ENV", "local"),
+		AppKey: strings.TrimSpace(getenv("APP_KEY")),
 		Database: Database{
 			Host:     envOr(getenv, "DB_HOST", "127.0.0.1"),
 			Port:     5432,
@@ -113,6 +125,9 @@ func Load(getenv func(string) string) (Config, error) {
 		},
 		TradingExchanges:       splitList(envOr(getenv, "TRADING_EXCHANGES", "binance")),
 		TradingDefaultExchange: envOr(getenv, "TRADING_DEFAULT_EXCHANGE", "binance"),
+		TradingExchangeBaseURL: strings.TrimSpace(getenv("ENGINE_EXCHANGE_BASE_URL")),
+		AppPreviousKeys:        splitList(getenv("APP_PREVIOUS_KEYS")),
+		InternalToken:          strings.TrimSpace(getenv("ENGINE_INTERNAL_TOKEN")),
 		MarketData: MarketData{
 			WSURL:   strings.TrimSpace(getenv("ENGINE_MARKET_DATA_WS_URL")),
 			RESTURL: strings.TrimSpace(getenv("ENGINE_MARKET_DATA_REST_URL")),
@@ -142,6 +157,10 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	if cfg.TradingExchangeSandbox, err = parseBool("TRADING_EXCHANGE_SANDBOX", getenv("TRADING_EXCHANGE_SANDBOX")); err != nil {
+		return Config{}, err
+	}
+
 	if cfg.MarketData.QuietAfter, err = parseDuration("ENGINE_MARKET_DATA_QUIET_AFTER", getenv("ENGINE_MARKET_DATA_QUIET_AFTER"), 30*time.Second); err != nil {
 		return Config{}, err
 	}
@@ -160,6 +179,36 @@ func Load(getenv func(string) string) (Config, error) {
 
 	if cfg.MarketData.RequestTimeout, err = parseDuration("ENGINE_MARKET_DATA_REQUEST_TIMEOUT", getenv("ENGINE_MARKET_DATA_REQUEST_TIMEOUT"), 10*time.Second); err != nil {
 		return Config{}, err
+	}
+
+	tickInterval, err := parsePositiveInt("TRADING_TICK_INTERVAL", envOr(getenv, "TRADING_TICK_INTERVAL", "60"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.TradingTickInterval = time.Duration(tickInterval) * time.Second
+
+	orderSyncSeconds, err := parsePositiveInt("TRADING_ORDER_SYNC_SECONDS", envOr(getenv, "TRADING_ORDER_SYNC_SECONDS", "5"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.TradingOrderSync = time.Duration(orderSyncSeconds) * time.Second
+
+	// A tick may read a cached quote no older than half its evaluation
+	// interval, with a 15-second floor so a fast bot still has slack for one
+	// missed socket update.
+	staleAfter := 15 * time.Second
+	if half := cfg.TradingTickInterval / 2; half > staleAfter {
+		staleAfter = half
+	}
+	if raw := strings.TrimSpace(getenv("ENGINE_MARKET_DATA_STALE_AFTER")); raw != "" {
+		if cfg.MarketData.StaleAfter, err = parseDuration("ENGINE_MARKET_DATA_STALE_AFTER", raw, staleAfter); err != nil {
+			return Config{}, err
+		}
+		if cfg.MarketData.StaleAfter <= 0 {
+			return Config{}, fmt.Errorf("ENGINE_MARKET_DATA_STALE_AFTER %q must be a positive duration", raw)
+		}
+	} else {
+		cfg.MarketData.StaleAfter = staleAfter
 	}
 
 	if cfg.BacktestJobTimeout, err = parseDuration("BACKTEST_JOB_TIMEOUT", getenv("BACKTEST_JOB_TIMEOUT"), 600*time.Second); err != nil {
@@ -184,6 +233,10 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	if err := validateEndpoint("ENGINE_MARKET_DATA_REST_URL", cfg.MarketData.RESTURL, "http", "https"); err != nil {
+		return Config{}, err
+	}
+
+	if err := validateEndpoint("ENGINE_EXCHANGE_BASE_URL", cfg.TradingExchangeBaseURL, "http", "https"); err != nil {
 		return Config{}, err
 	}
 

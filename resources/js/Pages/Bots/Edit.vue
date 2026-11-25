@@ -47,7 +47,7 @@ const selectedStrategy = computed(() => strategyMeta(props.bot.strategy_key));
 
 const preview = ref(props.preview);
 const previewLoading = ref(false);
-const previewError = ref('');
+const previewError = ref(props.preview?.error ?? '');
 let previewTimer = null;
 let previewRequest = 0;
 
@@ -148,6 +148,8 @@ const submit = () => form
                     <h3 class="font-semibold text-slate-100">Identity</h3>
                     <p class="mt-1 text-sm text-slate-300">
                         Symbol, exchange, mode and strategy are fixed for the lifetime of a bot. Create a new bot to change them.
+                        Live mode sends real orders only when the engine live gate is enabled; use testnet before a
+                        real-money account. Paper bots never promote to live automatically.
                     </p>
                     <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
                         <div><dt class="text-slate-300">Symbol</dt><dd class="font-mono">{{ bot.symbol }}</dd></div>

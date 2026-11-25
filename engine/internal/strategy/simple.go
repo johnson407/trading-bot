@@ -6,7 +6,7 @@ import (
 	"github.com/johnson407/trading-bot/engine/internal/decimal"
 )
 
-// SimpleGrid ports App\Strategies\SimpleGridStrategy.
+// SimpleGrid is the runtime simple-grid strategy.
 type SimpleGrid struct{}
 
 // NewSimpleGrid returns the simple-grid strategy.

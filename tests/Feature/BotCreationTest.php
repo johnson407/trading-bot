@@ -1,12 +1,12 @@
 <?php
 
 use App\Domain\Exchange\ValueObjects\MarketData;
-use App\Domain\Grid\GridPlanEvaluator;
 use App\Http\Requests\StoreBotRequest;
 use App\Models\Bot;
 use App\Models\ExchangeCredential;
 use App\Models\StrategyConfig;
 use App\Models\User;
+use App\Services\Engine\GridPlanClient;
 use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -213,6 +213,18 @@ it('defaults the fee rate from config when the field is omitted', function () {
     expect(Bot::where('user_id', $user->id)->firstOrFail()->fee_rate)->toBe('0.00150000');
 });
 
+it('fails closed without persisting when the plan engine is unreachable', function () {
+    config(['engine.plan_url' => 'http://127.0.0.1:1']);
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), botPayload())
+        ->assertSessionHasErrors('strategy_key');
+
+    expect(Bot::count())->toBe(0)
+        ->and(StrategyConfig::count())->toBe(0);
+});
+
 it('rejects a grid that cannot be constructed', function (array $overrides, string $field) {
     $user = User::factory()->create();
 
@@ -266,7 +278,7 @@ it('creates a bot when the plan only produces advisories', function () {
 
         $request = StoreBotRequest::create(route('bots.store'), 'POST', $payload);
         $request->setUserResolver(fn () => $user);
-        $plan = app(GridPlanEvaluator::class)->evaluate($request->gridPlanRequest());
+        $plan = app(GridPlanClient::class)->evaluate($request->gridPlanRequest());
 
         expect(array_map(fn ($problem) => $problem->code, $plan->warnings()))
             ->toContain('plan.max_open_orders', 'plan.max_position_notional', 'plan.center_price_band', 'plan.unfunded_sells')

@@ -1,8 +1,8 @@
 # Grid Trading Bot
 
 A Laravel 12 grid-trading engine for cryptocurrency markets with pluggable strategies,
-paper trading by default, optional live Binance execution through CCXT, and an
-authenticated Inertia + Vue dashboard.
+paper trading by default, gated live execution through the Go engine (Binance
+testnet first), and an authenticated Inertia + Vue dashboard.
 
 > **Safety first:** paper mode is the default. Live mode requires an explicit
 > environment gate, a stored API credential, an exact `<bot name> on <exchange>`
@@ -17,10 +17,15 @@ The hybrid runtime is implemented on the `hybrid-engine` branch:
 - Go engine bot runtime: control handlers, due-check ticks, grid sync, paper
   fills, daily-loss/exit guards, and backtests.
 - Laravel publishes commands and owns configuration, `desired_status`, the live
-  gate, previews, and the dashboard.
-- **Live execution remains disabled in the Go engine.** A live bot start is
-  paused with a clear `last_error`; Laravel still owns the live gate and cancels
-  open live orders locally on stop/kill-switch when the engine cannot.
+  gate, previews, and the dashboard. Preview and save both call the engine's
+  internal plan endpoint, so Go is the only strategy evaluator.
+- **Live execution is implemented in the Go engine and gated off by default.**
+  The first rollout target is Binance testnet with `TRADING_EXCHANGE_SANDBOX=true`
+  or a credential marked testnet. Production real-money live trading requires
+  Johnson's explicit yes for that exact action. The engine persists client order
+  IDs before placing, reconciles partial fills, and cancels through the exchange;
+  Laravel still cancels open live orders locally on stop/kill-switch when the
+  engine cannot. MAX is adapter-proven with fakes only in this change.
 - Risk controls: position/open-order caps, per-bot and account-wide daily loss
   pauses, kill switch (immediate command plus emergency live cancel), and
   live-mode safeguards.
@@ -105,10 +110,12 @@ scheduler, and Go engine services each have health checks.
 `adopt-hybrid-go-engine` change. It consumes `engine.commands` and
 `engine.backtests`, publishes `engine:heartbeat`, and serves `GET /healthz` and
 `GET /livez`. It executes the paper-trading bot runtime (control commands,
-due-check ticks, grids, paper orders/fills, daily-loss and exit guards), backtest
-replays, and sweeps. Live execution is intentionally disabled: a live bot start
-is paused with a clear error, and Laravel keeps the live gate plus its emergency
-`CancelBotOrders` path. Laravel remains the UI/configuration layer.
+due-check ticks, grids, paper orders/fills, daily-loss and exit guards), gated
+live placement/cancellation/reconciliation, and backtest replays and sweeps.
+`TRADING_LIVE_ENABLED` defaults to false; a closed gate pauses a live bot and
+records a risk event. Binance testnet is the first rollout target. Laravel keeps
+the live gate and its emergency `CancelBotOrders` path, and remains the
+UI/configuration layer.
 
 There is no Go toolchain on the host. Run its tests through Docker:
 
@@ -227,7 +234,12 @@ stated limitations.
 TRADING_EXCHANGE_SANDBOX=true
 ```
 
-The opt-in CCXT integration suite can place and cancel a small testnet order:
+The engine places, reconciles, and cancels through the same private client
+interface. Production real-money live trading needs Johnson's explicit yes for
+that exact action; do not set it locally or in CI. The MAX adapter exists behind
+the same interface but is fake-proven only and its live client is explicitly
+blocked in this build; a future MAX proof needs a new explicit yes. The opt-in
+Binance testnet suite can place and cancel a small testnet order:
 
 ```bash
 CCXT_TESTNET=1 \

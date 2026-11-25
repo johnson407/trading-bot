@@ -2,15 +2,14 @@
 
 use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Domain\Grid\Enums\GridPlanProblemSeverity;
-use App\Domain\Grid\GridPlanEvaluator;
 use App\Domain\Grid\ValueObjects\GridPlan;
 use App\Domain\Grid\ValueObjects\GridPlanRequest;
-use App\Domain\Strategy\StrategyRegistry;
 use App\Domain\Support\Decimal;
+use App\Services\Engine\GridPlanClient;
 
 function evaluateGridPlan(array $overrides = [], array $request = []): GridPlan
 {
-    return (new GridPlanEvaluator(app(StrategyRegistry::class)))->evaluate(new GridPlanRequest(
+    return app(GridPlanClient::class)->evaluate(new GridPlanRequest(
         strategyKey: $request['strategyKey'] ?? 'simple-grid',
         configuration: array_replace(gridPlanConfiguration(), $overrides),
         symbol: $request['symbol'] ?? 'BTC/USDT',

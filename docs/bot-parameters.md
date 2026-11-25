@@ -16,12 +16,14 @@ execution. Parameters come from three layers:
 ```
 
 The flow is: create/edit form -> `StoreBotRequest` / `UpdateBotRequest` ->
-`StrategyConfig.configuration` -> strategy class -> `RiskGuard`.
+`StrategyConfig.configuration` -> Go strategy (`engine/internal/strategy`) ->
+risk gates at tick time.
 
-The form also calls `GridPlanEvaluator` for a live preview through
+The form also calls the Go engine's internal `POST /v1/plan/evaluate` through
 `POST /bots/preview`, which returns the ladder, notional totals, and advisories
-without persisting anything. The same evaluator runs inside both requests, so the
-preview and the saved setup cannot disagree.
+without persisting anything. The same Go evaluator runs inside both save
+requests, so the preview and the saved setup cannot disagree. If the engine is
+unreachable, preview and save both fail closed with a clear error.
 
 ---
 
@@ -96,7 +98,7 @@ Example: center `50000`, arithmetic spacing `100`, 3 levels per side:
         BUY   49700   v  buy side (uses quote inventory)
 ```
 
-How levels are built (`GeneratesGridLevels`):
+How levels are built (`engine/internal/strategy/grid.go`):
 
 - Arithmetic: `center +/- spacing * i`
 - Geometric: `center * (1+spacing)^i` above, `center / (1+spacing)^i` below
@@ -117,7 +119,8 @@ Hard ceilings from the risk layer (defaults, editable at account level):
 
 ### Before saving: errors versus advisories
 
-The preview (`POST /bots/preview`) and both save requests share one evaluator:
+The preview (`POST /bots/preview`) and both save requests call the same Go
+engine evaluation endpoint:
 
 - **Errors stop saving.** These are setups that cannot run: geometric spacing >= 1,
   non-positive or duplicate level prices, and an order below the exchange minimum

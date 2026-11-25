@@ -1,85 +1,73 @@
 # Strategies
 
-The bot engine is strategy-agnostic. A strategy decides what grid to build and which orders to
-request; the engine owns persistence, exchange calls, risk checks, and order/fill bookkeeping.
-Strategies never read the database and never call an exchange.
+The bot engine is strategy-agnostic. A strategy decides what grid to build and
+which orders to request; the engine owns persistence, exchange calls, risk
+checks, and order/fill bookkeeping. Strategies never read the database and never
+call an exchange.
 
-In the hybrid runtime the executing strategies live in
-`engine/internal/strategy`. The PHP classes under `app/Strategies` remain only
-for the Laravel create/edit ladder preview (`POST /bots/preview`) and are not the
-tick runtime. Changes to a built-in rule must be made in both places until the
-preview is served from the engine; the Go fixture suite is the runtime authority.
+**Go is the only evaluator.** The four built-in strategies live in
+`engine/internal/strategy`. Laravel keeps only a key catalog
+(`App\Domain\Strategy\StrategyRegistry`) for form validation and backtest
+parameter sweeps. There are no PHP strategy implementations and no PHP
+`onTick` path: preview, create/update validation, and runtime ticks all use the
+same Go code.
 
-For the full list of bot fields, their validation rules, and their runtime effects, see
-[Bot parameters](bot-parameters.md).
+The preview path is:
 
-## The contract
+```text
+resources/js create/edit form
+  -> POST /bots/preview
+  -> App\Services\Engine\GridPlanClient
+  -> Go engine POST /v1/plan/evaluate
+  -> strategy OnTick with an empty state
+```
 
-Every strategy implements `App\Domain\Strategy\Contracts\StrategyInterface`:
+`StoreBotRequest` and `UpdateBotRequest` call the same client during validation,
+so the ladder a user previews is the ladder the engine will run. If the engine
+is unreachable, preview and save both fail with a clear error and persist
+nothing. The endpoint is internal-only: Compose does not publish the engine
+port, and `ENGINE_INTERNAL_TOKEN` is required if it is ever exposed beyond the
+service network.
 
-```php
-interface StrategyInterface
-{
-    public function key(): string;
-    public function initialize(StrategyInput $input): StrategyDecision;
-    public function onTick(StrategyInput $input): StrategyDecision;
-    public function onFill(StrategyInput $input, FillEvent $fill): StrategyDecision;
-    public function onCancel(StrategyInput $input, CancelEvent $cancel): StrategyDecision;
-    public function shouldStop(StrategyInput $input): bool;
+For the full list of bot fields, their validation rules, and their runtime
+effects, see [Bot parameters](bot-parameters.md).
 
-    /** @return list<GridLevelPlan> */
-    public function getGridLevels(StrategyInput $input): array;
+## Runtime contract
+
+The Go interface lives in `engine/internal/strategy/types.go`:
+
+```go
+type Strategy interface {
+    Key() string
+    Initialize(input Input) (Decision, error)
+    OnTick(input Input) (Decision, error)
+    OnFill(input Input, fill FillEvent) (Decision, error)
+    OnCancel(input Input, cancel CancelEvent) (Decision, error)
+    ShouldStop(input Input) bool
+    GetGridLevels(input Input) ([]GridLevelPlan, error)
 }
 ```
 
-`StrategyInput` is immutable and contains four value objects:
+`Input` is immutable and contains:
 
-- `market` — symbol, current price, optional bid/ask, recent prices, and timestamp.
-- `bot` — bot id, base/quote inventory, average entry price, realized P&L, capital, open orders.
-- `config` — the strategy configuration stored on the bot.
-- `state` — the versioned strategy state resumed from the database.
+- `Market` — symbol, current price, optional bid/ask, recent prices, timestamp.
+- `Bot` — bot id, base/quote inventory, average entry price, realized P&L,
+  capital, open orders.
+- `Config` — the strategy configuration stored on the bot.
+- `State` — the versioned strategy state resumed from the database.
 
-`StrategyDecision` is also immutable. It carries the next `state`, the grid `levels`, the `orders`
-to place, an optional `stop` flag, domain `events`, and `cancelClientOrderIds`.
-
-## Registration
-
-The PHP preview strategies are registered in `AppServiceProvider` for
-`StrategyRegistry` and the preview evaluator. A new runtime strategy must also be
-added to the Go engine's strategy factory and fixture tests; the PHP registration
-alone does not make it tradable.
-
-Register a strategy with the `StrategyRegistry` singleton, normally in
-`AppServiceProvider::boot()`:
-
-```php
-use App\Domain\Strategy\StrategyRegistry;
-
-public function boot(): void
-{
-    $this->app->make(StrategyRegistry::class)->register(new MyStrategy);
-}
-```
-
-The registry rejects duplicate keys and resolves strategies by their stable `key()`. The key is
-stored in `strategy_configs.strategy_key`, so renaming a key requires migrating existing bots.
+`Decision` is also immutable. It carries the next state, grid levels, orders to
+place, an optional stop flag, events, and client order IDs to cancel.
 
 ## State rules
 
-- `initialize()` must be idempotent. It should return the existing state unchanged when
-  `$input->state->isNew()` is false.
-- Return the next state from every hook through `StrategyDecision`.
-- State is persisted as JSON through `StrategyStateSerializer` with
-  `{ "version": 1, "data": { ... } }`. The version is checked on resume; an unsupported version
-  pauses the bot and records an activity error rather than guessing.
-- State must be JSON-serializable and free of floats. Use `Decimal` strings for money.
-- `state_version` is written alongside the JSON for diagnostics.
-
-## Configuration
-
-`StrategyConfiguration` exposes typed accessors: `get`, `has`, `string`, `decimal`, `int`, `bool`.
-Missing or invalid values should throw `InvalidStrategyConfigurationException::forStrategy()`.
-Money and quantities must be requested with `decimal()` so they stay exact strings.
+- `Initialize` must be idempotent and return the existing state unchanged when
+  the state is not new.
+- Return the next state from every hook through `Decision`.
+- State is persisted as JSON with `{ "version": 1, "data": { ... } }`. An
+  unsupported version pauses the bot rather than guessing.
+- State must be JSON-serializable and free of floats. Use decimal strings for
+  money and quantities.
 
 ## Built-in strategies
 
@@ -90,82 +78,13 @@ Money and quantities must be requested with `decimal()` so they stay exact strin
 | `martingale-grid` | Increases order size after fills with hard caps | Simple grid keys plus `size_multiplier`, `max_order_quantity`, `max_increases` |
 | `dynamic-grid` | Sets spacing from recent volatility | `levels_per_side`, `order_quantity`, `min_spacing`, `max_spacing`, optional `volatility_multiplier`, `initial_spacing`, `recalculation_interval_seconds` |
 
-## Minimal custom strategy
+## Adding a strategy
 
-The complete, runnable example lives at `tests/Fixtures/DocumentedCustomStrategy.php`. It builds a
-two-level ladder and demonstrates every interface method:
+1. Implement the Go `Strategy` interface in `engine/internal/strategy`.
+2. Register the key in the Go factory (`NewStrategy`).
+3. Add the key to `StrategyRegistry::KEYS` for Laravel form validation and
+   backtest sweeps.
+4. Add Go fixture/parity tests. There is no PHP implementation to mirror.
 
-```php
-namespace Tests\Fixtures;
-
-use App\Domain\Order\Enums\OrderSide;
-use App\Domain\Strategy\Contracts\StrategyInterface;
-use App\Domain\Strategy\ValueObjects\CancelEvent;
-use App\Domain\Strategy\ValueObjects\FillEvent;
-use App\Domain\Strategy\ValueObjects\GridLevelPlan;
-use App\Domain\Strategy\ValueObjects\StrategyDecision;
-use App\Domain\Strategy\ValueObjects\StrategyInput;
-use App\Domain\Support\Decimal;
-
-class DocumentedCustomStrategy implements StrategyInterface
-{
-    public const KEY = 'documented-custom';
-
-    public function key(): string { return self::KEY; }
-
-    public function initialize(StrategyInput $input): StrategyDecision
-    {
-        if (! $input->state->isNew()) {
-            return StrategyDecision::idle($input->state);
-        }
-
-        return StrategyDecision::withLevels(
-            $input->state->merge(['initialized' => true]),
-            $this->getGridLevels($input),
-        );
-    }
-
-    public function onTick(StrategyInput $input): StrategyDecision
-    {
-        return StrategyDecision::withLevels($input->state, $this->getGridLevels($input));
-    }
-
-    public function onFill(StrategyInput $input, FillEvent $fill): StrategyDecision
-    {
-        return StrategyDecision::idle($input->state->merge(['last_fill' => $fill->exchangeFillId]));
-    }
-
-    public function onCancel(StrategyInput $input, CancelEvent $cancel): StrategyDecision
-    {
-        return StrategyDecision::idle($input->state);
-    }
-
-    public function shouldStop(StrategyInput $input): bool { return false; }
-
-    /** @return list<GridLevelPlan> */
-    public function getGridLevels(StrategyInput $input): array
-    {
-        return [
-            GridLevelPlan::make(1, Decimal::of('99'), OrderSide::Buy),
-            GridLevelPlan::make(2, Decimal::of('101'), OrderSide::Sell),
-        ];
-    }
-}
-```
-
-Register it and select `documented-custom` when creating a bot for a preview, and
-add the equivalent Go implementation before relying on it at runtime. The test
-suite resolves the same class through `StrategyRegistry`, so the documented
-example is verified against the preview contract.
-
-
-## Market history
-
-The runtime keeps the last 30 tick prices in `bots.settings.recent_prices` and
-passes them to the strategy as `MarketSnapshot::recentPrices`. The dynamic
-strategy uses this window to measure volatility; without it, spacing falls back
-to the configured initial spacing.
-
-When a grid is recreated (for example after a trailing recenter), the pipeline
-cancels the old orders and then re-evaluates the strategy so every level in the
-new grid receives an order instead of leaving kept levels empty.
+The key is stored in `strategy_configs.strategy_key`, so renaming it requires a
+data migration.

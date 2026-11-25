@@ -35,15 +35,21 @@ class CreateBot
                 'strategy_key' => (string) $data['strategy_key'],
                 'mode' => $mode,
                 'capital_allocation' => (string) $data['capital_allocation'],
+                'fee_rate' => (string) ($data['fee_rate'] ?? config('trading.paper.fee_rate', '0')),
+                'tick_interval_seconds' => max(1, (int) config('trading.tick.interval_seconds')),
+                'settings' => [],
+            ]);
+
+            // Inventory, P&L, status, and failure counters are engine-owned
+            // after creation; initialize them explicitly without making them
+            // mass-assignable from request data.
+            $bot->forceFill([
                 'quote_inventory' => (string) $data['capital_allocation'],
                 'base_inventory' => '0',
                 'average_entry_price' => '0',
                 'realized_pnl' => '0',
                 'fees_paid' => '0',
-                'fee_rate' => (string) ($data['fee_rate'] ?? config('trading.paper.fee_rate', '0')),
-                'tick_interval_seconds' => max(1, (int) config('trading.tick.interval_seconds')),
-                'settings' => [],
-            ]);
+            ])->save();
 
             StrategyConfig::create([
                 'bot_id' => $bot->id,

@@ -1,7 +1,8 @@
-// Command engine is the trading engine process. It runs the paper trading
-// runtime (bot commands, due-check ticks, grids, paper fills, risk/exit guards),
-// deterministic backtests, and the heartbeat. Live execution is not implemented;
-// live bots are paused before any private exchange call.
+// Command engine is the trading engine process. It runs the paper and gated
+// live trading runtime (bot commands, due-check ticks, grids, paper/live fills,
+// risk/exit guards), deterministic backtests, the heartbeat, and the internal
+// setup-plan evaluator. Live placement stays closed unless TRADING_LIVE_ENABLED
+// is true; a closed gate pauses live bots before any private placement call.
 package main
 
 import (
@@ -9,10 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -22,12 +23,13 @@ import (
 	"github.com/johnson407/trading-bot/engine/internal/backtest"
 	"github.com/johnson407/trading-bot/engine/internal/config"
 	"github.com/johnson407/trading-bot/engine/internal/consumer"
-	"github.com/johnson407/trading-bot/engine/internal/decimal"
+	"github.com/johnson407/trading-bot/engine/internal/exchange"
 	"github.com/johnson407/trading-bot/engine/internal/health"
 	"github.com/johnson407/trading-bot/engine/internal/healthcheck"
 	"github.com/johnson407/trading-bot/engine/internal/heartbeat"
 	"github.com/johnson407/trading-bot/engine/internal/idempotency"
 	"github.com/johnson407/trading-bot/engine/internal/marketdata"
+	"github.com/johnson407/trading-bot/engine/internal/plan"
 	"github.com/johnson407/trading-bot/engine/internal/protocol"
 	"github.com/johnson407/trading-bot/engine/internal/runtime"
 )
@@ -35,6 +37,15 @@ import (
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		if err := runHealthcheck(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+
+		return
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "plan-server" {
+		if err := runPlanServer(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -61,11 +72,12 @@ func run() error {
 		"addr", cfg.Addr,
 		"app_env", cfg.AppEnv,
 		"live_trading_enabled", cfg.LiveTrading,
-		"trading_paths", "paper trading and backtests; live execution disabled",
+		"exchange_sandbox", cfg.TradingExchangeSandbox,
+		"trading_paths", "paper trading, backtests, and gated live execution",
 	)
 
 	if cfg.LiveTrading {
-		logger.Warn("TRADING_LIVE_ENABLED is true but live execution is not implemented; live bots are paused and no private exchange calls are made")
+		logger.Warn("TRADING_LIVE_ENABLED is true; live bots still require a venue client and per-order risk checks")
 	}
 
 	pool, err := pgxpool.New(context.Background(), cfg.Database.DSN())
@@ -84,9 +96,65 @@ func run() error {
 	engineContext, stopEngine := context.WithCancel(context.Background())
 	defer stopEngine()
 
-	tradingRuntime := runtime.New(pool, newPublicMarket(cfg.MarketData.RESTURL, cfg.MarketData.RequestTimeout), logger)
+	publicREST := newPublicREST(cfg.MarketData.RESTURL, cfg.MarketData.RequestTimeout)
 
-	heartbeatWriter := heartbeat.NewStub(redisHeartbeatSetter{client: redisClient})
+	// The feed is the tick price source. It stays idle until a running bot (or
+	// the optional ENGINE_MARKET_DATA_SYMBOLS watchlist) needs a symbol, and it
+	// never uses credentials.
+	marketFeed := marketdata.New(
+		marketdata.Config{
+			WSURL:            cfg.MarketData.WSURL,
+			RESTURL:          cfg.MarketData.RESTURL,
+			QuietAfter:       cfg.MarketData.QuietAfter,
+			RESTPollInterval: cfg.MarketData.RESTPollInterval,
+			ReconnectMin:     cfg.MarketData.ReconnectMin,
+			ReconnectMax:     cfg.MarketData.ReconnectMax,
+			RequestTimeout:   cfg.MarketData.RequestTimeout,
+		},
+		logger,
+		nil,
+	)
+
+	prices := marketdata.NewPriceSource(
+		marketFeed,
+		publicREST,
+		"binance",
+		cfg.MarketData.StaleAfter,
+		logger,
+	)
+
+	credentialLoader := exchange.CredentialLoader{
+		Pool:         pool,
+		Key:          cfg.AppKey,
+		PreviousKeys: cfg.AppPreviousKeys,
+	}
+	exchangeFactory := exchange.Factory{
+		BaseURL: cfg.TradingExchangeBaseURL,
+		Sandbox: cfg.TradingExchangeSandbox,
+	}
+
+	tradingRuntime := runtime.New(
+		pool,
+		prices,
+		logger,
+		runtime.WithLiveTrading(cfg.LiveTrading),
+		runtime.WithOrderSyncInterval(cfg.TradingOrderSync),
+		runtime.WithLiveClients(func(ctx context.Context, bot *runtime.Bot) (exchange.Client, error) {
+			credential, err := credentialLoader.Load(ctx, bot.ID)
+			if err != nil {
+				return nil, err
+			}
+
+			client, err := exchangeFactory.Client(bot.Exchange, credential)
+			if err != nil {
+				return nil, err
+			}
+
+			return exchange.GuardedClient{Enabled: cfg.LiveTrading, Client: client}, nil
+		}),
+	)
+
+	heartbeatWriter := heartbeat.NewWriter(redisHeartbeatSetter{client: redisClient})
 
 	// Write once before serving so readiness does not race the first refresh.
 	if err := heartbeatWriter.Write(engineContext, tradingRuntime.RunningCount(engineContext)); err != nil {
@@ -144,36 +212,23 @@ func run() error {
 	go runStaleBacktestSweeper(engineContext, backtestStore, cfg.BacktestJobTimeout, logger)
 	go tradingRuntime.RunScheduler(engineContext)
 
-	// Phase 3 market-data hook. It stays idle unless an operator sets both
-	// public endpoints and a symbol list; the shipped Compose service sets
-	// none of them, so the engine opens no exchange connection. The future
-	// tick loop will pass the running bots' symbols here.
-	marketFeed := marketdata.New(
-		marketdata.Config{
-			WSURL:            cfg.MarketData.WSURL,
-			RESTURL:          cfg.MarketData.RESTURL,
-			QuietAfter:       cfg.MarketData.QuietAfter,
-			RESTPollInterval: cfg.MarketData.RESTPollInterval,
-			ReconnectMin:     cfg.MarketData.ReconnectMin,
-			ReconnectMax:     cfg.MarketData.ReconnectMax,
-			RequestTimeout:   cfg.MarketData.RequestTimeout,
-		},
-		logger,
-		nil,
-	)
-
-	switch {
-	case !cfg.MarketData.Configured():
-		logger.Info("market data idle: public endpoints are not configured; no exchange connection will be opened")
-	case len(cfg.MarketData.Symbols) == 0:
-		logger.Info("market data idle: ENGINE_MARKET_DATA_SYMBOLS is empty; no exchange connection will be opened")
-	default:
-		logger.Info("market data enabled for explicit symbols", "symbols", len(cfg.MarketData.Symbols))
+	// The feed subscribes to the union of running/starting Binance bots'
+	// symbols, plus any operator-pinned ENGINE_MARKET_DATA_SYMBOLS. It stays
+	// idle unless both public endpoints are configured; ticks then fall back to
+	// one public REST snapshot per evaluation.
+	if cfg.MarketData.Configured() {
 		go func() {
-			if err := marketFeed.Run(engineContext, cfg.MarketData.Symbols); err != nil {
+			if err := marketFeed.Run(engineContext); err != nil {
 				logger.Error("market data feed stopped", "error_type", fmt.Sprintf("%T", err))
 			}
 		}()
+		go runMarketSymbols(engineContext, tradingRuntime, marketFeed, cfg.MarketData.Symbols, logger)
+		logger.Info("market data enabled for running bots",
+			"pinned_symbols", len(cfg.MarketData.Symbols),
+			"stale_after", cfg.MarketData.StaleAfter.String(),
+		)
+	} else {
+		logger.Info("market data feed idle: public endpoints are not configured; ticks use one public REST snapshot")
 	}
 
 	checks := []health.Check{
@@ -186,9 +241,14 @@ func run() error {
 		}},
 	}
 
+	mux := http.NewServeMux()
+	mux.Handle("/", health.NewRouter(checks, logger))
+	mux.Handle("POST /v1/plan/evaluate", plan.NewHandler(cfg.InternalToken, logger))
+	warnPlanEndpointExposure(logger, cfg.Addr, cfg.InternalToken)
+
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           health.NewRouter(checks, logger),
+		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -218,6 +278,50 @@ func run() error {
 	}
 
 	return nil
+}
+
+// runPlanServer serves only the internal setup-plan endpoint. It opens no
+// database, Redis, or exchange connection, which makes it suitable for Laravel
+// contract tests that need the real Go evaluator without a full stack.
+func runPlanServer() error {
+	cfg, err := config.Load(os.Getenv)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	mux := http.NewServeMux()
+	mux.Handle("POST /v1/plan/evaluate", plan.NewHandler(cfg.InternalToken, logger))
+	mux.HandleFunc("GET /livez", health.Live)
+
+	server := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	logger.Info("starting plan server", "addr", cfg.Addr, "token_required", cfg.InternalToken != "")
+	warnPlanEndpointExposure(logger, cfg.Addr, cfg.InternalToken)
+
+	serverErrors := make(chan error, 1)
+	go func() { serverErrors <- server.ListenAndServe() }()
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-serverErrors:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("serve: %w", err)
+		}
+	case <-signals:
+	}
+
+	shutdownContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	return server.Shutdown(shutdownContext)
 }
 
 // runHealthcheck probes the engine's own /healthz endpoint. It is the Compose
@@ -259,9 +363,9 @@ func (r redisHeartbeatReader) Get(ctx context.Context, key string) ([]byte, erro
 	return r.client.Get(ctx, key).Bytes()
 }
 
-// commandProcessor routes v1 commands. Backtest replay is implemented in this
-// build; every other command is rejected definitively so Redis does not retry
-// a handler this process does not have.
+// commandProcessor routes v1 commands. Backtests run in the dedicated consumer;
+// bot control commands go to the runtime; unknown commands are rejected
+// definitively so Redis does not retry a handler this process does not have.
 type commandProcessor struct {
 	backtests *backtest.Store
 	runtime   *runtime.Runtime
@@ -306,14 +410,9 @@ func (p commandProcessor) Process(ctx context.Context, command protocol.Envelope
 	return consumer.Rejection{Reason: "handler_not_available"}
 }
 
-// publicMarket adapts the public REST ticker client to the runtime market
-// interface. It never uses credentials and supports the default Binance public
-// endpoint only.
-type publicMarket struct {
-	client *marketdata.RESTClient
-}
-
-func newPublicMarket(baseURL string, timeout time.Duration) publicMarket {
+// newPublicREST returns the public ticker client used for cache misses and
+// venues without a WebSocket. It never uses credentials.
+func newPublicREST(baseURL string, timeout time.Duration) *marketdata.RESTClient {
 	if baseURL == "" {
 		baseURL = "https://api.binance.com"
 	}
@@ -321,28 +420,43 @@ func newPublicMarket(baseURL string, timeout time.Duration) publicMarket {
 		timeout = 10 * time.Second
 	}
 
-	return publicMarket{client: &marketdata.RESTClient{
+	return &marketdata.RESTClient{
 		BaseURL:    baseURL,
 		HTTPClient: &http.Client{Timeout: timeout},
-	}}
+	}
 }
 
-func (m publicMarket) Last(ctx context.Context, exchange, symbol string) (decimal.Decimal, error) {
-	if exchange != "binance" {
-		return decimal.Decimal{}, fmt.Errorf("public market data is not available for exchange %s", exchange)
+// marketSymbolRefresh is how often the feed's subscription set is reconciled
+// with running/starting bots. Start and stop commands also become visible
+// through the runtime's normal desired-status reconciliation.
+const marketSymbolRefresh = 2 * time.Second
+
+// runMarketSymbols keeps the public feed subscribed to exactly the symbols of
+// running/starting Binance bots, plus an optional operator-pinned list.
+func runMarketSymbols(ctx context.Context, trading *runtime.Runtime, feed *marketdata.Feed, pinned []string, logger *slog.Logger) {
+	sync := func() {
+		symbols, err := trading.FeedSymbols(ctx)
+		if err != nil {
+			logger.Error("refresh market-data symbols failed", "error_type", fmt.Sprintf("%T", err))
+			return
+		}
+
+		feed.SetSymbols(append(symbols, pinned...))
 	}
 
-	tickers, err := m.client.Fetch(ctx, []string{symbol})
-	if err != nil {
-		return decimal.Decimal{}, err
-	}
+	sync()
 
-	ticker, ok := tickers[strings.ToUpper(strings.ReplaceAll(symbol, "/", ""))]
-	if !ok {
-		return decimal.Decimal{}, fmt.Errorf("public market data omitted %s", symbol)
-	}
+	ticker := time.NewTicker(marketSymbolRefresh)
+	defer ticker.Stop()
 
-	return decimal.MustParse(ticker.Last), nil
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sync()
+		}
+	}
 }
 
 // runStaleBacktestSweeper fails runs abandoned by a stopped worker. Laravel
@@ -366,5 +480,30 @@ func runStaleBacktestSweeper(ctx context.Context, store *backtest.Store, timeout
 				logger.Warn("marked stale backtests failed", "count", count)
 			}
 		}
+	}
+}
+
+// warnPlanEndpointExposure flags the one deployment mistake the engine cannot
+// detect directly: publishing its HTTP port beyond the internal network while
+// leaving the shared plan token empty. Compose keeps the port internal, so this
+// stays a warning rather than breaking the default development stack.
+func warnPlanEndpointExposure(logger *slog.Logger, addr, token string) {
+	if token != "" {
+		return
+	}
+
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+
+	switch host {
+	case "", "0.0.0.0", "::", "[::]":
+		logger.Warn(
+			"engine HTTP port is bound beyond loopback without ENGINE_INTERNAL_TOKEN; publish it only on a trusted internal network",
+			"addr", addr,
+		)
+	case "127.0.0.1", "localhost", "::1":
+		return
 	}
 }

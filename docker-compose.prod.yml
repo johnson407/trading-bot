@@ -6,6 +6,7 @@ services:
     env_file: .env
     environment:
       RUN_MIGRATIONS: "true"
+      ENGINE_PLAN_URL: http://engine:8080
     volumes:
       - app-storage:/var/www/html/storage
     depends_on:
@@ -79,6 +80,11 @@ services:
       REDIS_PORT: "6379"
       ENGINE_LISTEN_ADDR: ":8080"
       TRADING_LIVE_ENABLED: "false"
+      TRADING_EXCHANGE_SANDBOX: ${TRADING_EXCHANGE_SANDBOX:-false}
+      TRADING_TICK_INTERVAL: ${TRADING_TICK_INTERVAL:-60}
+      TRADING_ORDER_SYNC_SECONDS: ${TRADING_ORDER_SYNC_SECONDS:-5}
+      ENGINE_MARKET_DATA_WS_URL: ${ENGINE_MARKET_DATA_WS_URL:-wss://stream.binance.com:9443/ws}
+      ENGINE_MARKET_DATA_REST_URL: ${ENGINE_MARKET_DATA_REST_URL:-https://api.binance.com}
     depends_on:
       postgres:
         condition: service_healthy

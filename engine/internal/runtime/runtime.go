@@ -1,9 +1,11 @@
 // Package runtime owns the Go trading runtime: control commands, the due-check
-// tick scheduler, grid persistence, paper fills, and runtime risk guards.
+// tick scheduler, grid persistence, paper fills, live order placement and
+// reconciliation, and runtime risk guards.
 //
-// Live execution is intentionally not implemented in this build. A live bot is
-// paused with a clear error instead of placing an order; Laravel keeps the
-// emergency local cancellation path for live orders.
+// Live execution is gated by TRADING_LIVE_ENABLED. When the gate is closed a
+// live bot is paused with a clear risk event instead of placing or falling back
+// to paper. Reads and cancellations remain available so existing live orders
+// can still be reconciled and removed.
 package runtime
 
 import (
@@ -20,38 +22,93 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/johnson407/trading-bot/engine/internal/decimal"
+	"github.com/johnson407/trading-bot/engine/internal/exchange"
 	"github.com/johnson407/trading-bot/engine/internal/protocol"
 	"github.com/johnson407/trading-bot/engine/internal/tick"
 )
 
 const (
-	liveDisabledMessage = "Live trading is not available in the Go engine yet. The bot was paused."
+	liveDisabledMessage = "Live trading is disabled by TRADING_LIVE_ENABLED=false. The bot was paused."
 	defaultMaxOpen      = 20
 	defaultMaxNotional  = "1000"
 	defaultDailyLoss    = "100"
 )
+
+// Option customises the runtime.
+type Option func(*Runtime)
+
+// WithLiveTrading passes the TRADING_LIVE_ENABLED gate to the runtime. The
+// default is closed; a live bot is paused with a risk event, never converted to
+// paper.
+func WithLiveTrading(enabled bool) Option {
+	return func(r *Runtime) {
+		r.liveTrading = enabled
+	}
+}
 
 // Market returns the public last price for a symbol.
 type Market interface {
 	Last(ctx context.Context, exchange, symbol string) (decimal.Decimal, error)
 }
 
+// LiveClientFactory builds a private exchange client for a bot. Implementations
+// decrypt credentials in memory and return a gate-guarded client. A nil client
+// or error pauses the live bot; it never falls back to paper.
+type LiveClientFactory func(ctx context.Context, bot *Bot) (exchange.Client, error)
+
+// WithLiveClients supplies the private client factory used for live placement,
+// cancellation, and reconciliation.
+func WithLiveClients(factory LiveClientFactory) Option {
+	return func(r *Runtime) {
+		r.liveClients = factory
+	}
+}
+
+// WithOrderSyncInterval sets the live reconciliation cadence. The default is
+// five seconds.
+func WithOrderSyncInterval(interval time.Duration) Option {
+	return func(r *Runtime) {
+		if interval > 0 {
+			r.orderSyncInterval = interval
+		}
+	}
+}
+
 // Runtime is a PostgreSQL-backed trading runtime.
 type Runtime struct {
-	pool    *pgxpool.Pool
-	market  Market
-	logger  *slog.Logger
-	now     func() time.Time
-	started sync.Map
+	pool               *pgxpool.Pool
+	market             Market
+	logger             *slog.Logger
+	now                func() time.Time
+	started            sync.Map
+	liveTrading        bool
+	liveClients        LiveClientFactory
+	orderSyncInterval  time.Duration
+	lastOrderSync      map[int64]time.Time
+	orderSyncNotBefore map[int64]time.Time
+	syncMu             sync.Mutex
 }
 
 // New builds a runtime. A nil logger discards logs.
-func New(pool *pgxpool.Pool, market Market, logger *slog.Logger) *Runtime {
+func New(pool *pgxpool.Pool, market Market, logger *slog.Logger, options ...Option) *Runtime {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(discardWriter{}, nil))
 	}
 
-	return &Runtime{pool: pool, market: market, logger: logger, now: func() time.Time { return time.Now().UTC() }}
+	runtime := &Runtime{
+		pool:               pool,
+		market:             market,
+		logger:             logger,
+		now:                func() time.Time { return time.Now().UTC() },
+		orderSyncInterval:  5 * time.Second,
+		lastOrderSync:      map[int64]time.Time{},
+		orderSyncNotBefore: map[int64]time.Time{},
+	}
+	for _, option := range options {
+		option(runtime)
+	}
+
+	return runtime
 }
 
 type discardWriter struct{}
@@ -113,17 +170,33 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 		}
 		message := ""
 		switch {
-		case bot.live():
+		case bot.live() && !r.liveTrading:
 			message = liveDisabledMessage
-		case bot.Exchange != "binance":
-			message = fmt.Sprintf("Exchange %s is not supported by the Go runtime yet. The bot was paused.", bot.Exchange)
+		case bot.Exchange != "binance" && !bot.live():
+			message = fmt.Sprintf("Exchange %s is not supported by the Go runtime for paper bots yet. The bot was paused.", bot.Exchange)
 		}
 		if message != "" {
+			if bot.live() {
+				// Pausing must also remove any resting live orders. A refused
+				// start is not allowed to leave exchange orders working.
+				r.pause(ctx, bot, message, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
+
+				return nil
+			}
+
 			_, err := r.pool.Exec(ctx,
 				`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1`,
 				bot.ID, message,
 			)
+
 			return err
+		}
+		if bot.live() {
+			if err := r.liveBalanceAllowsStart(ctx, bot); err != nil {
+				r.pause(ctx, bot, "Live start refused: "+err.Error(), "bot.live_start_refused", "risk.live_start_refused", "critical")
+
+				return nil
+			}
 		}
 		if bot.StrategyReset {
 			if _, err := r.pool.Exec(ctx, `UPDATE strategy_configs SET state = NULL, updated_at = now() WHERE bot_id = $1`, bot.ID); err != nil {
@@ -200,14 +273,15 @@ func (r *Runtime) cancelOrder(ctx context.Context, command protocol.Envelope) er
 	return runBotCommand(ctx, func(ctx context.Context) error {
 		var botID int64
 		var gridLevelID *int64
-		var mode string
+		var mode, clientOrderID, exchangeOrderID, filledQuantity string
 		err := r.pool.QueryRow(ctx,
-			`SELECT orders.bot_id, orders.grid_level_id, orders.mode
+			`SELECT orders.bot_id, orders.grid_level_id, orders.mode, orders.client_order_id,
+			        COALESCE(orders.exchange_order_id, ''), orders.filled_quantity::text
 			 FROM orders JOIN bots ON bots.id = orders.bot_id
 			 WHERE orders.id = $1 AND orders.bot_id = $2 AND bots.user_id = $3
 			   AND orders.status IN ('pending','open','partially_filled')`,
 			orderID, command.BotID, command.UserID,
-		).Scan(&botID, &gridLevelID, &mode)
+		).Scan(&botID, &gridLevelID, &mode, &clientOrderID, &exchangeOrderID, &filledQuantity)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
@@ -215,7 +289,18 @@ func (r *Runtime) cancelOrder(ctx context.Context, command protocol.Envelope) er
 			return fmt.Errorf("load order: %w", err)
 		}
 		if mode == "live" {
-			return fmt.Errorf("live order cancellation is not available in the Go engine yet; use stop or the kill switch")
+			bot, err := r.loadBot(ctx, botID)
+			if err != nil {
+				return err
+			}
+			if err := r.cancelLiveOrder(ctx, bot, openOrder{
+				ID:              orderID,
+				ClientOrderID:   clientOrderID,
+				ExchangeOrderID: exchangeOrderID,
+				FilledQuantity:  mustDecimal(filledQuantity),
+			}); err != nil {
+				return err
+			}
 		}
 
 		if _, err := r.pool.Exec(ctx,
@@ -227,7 +312,8 @@ func (r *Runtime) cancelOrder(ctx context.Context, command protocol.Envelope) er
 		}
 
 		if gridLevelID != nil {
-			_, _ = r.pool.Exec(ctx, `UPDATE grid_levels SET state = 'canceled', updated_at = now() WHERE id = $1`, *gridLevelID)
+			_, _ = r.pool.Exec(ctx, `UPDATE grid_levels SET state = 'canceled', updated_at = now()
+				WHERE id = $1 AND state IN ('idle', 'open')`, *gridLevelID)
 		}
 
 		r.activity(ctx, command.UserID, botID, "order.canceled", "info", "Order canceled by operator.", nil)
@@ -308,6 +394,8 @@ func (r *Runtime) RunningCount(ctx context.Context) int {
 
 // RunScheduler performs the due-check every second until ctx is canceled.
 func (r *Runtime) RunScheduler(ctx context.Context) {
+	r.syncAllLiveOrders(ctx, true)
+
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -319,6 +407,7 @@ func (r *Runtime) RunScheduler(ctx context.Context) {
 			if err := r.reconcile(ctx); err != nil {
 				r.logger.Error("runtime reconciliation failed", "error_type", fmt.Sprintf("%T", err))
 			}
+			r.syncAllLiveOrders(ctx, false)
 			if err := r.runDue(ctx); err != nil {
 				r.logger.Error("tick scheduler failed", "error_type", fmt.Sprintf("%T", err))
 			}
@@ -331,6 +420,8 @@ func (r *Runtime) RunScheduler(ctx context.Context) {
 // Reconcile applies desired-status drift, cancellation retries, and stale-tick
 // pauses once. The scheduler calls it every second; tests use it directly.
 func (r *Runtime) Reconcile(ctx context.Context) error {
+	r.syncAllLiveOrders(ctx, true)
+
 	return r.reconcile(ctx)
 }
 
@@ -498,11 +589,20 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 
 	switch bot.DesiredStatus {
 	case "running":
-		if bot.live() {
-			return r.markPaused(ctx, bot, liveDisabledMessage)
+		if bot.live() && !r.liveTrading {
+			r.pause(ctx, bot, liveDisabledMessage, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
+
+			return nil
 		}
-		if bot.Exchange != "binance" {
-			return r.markPaused(ctx, bot, fmt.Sprintf("Exchange %s is not supported by the Go runtime yet. The bot was paused.", bot.Exchange))
+		if bot.Exchange != "binance" && !bot.live() {
+			return r.markPaused(ctx, bot, fmt.Sprintf("Exchange %s is not supported by the Go runtime for paper bots yet. The bot was paused.", bot.Exchange))
+		}
+		if bot.live() {
+			if err := r.liveBalanceAllowsStart(ctx, bot); err != nil {
+				r.pause(ctx, bot, "Live start refused: "+err.Error(), "bot.live_start_refused", "risk.live_start_refused", "critical")
+
+				return nil
+			}
 		}
 		_, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'running', last_error = NULL, updated_at = now() WHERE id = $1`, bot.ID)
 		return err
@@ -571,6 +671,33 @@ func (r *Runtime) runDue(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// FeedSymbols returns the distinct public symbols the market-data feed must
+// subscribe to for Binance bots that are running or starting. Other venues do
+// not have a WebSocket client in this build and use REST snapshots instead.
+func (r *Runtime) FeedSymbols(ctx context.Context) ([]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT DISTINCT symbol FROM bots
+		 WHERE exchange = 'binance' AND status IN ('starting','running')
+		   AND symbol IS NOT NULL AND symbol <> ''
+		 ORDER BY symbol`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load feed symbols: %w", err)
+	}
+	defer rows.Close()
+
+	var symbols []string
+	for rows.Next() {
+		var symbol string
+		if err := rows.Scan(&symbol); err != nil {
+			return nil, err
+		}
+		symbols = append(symbols, symbol)
+	}
+
+	return symbols, rows.Err()
 }
 
 // Source adapts the runtime to tick.Source for callers that want the pure

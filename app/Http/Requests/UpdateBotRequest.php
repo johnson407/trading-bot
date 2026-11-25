@@ -3,11 +3,12 @@
 namespace App\Http\Requests;
 
 use App\Domain\Exchange\ValueObjects\MarketData;
-use App\Domain\Grid\GridPlanEvaluator;
+use App\Domain\Grid\Exceptions\GridPlanUnavailableException;
 use App\Domain\Grid\ValueObjects\GridPlanRequest;
 use App\Domain\Risk\RiskLimitService;
 use App\Http\Requests\Concerns\BuildsStrategyConfiguration;
 use App\Models\Bot;
+use App\Services\Engine\GridPlanClient;
 use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -68,7 +69,13 @@ class UpdateBotRequest extends FormRequest
                 return;
             }
 
-            $plan = app(GridPlanEvaluator::class)->evaluate($this->gridPlanRequest($bot));
+            try {
+                $plan = app(GridPlanClient::class)->evaluate($this->gridPlanRequest($bot));
+            } catch (GridPlanUnavailableException $exception) {
+                $validator->errors()->add('strategy_key', $exception->getMessage());
+
+                return;
+            }
 
             foreach ($plan->errors() as $problem) {
                 $validator->errors()->add($problem->field ?? 'strategy_key', $problem->message);

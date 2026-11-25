@@ -5,7 +5,9 @@ use App\Models\Bot;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Engine\CommandPublisher;
+use App\Services\Exchange\ExchangeClientFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Fixtures\FakeExchangeClient;
 
 uses(RefreshDatabase::class);
 
@@ -56,6 +58,8 @@ it('ignores a cancellation for an already terminal order', function () {
 });
 
 it('cancels a live order through the Laravel exchange path', function () {
+    app()->instance(ExchangeClientFactory::class, new ExchangeClientFactory(null, new FakeExchangeClient));
+
     $user = User::factory()->create();
     $bot = Bot::factory()->for($user)->live()->create();
     $order = Order::factory()->for($bot)->create([

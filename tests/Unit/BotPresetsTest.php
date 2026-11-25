@@ -1,10 +1,9 @@
 <?php
 
-use App\Domain\Grid\GridPlanEvaluator;
 use App\Domain\Grid\PresetResolver;
 use App\Domain\Grid\ValueObjects\GridPlanRequest;
-use App\Domain\Strategy\StrategyRegistry;
 use App\Domain\Support\Decimal;
+use App\Services\Engine\GridPlanClient;
 
 it('ships a preset catalog with the required keys', function () {
     $presets = config('bot_presets');
@@ -63,7 +62,7 @@ it('derives every preset within the default risk limits', function () {
             $configuration['trailing_distance'] = $values['trailing_distance'];
         }
 
-        $plan = (new GridPlanEvaluator(app(StrategyRegistry::class)))->evaluate(new GridPlanRequest(
+        $plan = app(GridPlanClient::class)->evaluate(new GridPlanRequest(
             strategyKey: $values['strategy_key'],
             configuration: $configuration,
             symbol: 'BTC/USDT',

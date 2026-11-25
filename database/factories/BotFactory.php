@@ -12,6 +12,21 @@ class BotFactory extends Factory
 {
     protected $model = Bot::class;
 
+    /**
+     * Engine-owned columns are intentionally outside the model's $fillable
+     * list. Test fixtures still need to seed them, so the factory force-fills
+     * the expanded definition instead of relying on mass assignment.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function newModel(array $attributes = [])
+    {
+        $model = parent::newModel([]);
+        $model->forceFill($attributes);
+
+        return $model;
+    }
+
     public function definition(): array
     {
         return [

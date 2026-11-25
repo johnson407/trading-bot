@@ -58,12 +58,15 @@ const (
 
 // Ticker is a normalized public quote. Prices stay decimal strings so callers
 // keep exact exchange precision and never introduce floats into money paths.
+// TradeAt records when Last changed; a book-ticker update refreshes UpdatedAt
+// but must not make an old trade price look fresh to a tick.
 type Ticker struct {
 	Symbol    string
 	Last      string
 	Bid       string
 	Ask       string
 	UpdatedAt time.Time
+	TradeAt   time.Time
 }
 
 // Status describes the transport in use. Degraded is true while the REST
@@ -108,6 +111,8 @@ func (c Config) Configured() bool {
 type EventSink func(Event)
 
 // Feed is a public market-data feed. Create it with New and run it with Run.
+// The subscribed symbol set can be changed at runtime with SetSymbols; Run
+// applies the difference to the live connection (or dials the new set).
 type Feed struct {
 	cfg    Config
 	logger *slog.Logger
@@ -116,9 +121,18 @@ type Feed struct {
 	now    func() time.Time
 
 	mu          sync.RWMutex
+	desired     []string
+	active      []string
 	tickers     map[string]Ticker
 	lastTradeID map[string]int64
 	status      Status
+	changed     chan struct{}
+	requestID   int
+
+	// warningCount and lastWarning are guarded by mu. They aggregate malformed
+	// frame warnings so a bad stream cannot flood the log.
+	warningCount int
+	lastWarning  time.Time
 }
 
 // New returns a feed. The caller must call Run to open any connection. New
@@ -140,6 +154,7 @@ func New(cfg Config, logger *slog.Logger, sink EventSink) *Feed {
 		tickers:     make(map[string]Ticker),
 		lastTradeID: make(map[string]int64),
 		status:      Status{Mode: ModeIdle, Since: time.Now()},
+		changed:     make(chan struct{}, 1),
 	}
 }
 
@@ -167,14 +182,49 @@ func withDefaults(cfg Config) Config {
 	return cfg
 }
 
-// Run subscribes to the public streams for symbols and blocks until ctx is
-// cancelled. With no configured endpoints or no symbols it stays idle and
-// opens no connection. It never requires credentials and never places orders.
-func (f *Feed) Run(ctx context.Context, symbols []string) error {
-	symbols = normalizeSymbols(symbols)
+// SetSymbols replaces the desired subscription set. It is safe to call from
+// any goroutine. Run applies additions and removals to the live connection on
+// its next wake-up; a symbol removed here stops receiving quotes and its cached
+// ticker is dropped.
+func (f *Feed) SetSymbols(symbols []string) {
+	normalized := normalizeSymbols(symbols)
 
-	if !f.cfg.Configured() || len(symbols) == 0 {
-		f.setIdle(symbols)
+	f.mu.Lock()
+	if sameSymbolSet(f.desired, normalized) {
+		f.mu.Unlock()
+		return
+	}
+
+	f.desired = normalized
+	f.pruneTickersLocked(normalized)
+	f.mu.Unlock()
+
+	select {
+	case f.changed <- struct{}{}:
+	default:
+	}
+}
+
+// Symbols returns a copy of the desired subscription set.
+func (f *Feed) Symbols() []string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	return append([]string(nil), f.desired...)
+}
+
+// Run subscribes to the public streams for the desired symbol set and blocks
+// until ctx is cancelled. An optional initial symbol list seeds the set; call
+// SetSymbols later to change it. With no configured endpoints the feed stays
+// idle and returns immediately. It never requires credentials and never places
+// orders.
+func (f *Feed) Run(ctx context.Context, initial ...[]string) error {
+	if len(initial) > 0 {
+		f.SetSymbols(initial[0])
+	}
+
+	if !f.cfg.Configured() {
+		f.setIdle()
 		return nil
 	}
 
@@ -182,24 +232,36 @@ func (f *Feed) Run(ctx context.Context, symbols []string) error {
 
 	for {
 		if ctx.Err() != nil {
-			f.setIdle(symbols)
+			f.setIdle()
 			return nil
+		}
+
+		symbols := f.Symbols()
+		if len(symbols) == 0 {
+			// Stay idle until a bot starts and the symbol synchronizer calls
+			// SetSymbols. Opening no connection is intentional.
+			f.setIdle()
+			if !f.waitForChange(ctx) {
+				f.setIdle()
+				return nil
+			}
+			continue
 		}
 
 		connection, err := f.dial(ctx, symbols)
 		if err != nil {
 			if ctx.Err() != nil {
-				f.setIdle(symbols)
+				f.setIdle()
 				return nil
 			}
 
 			// The socket could not be established: switch to periodic public
 			// REST tickers and keep retrying with backoff.
-			f.markDegraded(ReasonWebSocketUnavailable, symbols)
-			f.fetchREST(ctx, symbols)
+			f.markDegraded(ReasonWebSocketUnavailable)
+			f.fetchREST(ctx)
 
-			if !f.wait(ctx, backoff, symbols) {
-				f.setIdle(symbols)
+			if !f.wait(ctx, backoff) {
+				f.setIdle()
 				return nil
 			}
 
@@ -210,27 +272,135 @@ func (f *Feed) Run(ctx context.Context, symbols []string) error {
 		f.markConnected(symbols)
 		backoff = f.cfg.ReconnectMin
 
-		reason, received := f.read(ctx, connection, symbols)
+		result := f.session(ctx, connection, symbols)
 		_ = connection.Close()
 
 		if ctx.Err() != nil {
-			f.setIdle(symbols)
+			f.setIdle()
 			return nil
+		}
+
+		if result.reason == reasonNoSymbols {
+			f.setIdle()
+			continue
 		}
 
 		// Any disconnect, gap, or quiet period is repaired with a public REST
 		// snapshot before the next subscription attempt.
-		f.markDegraded(reason, symbols)
-		f.fetchREST(ctx, symbols)
+		f.markDegraded(result.reason)
+		f.fetchREST(ctx)
 
-		if !f.wait(ctx, backoff, symbols) {
-			f.setIdle(symbols)
+		if !f.wait(ctx, backoff) {
+			f.setIdle()
 			return nil
 		}
 
-		if !received {
+		if !result.received {
 			backoff = nextBackoff(backoff, f.cfg.ReconnectMax)
 		}
+	}
+}
+
+// reasonNoSymbols is internal: the last running bot stopped and the feed must
+// close the socket without recording a degraded event.
+const reasonNoSymbols = "subscription_empty"
+
+type sessionResult struct {
+	reason   string
+	received bool
+}
+
+// session reads quotes until the connection fails, the context is canceled, or
+// the desired symbol set changes. Subscription updates are written on the same
+// connection so existing streams stay open.
+func (f *Feed) session(ctx context.Context, connection *websocket.Conn, symbols []string) sessionResult {
+	results := make(chan sessionResult, 1)
+
+	go func() {
+		reason, received := f.read(ctx, connection)
+		results <- sessionResult{reason: reason, received: received}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return sessionResult{reason: ReasonDisconnected}
+		case <-f.changed:
+			desired := f.Symbols()
+			if len(desired) == 0 {
+				return sessionResult{reason: reasonNoSymbols}
+			}
+			if err := f.updateSubscription(connection, desired); err != nil {
+				// Log only the error type: the endpoint and request body must not
+				// reach the log.
+				f.logger.Warn("market data subscription update failed", "error_type", fmt.Sprintf("%T", err))
+				return sessionResult{reason: ReasonDisconnected}
+			}
+		case result := <-results:
+			return result
+		}
+	}
+}
+
+// updateSubscription sends incremental SUBSCRIBE/UNSUBSCRIBE requests for the
+// difference between the active and desired sets. The active set changes only
+// after the request is written, so quotes for removed symbols are ignored.
+func (f *Feed) updateSubscription(connection *websocket.Conn, desired []string) error {
+	f.mu.Lock()
+	added, removed := symbolDiff(f.active, desired)
+	pruned := make([]string, 0, len(removed))
+	for _, symbol := range removed {
+		if _, ok := f.tickers[symbol]; ok {
+			pruned = append(pruned, symbol)
+		}
+		delete(f.tickers, symbol)
+		delete(f.lastTradeID, symbol)
+	}
+	f.active = append([]string(nil), desired...)
+	f.status.Symbols = append([]string(nil), desired...)
+	f.mu.Unlock()
+
+	if len(removed) > 0 {
+		if err := f.writeRequest(connection, "UNSUBSCRIBE", removed); err != nil {
+			return err
+		}
+	}
+
+	if len(added) > 0 {
+		if err := f.writeRequest(connection, "SUBSCRIBE", added); err != nil {
+			return err
+		}
+	}
+
+	if len(pruned) > 0 {
+		f.logger.Info("market data unsubscribed idle symbols", "symbols", len(pruned))
+	}
+
+	return nil
+}
+
+func (f *Feed) writeRequest(connection *websocket.Conn, method string, symbols []string) error {
+	return connection.WriteJSON(subscriptionRequest{
+		Method: method,
+		Params: streamNames(symbols),
+		ID:     f.nextRequestID(),
+	})
+}
+
+// nextRequestID is called only from the Run goroutine, which is the sole
+// writer on the WebSocket connection.
+func (f *Feed) nextRequestID() int {
+	f.requestID++
+
+	return f.requestID
+}
+
+func (f *Feed) waitForChange(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-f.changed:
+		return true
 	}
 }
 
@@ -271,7 +441,7 @@ func (f *Feed) dial(ctx context.Context, symbols []string) (*websocket.Conn, err
 	request := subscriptionRequest{
 		Method: "SUBSCRIBE",
 		Params: streamNames(symbols),
-		ID:     1,
+		ID:     f.nextRequestID(),
 	}
 
 	if err := connection.WriteJSON(request); err != nil {
@@ -285,7 +455,7 @@ func (f *Feed) dial(ctx context.Context, symbols []string) (*websocket.Conn, err
 // read consumes messages until a recoverable condition occurs. It returns the
 // secret-free reason and whether at least one quote was applied. A gap is
 // detected from the per-symbol trade id; a quiet period from the read deadline.
-func (f *Feed) read(ctx context.Context, connection *websocket.Conn, symbols []string) (string, bool) {
+func (f *Feed) read(ctx context.Context, connection *websocket.Conn) (string, bool) {
 	received := false
 
 	for {
@@ -311,7 +481,7 @@ func (f *Feed) read(ctx context.Context, connection *websocket.Conn, symbols []s
 			return ReasonDisconnected, received
 		}
 
-		updated, gap := f.applyMessage(payload, symbols)
+		updated, gap := f.applyMessage(payload)
 		if updated {
 			received = true
 		}
@@ -322,110 +492,210 @@ func (f *Feed) read(ctx context.Context, connection *websocket.Conn, symbols []s
 	}
 }
 
-// applyMessage normalizes a trade or book-ticker message. Binance bookTicker
-// payloads have no event type, so the shape (p for a trade, b/a for book) is
-// used to distinguish them. It reports whether a quote changed and whether the
-// trade-id sequence skipped.
-func (f *Feed) applyMessage(payload []byte, symbols []string) (bool, bool) {
-	var message struct {
-		Stream     string          `json:"stream"`
-		Data       json.RawMessage `json:"data"`
-		Event      string          `json:"e"`
-		Symbol     string          `json:"s"`
-		TradeID    int64           `json:"t"`
-		TradePrice string          `json:"p"`
-		Bid        string          `json:"b"`
-		Ask        string          `json:"a"`
-		ID         *int64          `json:"id"`
+// applyMessage normalizes a trade or book-ticker message. It decodes the event
+// type before binding fields because Binance trade frames use numeric b/a for
+// buyer/seller order IDs, while bookTicker frames use b/a for best bid/ask.
+// BookTicker payloads may omit an event type, so the shape is used as a
+// fallback. It ignores symbols that are not actively subscribed and reports
+// whether a quote changed and whether the trade-id sequence skipped.
+func (f *Feed) applyMessage(payload []byte) (bool, bool) {
+	var envelope struct {
+		Stream string          `json:"stream"`
+		Data   json.RawMessage `json:"data"`
+		ID     *int64          `json:"id"`
 	}
 
-	if err := json.Unmarshal(payload, &message); err != nil {
-		f.logger.Warn("market data message is not JSON", "error_type", fmt.Sprintf("%T", err))
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		f.warnDecodeFailure(err)
 		return false, false
 	}
 
-	if len(message.Stream) > 0 {
-		if len(message.Data) == 0 {
+	if len(envelope.Stream) > 0 {
+		if len(envelope.Data) == 0 {
 			return false, false
 		}
 
-		if err := json.Unmarshal(message.Data, &message); err != nil {
-			f.logger.Warn("market data stream payload is not JSON", "error_type", fmt.Sprintf("%T", err))
-			return false, false
-		}
+		payload = envelope.Data
 	}
+
+	// A struct bind is unsafe here: encoding/json matches keys case-insensitively,
+	// so trade frames' E/T collide with e/t and bookTicker's B/A collide with b/a.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		f.warnDecodeFailure(err)
+		return false, false
+	}
+
+	event, _ := jsonString(fields["e"])
+	symbolText, _ := jsonString(fields["s"])
 
 	// Subscription acknowledgements carry only an id and a null result.
-	if message.ID != nil && message.Symbol == "" {
+	if envelope.ID != nil && symbolText == "" {
 		return false, false
 	}
 
-	symbol := normalizeSymbol(message.Symbol)
-	if symbol == "" || !containsSymbol(symbols, symbol) {
+	symbol := normalizeSymbol(symbolText)
+	if symbol == "" || !f.isActive(symbol) {
 		return false, false
 	}
 
-	now := f.now()
+	tradeID, hasTradeID := jsonInt64(fields["t"])
+	tradePrice, hasTradePrice := jsonString(fields["p"])
+	bidRaw := fields["b"]
+	askRaw := fields["a"]
 
-	if message.TradeID > 0 && message.TradePrice != "" {
-		if !validDecimal(message.TradePrice) {
-			f.logger.Warn("market data trade has an invalid price", "symbol", symbol)
+	if event == "trade" {
+		if !hasTradeID || !hasTradePrice {
+			f.warnThrottled("market data trade is missing a numeric id or text price", "symbol", symbol)
 			return false, false
 		}
 
-		f.mu.Lock()
-		previous := f.lastTradeID[symbol]
-		gap := previous > 0 && message.TradeID > previous+1
-		// Ignore stale or duplicate updates; only advance the sequence.
-		if message.TradeID <= previous {
-			f.mu.Unlock()
-			return false, false
-		}
-
-		f.lastTradeID[symbol] = message.TradeID
-		ticker := f.tickers[symbol]
-		ticker.Symbol = symbol
-		ticker.Last = message.TradePrice
-		ticker.UpdatedAt = now
-		f.tickers[symbol] = ticker
-		f.status.LastMessageAt = now
-		f.mu.Unlock()
-
-		return true, gap
+		return f.applyTrade(symbol, tradeID, tradePrice)
 	}
 
-	if message.Bid != "" || message.Ask != "" {
-		if message.Bid != "" && !validDecimal(message.Bid) {
-			f.logger.Warn("market data book has an invalid bid", "symbol", symbol)
-			return false, false
-		}
+	if event == "" && hasTradeID && hasTradePrice {
+		return f.applyTrade(symbol, tradeID, tradePrice)
+	}
 
-		if message.Ask != "" && !validDecimal(message.Ask) {
-			f.logger.Warn("market data book has an invalid ask", "symbol", symbol)
-			return false, false
-		}
+	if event == "bookTicker" || (event == "" && (len(bidRaw) > 0 || len(askRaw) > 0)) {
+		bid, _ := jsonString(bidRaw)
+		ask, _ := jsonString(askRaw)
 
-		f.mu.Lock()
-		ticker := f.tickers[symbol]
-		ticker.Symbol = symbol
-		if message.Bid != "" {
-			ticker.Bid = message.Bid
-		}
-		if message.Ask != "" {
-			ticker.Ask = message.Ask
-		}
-		ticker.UpdatedAt = now
-		f.tickers[symbol] = ticker
-		f.status.LastMessageAt = now
-		f.mu.Unlock()
-
-		return true, false
+		return f.applyBookTicker(symbol, bid, ask), false
 	}
 
 	return false, false
 }
 
-func (f *Feed) fetchREST(ctx context.Context, symbols []string) {
+func jsonString(raw json.RawMessage) (string, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", false
+	}
+
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", false
+	}
+
+	return value, true
+}
+
+func jsonInt64(raw json.RawMessage) (int64, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0, false
+	}
+
+	var value int64
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return 0, false
+	}
+
+	return value, true
+}
+
+func (f *Feed) applyTrade(symbol string, tradeID int64, price string) (bool, bool) {
+	if tradeID <= 0 || price == "" {
+		return false, false
+	}
+
+	if !validDecimal(price) {
+		f.warnThrottled("market data trade has an invalid price", "symbol", symbol)
+		return false, false
+	}
+
+	now := f.now()
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	previous := f.lastTradeID[symbol]
+	gap := previous > 0 && tradeID > previous+1
+	// Ignore stale or duplicate updates; only advance the sequence.
+	if tradeID <= previous {
+		return false, false
+	}
+
+	f.lastTradeID[symbol] = tradeID
+	ticker := f.tickers[symbol]
+	ticker.Symbol = symbol
+	ticker.Last = price
+	ticker.UpdatedAt = now
+	ticker.TradeAt = now
+	f.tickers[symbol] = ticker
+	f.status.LastMessageAt = now
+
+	return true, gap
+}
+
+func (f *Feed) applyBookTicker(symbol, bid, ask string) bool {
+	if bid == "" && ask == "" {
+		return false
+	}
+
+	if bid != "" && !validDecimal(bid) {
+		f.warnThrottled("market data book has an invalid bid", "symbol", symbol)
+		return false
+	}
+
+	if ask != "" && !validDecimal(ask) {
+		f.warnThrottled("market data book has an invalid ask", "symbol", symbol)
+		return false
+	}
+
+	now := f.now()
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	ticker := f.tickers[symbol]
+	ticker.Symbol = symbol
+	if bid != "" {
+		ticker.Bid = bid
+	}
+	if ask != "" {
+		ticker.Ask = ask
+	}
+	ticker.UpdatedAt = now
+	f.tickers[symbol] = ticker
+	f.status.LastMessageAt = now
+
+	return true
+}
+
+// warnDecodeFailure records malformed frames without flooding the log.
+func (f *Feed) warnDecodeFailure(err error) {
+	f.warnThrottled("market data message could not be decoded", "error_type", fmt.Sprintf("%T", err))
+}
+
+// warnThrottled logs the first warning and then at most one per minute,
+// reporting how many matching warnings were suppressed in between.
+func (f *Feed) warnThrottled(message string, attributes ...any) {
+	f.mu.Lock()
+	now := f.now()
+	if !f.lastWarning.IsZero() && now.Sub(f.lastWarning) < time.Minute {
+		f.warningCount++
+		f.mu.Unlock()
+		return
+	}
+
+	suppressed := f.warningCount
+	f.warningCount = 0
+	f.lastWarning = now
+	f.mu.Unlock()
+
+	if suppressed > 0 {
+		attributes = append(attributes, "suppressed", suppressed)
+	}
+
+	f.logger.Warn(message, attributes...)
+}
+
+func (f *Feed) fetchREST(ctx context.Context) {
+	symbols := f.Symbols()
+	if len(symbols) == 0 {
+		return
+	}
+
 	snapshots, err := f.rest.Fetch(ctx, symbols)
 	if err != nil {
 		// Log only the error type. URLs, response bodies, and headers must not
@@ -438,15 +708,21 @@ func (f *Feed) fetchREST(ctx context.Context, symbols []string) {
 
 	f.mu.Lock()
 	for symbol, ticker := range snapshots {
+		// Only cache quotes an active (or newly desired) bot needs.
+		if !f.wantedLocked(symbol) {
+			continue
+		}
 		ticker.UpdatedAt = now
+		ticker.TradeAt = now
 		f.tickers[symbol] = ticker
 	}
 	f.mu.Unlock()
 }
 
 // wait sleeps for duration while polling the REST ticker at RESTPollInterval.
-// It returns false when ctx is cancelled.
-func (f *Feed) wait(ctx context.Context, duration time.Duration, symbols []string) bool {
+// It returns true when the deadline expires or the desired symbol set changes,
+// and false only when ctx is cancelled.
+func (f *Feed) wait(ctx context.Context, duration time.Duration) bool {
 	if duration <= 0 {
 		duration = time.Millisecond
 	}
@@ -454,27 +730,23 @@ func (f *Feed) wait(ctx context.Context, duration time.Duration, symbols []strin
 	deadline := time.NewTimer(duration)
 	defer deadline.Stop()
 
-	poll := f.cfg.RESTPollInterval
-	if poll <= 0 || poll >= duration {
-		select {
-		case <-ctx.Done():
-			return false
-		case <-deadline.C:
-			return true
-		}
+	var poll <-chan time.Time
+	if f.cfg.RESTPollInterval > 0 {
+		ticker := time.NewTicker(f.cfg.RESTPollInterval)
+		defer ticker.Stop()
+		poll = ticker.C
 	}
-
-	ticker := time.NewTicker(poll)
-	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return false
+		case <-f.changed:
+			return true
 		case <-deadline.C:
 			return true
-		case <-ticker.C:
-			f.fetchREST(ctx, symbols)
+		case <-poll:
+			f.fetchREST(ctx)
 		}
 	}
 }
@@ -486,6 +758,7 @@ func (f *Feed) markConnected(symbols []string) {
 	// start a fresh trade-id baseline after resubscribing. Keeping the old
 	// baseline would turn every reconnect into another false gap.
 	f.lastTradeID = make(map[string]int64)
+	f.active = append([]string(nil), symbols...)
 	f.status = Status{
 		Mode:          ModeWebSocket,
 		Symbols:       append([]string(nil), symbols...),
@@ -499,7 +772,7 @@ func (f *Feed) markConnected(symbols []string) {
 	}
 }
 
-func (f *Feed) markDegraded(reason string, symbols []string) {
+func (f *Feed) markDegraded(reason string) {
 	f.mu.Lock()
 	changed := !f.status.Degraded || f.status.Reason != reason
 	since := f.status.Since
@@ -510,26 +783,52 @@ func (f *Feed) markDegraded(reason string, symbols []string) {
 		Mode:          ModeREST,
 		Degraded:      true,
 		Reason:        reason,
-		Symbols:       append([]string(nil), symbols...),
+		Symbols:       append([]string(nil), f.desired...),
 		Since:         since,
 		LastMessageAt: f.status.LastMessageAt,
 	}
+	symbols := len(f.desired)
 	f.mu.Unlock()
 
 	if changed {
-		f.emit(Event{Type: EventDegraded, Mode: ModeREST, Reason: reason, Symbols: len(symbols), At: f.now()})
+		f.emit(Event{Type: EventDegraded, Mode: ModeREST, Reason: reason, Symbols: symbols, At: f.now()})
 	}
 }
 
-func (f *Feed) setIdle(symbols []string) {
+func (f *Feed) setIdle() {
 	f.mu.Lock()
+	f.active = nil
 	f.status = Status{
 		Mode:          ModeIdle,
-		Symbols:       append([]string(nil), symbols...),
+		Symbols:       append([]string(nil), f.desired...),
 		Since:         f.now(),
 		LastMessageAt: f.status.LastMessageAt,
 	}
 	f.mu.Unlock()
+}
+
+// isActive reports whether symbol is part of the current WebSocket
+// subscription. Messages for removed symbols are ignored.
+func (f *Feed) isActive(symbol string) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	return containsSymbol(f.active, symbol)
+}
+
+func (f *Feed) wantedLocked(symbol string) bool {
+	return containsSymbol(f.desired, symbol) || containsSymbol(f.active, symbol)
+}
+
+// pruneTickersLocked drops cached quotes for symbols the desired set no longer
+// contains, so a stopped bot cannot keep a stale price alive.
+func (f *Feed) pruneTickersLocked(symbols []string) {
+	for symbol := range f.tickers {
+		if !containsSymbol(symbols, symbol) {
+			delete(f.tickers, symbol)
+			delete(f.lastTradeID, symbol)
+		}
+	}
 }
 
 func (f *Feed) emit(event Event) {
@@ -616,6 +915,39 @@ func containsSymbol(symbols []string, symbol string) bool {
 	}
 
 	return false
+}
+
+// sameSymbolSet compares two normalized sets without caring about order.
+func sameSymbolSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+
+	for _, symbol := range left {
+		if !containsSymbol(right, symbol) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// symbolDiff returns symbols to subscribe and unsubscribe when moving from
+// active to desired.
+func symbolDiff(active, desired []string) (added, removed []string) {
+	for _, symbol := range desired {
+		if !containsSymbol(active, symbol) {
+			added = append(added, symbol)
+		}
+	}
+
+	for _, symbol := range active {
+		if !containsSymbol(desired, symbol) {
+			removed = append(removed, symbol)
+		}
+	}
+
+	return added, removed
 }
 
 // validDecimal accepts a plain decimal string with an optional leading minus.

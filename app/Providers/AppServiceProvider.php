@@ -14,10 +14,6 @@ use App\Services\Engine\CommandPublisher;
 use App\Services\Engine\EngineHeartbeat;
 use App\Services\Engine\RedisCommandPublisher;
 use App\Services\Exchange\ExchangeClientFactory;
-use App\Strategies\DynamicGridStrategy;
-use App\Strategies\MartingaleGridStrategy;
-use App\Strategies\SimpleGridStrategy;
-use App\Strategies\TrailingGridStrategy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -64,10 +60,5 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Bot::class, BotPolicy::class);
         Gate::policy(ExchangeCredential::class, ExchangeCredentialPolicy::class);
         Gate::policy(BacktestRun::class, BacktestRunPolicy::class);
-
-        $this->app->make(StrategyRegistry::class)->register(new SimpleGridStrategy);
-        $this->app->make(StrategyRegistry::class)->register(new TrailingGridStrategy);
-        $this->app->make(StrategyRegistry::class)->register(new MartingaleGridStrategy);
-        $this->app->make(StrategyRegistry::class)->register(new DynamicGridStrategy);
     }
 }

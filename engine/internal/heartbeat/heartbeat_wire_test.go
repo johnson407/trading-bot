@@ -92,7 +92,7 @@ func TestRunRefreshesAtLeastEveryFiveSeconds(t *testing.T) {
 	t.Parallel()
 
 	setter := &safeSet{}
-	writer := heartbeat.NewStub(setter)
+	writer := heartbeat.NewWriter(setter)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

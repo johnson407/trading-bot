@@ -8,13 +8,13 @@ ownership, and the heartbeat.
 
 > **Current phase:** the Go engine under `engine/` implements the contract,
 > consumer, idempotency, heartbeat, public market data, `/healthz` readiness,
-> the tick loop, grid and paper-fill runtime, strategies, risk/exit guards, and
-> deterministic backtest replay with PostgreSQL persistence. Laravel publishes
-> user commands and backtest commands, writes only `desired_status`, shows an
-> expired heartbeat as a warning, and has trimmed the PHP bot/backtest schedule
-> and Horizon queue. Live exchange execution remains disabled in the engine; a
-> live start is paused with a clear error and Laravel retains the emergency
-> `CancelBotOrders` path.
+> the tick loop, grid and paper-fill runtime, strategies, risk/exit guards,
+> deterministic backtest replay with PostgreSQL persistence, and gated live
+> placement/cancellation/reconciliation. Laravel publishes user commands and
+> backtest commands, writes only `desired_status`, shows an expired heartbeat
+> as a warning, and retains the emergency `CancelBotOrders` path. Live execution
+> is off unless `TRADING_LIVE_ENABLED=true`; the first rollout target is Binance
+> testnet, and production real-money live use needs an explicit operator yes.
 
 ## Streams
 
@@ -166,11 +166,12 @@ retained after the PHP engine is deleted.
 
 The Laravel side of this wiring is implemented: start, pause, stop, single-order
 cancel, and the kill-switch write `desired_status` and publish their command.
-The Go engine executes those commands. Live execution is disabled in this
-build, so starting a live bot pauses it; stop and kill-switch use the emergency
-local cancel only when the heartbeat is unavailable or the publish fails.
-Single live-order cancellation uses Laravel's retained exchange path, while
-paper order cancellation goes through `order.cancel`.
+The Go engine executes those commands, including live placement when the gate is
+open. Stop and kill-switch use the emergency local cancel only when the
+heartbeat is unavailable or the publish fails. Single live-order cancellation
+continues through Laravel's retained local exchange path; paper cancellation
+goes through `order.cancel`. A closed live gate pauses the bot and records a
+risk event; it never converts the bot to paper.
 
 ## Heartbeat
 
@@ -220,7 +221,7 @@ added.** If a future requirement needs durable, queryable command history
 independent of Redis retention, a Laravel-owned receipt migration can be added
 then; the engine never runs migrations.
 
-## Market data (phase 3)
+## Market data (cached tick price source)
 
 `engine/internal/marketdata` implements the public Binance feed from design §5
 without credentials: `<symbol>@trade` plus `<symbol>@bookTicker` streams,
@@ -229,10 +230,40 @@ public REST `24hr` ticker snapshot for recovery, and periodic REST tickers while
 the socket cannot connect. A degraded feed emits `marketdata.degraded` (with a
 secret-free reason) and recovery emits `marketdata.recovered`.
 
+The feed subscribes to the union of running and starting Binance bots' symbols
+plus the optional `ENGINE_MARKET_DATA_SYMBOLS` watchlist. It adds a symbol when
+a bot starts, removes it after the last bot using it stops, and drops the
+removed symbol's cached quote. When the set becomes empty the socket is closed
+and the feed is idle.
+
+Ticks read `marketdata.PriceSource`, not the public REST endpoint directly. A
+cached quote no older than `ENGINE_MARKET_DATA_STALE_AFTER` (default
+`max(15s, TRADING_TICK_INTERVAL / 2)`) is used as-is. A missing or stale quote
+triggers one public REST snapshot; if that also fails, the tick fails instead of
+trading on an old price. Only the trade timestamp counts for staleness, so a
+fresh book-ticker update cannot make an old last price look current. No market
+data path reads API keys or calls a private endpoint.
+
 The feed is **idle unless** `ENGINE_MARKET_DATA_WS_URL` and
-`ENGINE_MARKET_DATA_REST_URL` are both set and `ENGINE_MARKET_DATA_SYMBOLS` is
-non-empty. Local Compose sets none of them, so the engine opens no exchange
-connection. Phase 4 will supply running-bot symbols to `marketdata.Feed.Run`.
+`ENGINE_MARKET_DATA_REST_URL` are both set. Local Compose sets the public
+Binance URLs and `TRADING_TICK_INTERVAL`; no symbol list is required. Without
+the endpoints, ticks still use one public REST snapshot per evaluation.
+
+## Setup plan evaluation
+
+`POST /v1/plan/evaluate` runs the same Go strategy code used by ticks against a
+non-persisted setup and returns levels, totals, errors, warnings, and the public
+market data supplied by Laravel. It makes no private call and writes no bot,
+grid, order, or risk row. Laravel's `POST /bots/preview` and both save requests
+call it; if the engine is unreachable, preview and save fail closed and persist
+nothing.
+
+Compose does not publish the engine port. Laravel reaches it at
+`ENGINE_PLAN_URL=http://engine:8080`. If an operator ever exposes the port
+beyond the internal network, set `ENGINE_INTERNAL_TOKEN` in both services; the
+endpoint then requires `Authorization: Bearer <token>`. `plan-server` is a
+DB/Redis-free subcommand used by the Laravel contract tests:
+`/engine plan-server`.
 
 ## PHP golden engine fixtures (phase 4 capture)
 

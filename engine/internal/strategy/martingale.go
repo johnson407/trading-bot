@@ -4,7 +4,7 @@ import (
 	"github.com/johnson407/trading-bot/engine/internal/decimal"
 )
 
-// MartingaleGrid ports App\Strategies\MartingaleGridStrategy.
+// MartingaleGrid is the runtime martingale-grid strategy.
 type MartingaleGrid struct{}
 
 // NewMartingaleGrid returns the martingale-grid strategy.

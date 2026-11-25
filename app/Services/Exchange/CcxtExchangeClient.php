@@ -135,10 +135,30 @@ class CcxtExchangeClient implements ExchangeClient
         }
     }
 
-    public function cancelOrder(Bot $bot, string $symbol, string $exchangeOrderId): void
-    {
-        $this->withRetry('cancelOrder', function () use ($bot, $symbol, $exchangeOrderId) {
-            $this->privateClient($bot)->cancel_order($exchangeOrderId, $symbol);
+    public function cancelOrder(
+        Bot $bot,
+        string $symbol,
+        ?string $exchangeOrderId,
+        ?string $clientOrderId = null,
+    ): void {
+        $this->withRetry('cancelOrder', function () use ($bot, $symbol, $exchangeOrderId, $clientOrderId) {
+            $client = $this->privateClient($bot);
+
+            if ($exchangeOrderId !== null && $exchangeOrderId !== '') {
+                $client->cancel_order($exchangeOrderId, $symbol);
+            } elseif ($clientOrderId !== null && $clientOrderId !== '') {
+                // A live intent can exist on the venue without a known exchange
+                // ID when placement timed out. Binance accepts the surviving
+                // client order ID as the cancellation key.
+                $client->cancel_order_with_client_order_id($clientOrderId, $symbol);
+            } else {
+                throw ExchangeException::make(
+                    ExchangeErrorType::Unknown,
+                    $this->exchange(),
+                    'cancelOrder',
+                    'Cancelling a live order requires an exchange order ID or a client order ID.',
+                );
+            }
 
             return true;
         });

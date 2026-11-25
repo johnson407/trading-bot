@@ -59,14 +59,16 @@ stay within the default 20-order and 1000-quote risk limits at a 1000 capital
 allocation. Martingale and dynamic grids remain advanced-only.
 
 The form shows a live ladder preview before saving. It calls
-`POST /bots/preview` (`bots.preview`), which validates the setup and returns
-levels, per-order size, notional totals, effective risk limits, and advisories
-without writing anything. `GET /bots/market-data` (`bots.market-data`) supplies
-the optional current-price button; when the exchange is unreachable the form
-falls back to a manually entered center price.
+`POST /bots/preview` (`bots.preview`), which asks the Go engine's internal plan
+endpoint for levels, per-order size, notional totals, effective risk limits, and
+advisories without writing anything. `GET /bots/market-data` (`bots.market-data`)
+supplies the optional current-price button; when the exchange is unreachable the
+form falls back to a manually entered center price.
 
 - Mode defaults to **paper**.
 - Live mode requires a stored exchange credential and the live configuration gate.
+  The form explains that testnet and real-money live are different and that a
+  paper bot never promotes to live automatically.
 - Invalid symbol, capital, levels, spacing, quantity, fee, strategy, missing
   strategy-specific parameters, unbuildable geometry, and orders below exchange
   minimums (when market data is available) are rejected with field errors.
@@ -127,7 +129,10 @@ Feature test: `tests/Feature/BotExitGuardTest.php`.
 
 For live bots, start requires a confirmation string equal to `<bot name> on <exchange>`,
 the `TRADING_LIVE_ENABLED` gate, and enough free quote balance. Creating a live bot
-requires the same phrase; the error is reported on `live_confirmation`. Missing or mismatched
+requires the same phrase; the error is reported on `live_confirmation`. Testnet
+comes first: a credential marked `testnet` or `TRADING_EXCHANGE_SANDBOX=true`
+routes Binance orders to `https://testnet.binance.vision`, and a custom relay is
+refused. Production real-money live needs an explicit operator yes. Missing or mismatched
 confirmation is returned as a `confirmation` error; other failures are returned as
 an `action` error and leave the prior state unchanged. Cross-user control is
 denied.

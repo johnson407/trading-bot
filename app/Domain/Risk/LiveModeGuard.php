@@ -32,6 +32,11 @@ class LiveModeGuard
         }
 
         $exchange ??= $this->clients->forBot($bot);
+
+        if ($bot->exchange === 'max') {
+            throw LiveTradingDisabledException::forExchange('max');
+        }
+
         $balances = $exchange->balances($bot);
         $asset = $this->quoteAsset($bot->symbol);
         $available = $this->available($balances, $asset);

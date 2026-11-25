@@ -18,7 +18,7 @@ class FakeExchangeClient implements ExchangeClient
     /** @var array<string, ExchangeOrder> */
     public array $orders = [];
 
-    /** @var list<array{symbol: string, exchange_order_id: string}> */
+    /** @var list<array{symbol: string, exchange_order_id: string|null, client_order_id: string|null}> */
     public array $cancelCalls = [];
 
     /** @var list<array{side: OrderSide, price: string, quantity: string, client_order_id: string}> */
@@ -105,14 +105,23 @@ class FakeExchangeClient implements ExchangeClient
         return $this->orders[$id];
     }
 
-    public function cancelOrder(Bot $bot, string $symbol, string $exchangeOrderId): void
-    {
-        $this->cancelCalls[] = ['symbol' => $symbol, 'exchange_order_id' => $exchangeOrderId];
+    public function cancelOrder(
+        Bot $bot,
+        string $symbol,
+        ?string $exchangeOrderId,
+        ?string $clientOrderId = null,
+    ): void {
+        $this->cancelCalls[] = [
+            'symbol' => $symbol,
+            'exchange_order_id' => $exchangeOrderId,
+            'client_order_id' => $clientOrderId,
+        ];
 
         if ($this->cancelFailure !== null) {
             throw $this->cancelFailure;
         }
 
+        $exchangeOrderId ??= $this->exchangeIDForClientID((string) $clientOrderId);
         $order = $this->orderOrFail($exchangeOrderId);
 
         $this->orders[$exchangeOrderId] = ExchangeOrder::make(
@@ -123,6 +132,22 @@ class FakeExchangeClient implements ExchangeClient
             $order->price,
             $order->quantity,
             $order->filledQuantity,
+        );
+    }
+
+    private function exchangeIDForClientID(string $clientOrderId): string
+    {
+        foreach ($this->orders as $exchangeOrderId => $order) {
+            if ($order->clientOrderId === $clientOrderId) {
+                return $exchangeOrderId;
+            }
+        }
+
+        throw ExchangeException::make(
+            ExchangeErrorType::NotFound,
+            'fake',
+            'cancelOrder',
+            'Order not found.',
         );
     }
 

@@ -4,7 +4,7 @@ import (
 	"github.com/johnson407/trading-bot/engine/internal/decimal"
 )
 
-// TrailingGrid ports App\Strategies\TrailingGridStrategy.
+// TrailingGrid is the runtime trailing-grid strategy.
 type TrailingGrid struct{}
 
 // NewTrailingGrid returns the trailing-grid strategy.

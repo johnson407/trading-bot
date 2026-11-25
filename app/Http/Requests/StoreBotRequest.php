@@ -3,12 +3,13 @@
 namespace App\Http\Requests;
 
 use App\Domain\Exchange\ValueObjects\MarketData;
-use App\Domain\Grid\GridPlanEvaluator;
+use App\Domain\Grid\Exceptions\GridPlanUnavailableException;
 use App\Domain\Grid\PresetResolver;
 use App\Domain\Grid\ValueObjects\GridPlanRequest;
 use App\Domain\Risk\RiskLimitService;
 use App\Domain\Strategy\StrategyRegistry;
 use App\Http\Requests\Concerns\BuildsStrategyConfiguration;
+use App\Services\Engine\GridPlanClient;
 use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -118,7 +119,13 @@ class StoreBotRequest extends FormRequest
                 return;
             }
 
-            $plan = app(GridPlanEvaluator::class)->evaluate($this->gridPlanRequest());
+            try {
+                $plan = app(GridPlanClient::class)->evaluate($this->gridPlanRequest());
+            } catch (GridPlanUnavailableException $exception) {
+                $validator->errors()->add('strategy_key', $exception->getMessage());
+
+                return;
+            }
 
             foreach ($plan->errors() as $problem) {
                 $validator->errors()->add($problem->field ?? 'strategy_key', $problem->message);
