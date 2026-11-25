@@ -59,9 +59,38 @@ The dashboard SHALL offer a quick setup that captures name, symbol, exchange, ca
 - **WHEN** a user edits the grid parameters of an idle bot
 - **THEN** the form shows the same plan evaluation and advisory warnings as creation before saving
 
+### Requirement: Account settings hub
+
+The dashboard SHALL provide a Settings hub that groups account configuration. The hub SHALL link to exchange credentials and risk limits, and every settings page SHALL require an authenticated user.
+
+#### Scenario: Open the settings hub
+
+- **WHEN** a signed-in user opens the Settings hub
+- **THEN** links to exchange credentials and risk limits are present
+
+#### Scenario: Open exchange credentials from settings
+
+- **WHEN** a signed-in user selects exchange credentials in the Settings hub
+- **THEN** the exchange credential list is shown
+
+#### Scenario: Open risk limits from settings
+
+- **WHEN** a signed-in user selects risk limits in the Settings hub
+- **THEN** the account risk-limit form is shown
+
+#### Scenario: Reject an unauthenticated settings request
+
+- **WHEN** an unauthenticated visitor requests a settings page
+- **THEN** the visitor is redirected to sign in
+
 ### Requirement: Exchange credentials management
 
-The dashboard SHALL let a user add exchange credentials for live trading. After saving, the secret SHALL be displayed only as a masked value and SHALL NOT be readable through the interface.
+The dashboard SHALL let a user add exchange credentials for live trading from the Settings area. After saving, the secret SHALL be displayed only as a masked value and SHALL NOT be readable through the interface.
+
+#### Scenario: Reach credentials from settings
+
+- **WHEN** a user opens the Settings hub
+- **THEN** a link to exchange credentials is available without typing a URL
 
 #### Scenario: Save credentials
 
@@ -122,11 +151,16 @@ The dashboard SHALL allow a bot's owner to start, pause, and stop the bot, and S
 
 ### Requirement: Kill-switch access
 
-The dashboard SHALL expose the account-wide kill-switch and SHALL require explicit confirmation before activating it. Activation SHALL write `desired_status` paused and publish a `kill_switch` command. If the engine heartbeat is missing or expired or publish fails, Laravel SHALL also cancel open live orders in that same action.
+The dashboard SHALL expose the account-wide kill-switch from the bot list as a danger-styled control beside Create bot, and SHALL require explicit confirmation before activating it. Activation SHALL write `desired_status` paused and publish a `kill_switch` command. If the engine heartbeat is missing or expired or publish fails, Laravel SHALL also cancel open live orders in that same action.
+
+#### Scenario: Locate the kill switch
+
+- **WHEN** a user opens the bot list
+- **THEN** a danger-styled Kill switch control is shown next to Create bot
 
 #### Scenario: Activate from the dashboard
 
-- **WHEN** a user confirms the kill-switch
+- **WHEN** a user confirms the kill-switch after opening it from the bot list
 - **THEN** all of the user's bots are paused and their open orders are canceled
 
 ### Requirement: Activity and errors
@@ -145,17 +179,27 @@ The dashboard SHALL show a per-bot activity log containing order, fill, cancella
 
 ### Requirement: Primary navigation
 
-The authenticated layout SHALL link to the dashboard, the bot list, backtests, exchange credentials, and the kill switch from every authenticated page, on both desktop and responsive menus.
+The authenticated layout SHALL link to the dashboard, alerts, the bot list, backtests, and Settings from every authenticated page, on both desktop and responsive menus. The Settings hub SHALL link to exchange credentials and risk limits. The kill switch SHALL NOT appear in primary navigation.
 
 #### Scenario: Reach the bot list
 
 - **WHEN** a signed-in user views any authenticated page
 - **THEN** a navigation link to the bot list is available without typing a URL
 
-#### Scenario: Reach credentials and the kill switch
+#### Scenario: Reach settings
 
 - **WHEN** a signed-in user opens the navigation menu
-- **THEN** links to exchange credentials and the kill switch are present
+- **THEN** a link to Settings is present
+
+#### Scenario: Reach credentials and the kill switch
+
+- **WHEN** a signed-in user opens the navigation menu and the Settings hub
+- **THEN** credentials are reachable through Settings, and the kill switch is reachable from the bot list
+
+#### Scenario: Keep the kill switch out of primary navigation
+
+- **WHEN** a signed-in user opens the desktop or responsive navigation menu
+- **THEN** the kill switch is not listed among the primary navigation links
 
 #### Scenario: Reach backtests
 

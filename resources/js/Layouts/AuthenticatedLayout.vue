@@ -73,29 +73,16 @@ const showingNavigationDropdown = ref(false);
                                 </NavLink>
 
                                 <NavLink
-                                    :href="route('exchange-credentials.index')"
+                                    :href="route('settings.index')"
                                     :active="
+                                        route().current('settings.*') ||
                                         route().current(
                                             'exchange-credentials.*',
-                                        )
+                                        ) ||
+                                        route().current('risk-limits.*')
                                     "
                                 >
-                                    Credentials
-                                </NavLink>
-
-                                <NavLink
-                                    :href="route('kill-switch.create')"
-                                    :active="route().current('kill-switch.*')"
-                            danger
-                                >
-                                    Kill switch
-                                </NavLink>
-
-                                <NavLink
-                                    :href="route('risk-limits.edit')"
-                                    :active="route().current('risk-limits.*')"
-                                >
-                                    Risk limits
+                                    Settings
                                 </NavLink>
                             </div>
                         </div>
@@ -238,27 +225,14 @@ const showingNavigationDropdown = ref(false);
                         </ResponsiveNavLink>
 
                         <ResponsiveNavLink
-                            :href="route('exchange-credentials.index')"
+                            :href="route('settings.index')"
                             :active="
-                                route().current('exchange-credentials.*')
+                                route().current('settings.*') ||
+                                route().current('exchange-credentials.*') ||
+                                route().current('risk-limits.*')
                             "
                         >
-                            Credentials
-                        </ResponsiveNavLink>
-
-                        <ResponsiveNavLink
-                            :href="route('kill-switch.create')"
-                            :active="route().current('kill-switch.*')"
-                            danger
-                        >
-                            Kill switch
-                        </ResponsiveNavLink>
-
-                        <ResponsiveNavLink
-                            :href="route('risk-limits.edit')"
-                            :active="route().current('risk-limits.*')"
-                        >
-                            Risk limits
+                            Settings
                         </ResponsiveNavLink>
                     </div>
 

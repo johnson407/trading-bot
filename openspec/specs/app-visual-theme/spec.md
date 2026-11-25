@@ -35,8 +35,8 @@ The application SHALL communicate profit and loss, bot states, live mode, warnin
 The kill switch and live-mode warnings SHALL be visually distinct and clearly labeled wherever they are presented.
 
 #### Scenario: Locate the kill switch
-- **WHEN** a user navigates the authenticated application
-- **THEN** the kill switch is identifiable by its label and distinct treatment
+- **WHEN** a user opens the bot list
+- **THEN** the kill switch is identifiable by its label and distinct danger treatment beside Create bot
 
 ### Requirement: Responsive themed interface
 The themed interface SHALL remain usable at desktop and mobile viewport widths, including navigation, forms, dialogs, and data tables.

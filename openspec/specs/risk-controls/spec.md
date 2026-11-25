@@ -185,7 +185,7 @@ Live fills SHALL record the fee reported by the exchange, prorated across partia
 
 ### Requirement: Risk limit configuration
 
-Account-scope risk limits SHALL apply to every bot that does not have an explicit per-bot override. A user SHALL be able to view and update the account limits from the dashboard. Legacy bot-scope rows created automatically for every bot SHALL be removed.
+Account-scope risk limits SHALL apply to every bot that does not have an explicit per-bot override. A user SHALL be able to view and update the account limits from the Settings area. Legacy bot-scope rows created automatically for every bot SHALL be removed.
 
 #### Scenario: Apply account limits to a bot without an override
 
@@ -194,7 +194,7 @@ Account-scope risk limits SHALL apply to every bot that does not have an explici
 
 #### Scenario: Update account limits
 
-- **WHEN** a user saves valid account limits
+- **WHEN** a user saves valid account limits from the Settings area
 - **THEN** the new limits are stored and applied to every bot without an override
 
 #### Scenario: Reject invalid limits

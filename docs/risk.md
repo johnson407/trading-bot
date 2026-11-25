@@ -21,7 +21,7 @@ Position notional is projected as `abs(base_inventory) * price` plus the remaini
 
 A sell is blocked with `risk.insufficient_inventory` when its quantity exceeds the base inventory that is not already reserved by open sell orders. A quote-only bot therefore places only buys until a buy fills and funds the paired sell; paper mode never reaches the negative-inventory pause by design. Insufficient inventory is an expected deferral, not an incident, so the check records no risk event; it is re-evaluated on the next tick. The risk decision, existing-order lookup, and order creation run inside a transaction that holds the bot row lock, so two concurrent ticks cannot both reserve the same base inventory.
 
-New bots do not receive a bot-scope row, so the account-wide limits apply immediately. `Risk limits` in the navigation (`risk-limits.edit`) edits the user-scope row; a bot-scope row, when one exists, still overrides it.
+New bots do not receive a bot-scope row, so the account-wide limits apply immediately. **Settings > Risk limits** (`risk-limits.edit`) edits the user-scope row; a bot-scope row, when one exists, still overrides it.
 
 ## Daily loss
 
