@@ -4,10 +4,16 @@ use App\Models\Bot;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Engine\EngineHeartbeat;
+use App\Services\Exchange\ExchangeClientFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Fixtures\FakeExchangeClient;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    app()->instance(ExchangeClientFactory::class, new ExchangeClientFactory(null, new FakeExchangeClient));
+});
 
 it('renders the kill-switch confirmation with account counts', function () {
     $user = User::factory()->create();

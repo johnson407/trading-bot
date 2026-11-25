@@ -9,11 +9,17 @@ use App\Models\Order;
 use App\Models\User;
 use App\Services\Engine\CommandPublisher;
 use App\Services\Engine\EngineHeartbeat;
+use App\Services\Exchange\ExchangeClientFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery\MockInterface;
+use Tests\Fixtures\FakeExchangeClient;
 use Tests\Support\FakeCommandPublisher;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    app()->instance(ExchangeClientFactory::class, new ExchangeClientFactory(null, new FakeExchangeClient));
+});
 
 it('pauses every user bot and leaves orders to the engine', function () {
     $user = User::factory()->create();

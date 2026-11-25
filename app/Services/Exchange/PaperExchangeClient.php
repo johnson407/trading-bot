@@ -5,7 +5,6 @@ namespace App\Services\Exchange;
 use App\Domain\Exchange\Contracts\ExchangeClient;
 use App\Domain\Exchange\Enums\ExchangeErrorType;
 use App\Domain\Exchange\Exceptions\ExchangeException;
-use App\Domain\Exchange\ValueObjects\Balance;
 use App\Domain\Exchange\ValueObjects\ExchangeOrder;
 use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Domain\Exchange\ValueObjects\PaperFill;
@@ -45,8 +44,12 @@ class PaperExchangeClient implements ExchangeClient
         return $this->privateOperation('createOrder');
     }
 
-    public function cancelOrder(Bot $bot, string $symbol, string $exchangeOrderId): void
-    {
+    public function cancelOrder(
+        Bot $bot,
+        string $symbol,
+        ?string $exchangeOrderId,
+        ?string $clientOrderId = null,
+    ): void {
         $this->privateOperation('cancelOrder');
     }
 

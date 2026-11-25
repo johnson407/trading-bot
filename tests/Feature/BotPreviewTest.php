@@ -100,6 +100,19 @@ it('returns a preview error instead of a validation failure for invalid geometry
         ->assertJsonCount(0, 'plan.levels');
 });
 
+it('fails closed with a 503 when the plan engine is unreachable', function () {
+    config(['engine.plan_url' => 'http://127.0.0.1:1']);
+    $user = User::factory()->create();
+    fakeMarket();
+
+    $response = $this->actingAs($user)
+        ->postJson(route('bots.preview'), previewPayload())
+        ->assertStatus(503)
+        ->assertJsonStructure(['message']);
+
+    expect($response->json('message'))->toContain('plan evaluator is unavailable');
+});
+
 it('derives concrete values from a quick-setup preset', function () {
     $user = User::factory()->create();
     fakeMarket();

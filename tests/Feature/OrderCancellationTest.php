@@ -7,6 +7,7 @@ use App\Domain\Exchange\Enums\ExchangeErrorType;
 use App\Domain\Exchange\Exceptions\ExchangeException;
 use App\Domain\Order\Enums\OrderSide;
 use App\Domain\Order\Enums\OrderStatus;
+use App\Domain\Support\Decimal;
 use App\Models\Bot;
 use App\Models\Order;
 use App\Services\Exchange\ExchangeClientFactory;
@@ -23,8 +24,8 @@ function liveOrderForCancellation(FakeExchangeClient $fake): array
         $bot,
         $bot->symbol,
         OrderSide::Buy,
-        \App\Domain\Support\Decimal::of('100'),
-        \App\Domain\Support\Decimal::of('1'),
+        Decimal::of('100'),
+        Decimal::of('1'),
         'client-1',
     );
 
@@ -48,7 +49,33 @@ it('cancels a live order on the exchange before marking it canceled locally', fu
 
     expect($order->fresh()->status)->toBe(OrderStatus::Canceled)
         ->and($fake->orders[$remote->exchangeOrderId]->status)->toBe(OrderStatus::Canceled)
-        ->and($fake->cancelCalls)->toBe([['symbol' => $bot->symbol, 'exchange_order_id' => $remote->exchangeOrderId]]);
+        ->and($fake->cancelCalls)->toBe([[
+            'symbol' => $bot->symbol,
+            'exchange_order_id' => $remote->exchangeOrderId,
+            'client_order_id' => 'client-1',
+        ]]);
+});
+
+it('cancels a live pending intent by client order id when no exchange id is stored', function () {
+    $fake = new FakeExchangeClient;
+    app()->instance(ExchangeClientFactory::class, new ExchangeClientFactory(null, $fake));
+
+    [$bot, $order] = liveOrderForCancellation($fake);
+
+    $order->forceFill([
+        'exchange_order_id' => null,
+        'status' => OrderStatus::Pending,
+    ])->save();
+    $pending = $order->fresh();
+
+    app(CancelOrder::class)->handle($pending);
+
+    expect($pending->fresh()->status)->toBe(OrderStatus::Canceled)
+        ->and($fake->cancelCalls)->toBe([[
+            'symbol' => $bot->symbol,
+            'exchange_order_id' => null,
+            'client_order_id' => 'client-1',
+        ]]);
 });
 
 it('treats an exchange order that is already missing as canceled', function () {

@@ -84,9 +84,18 @@ Evidence: `tests/Feature/RateLimitTest.php`.
 - [x] Creating or starting a live bot requires `<bot name> on <exchange>` as
   confirmation, and starting also requires a free quote balance at least equal to
   the capital allocation.
-  `app/Domain/Risk/LiveModeGuard.php`.
-- [x] Live failures pause the bot and cancel open orders in the Go engine; there
-  is no silent fallback to paper.
+  `app/Domain/Risk/LiveModeGuard.php`; the engine repeats the balance check and
+  pauses live starts that fail it.
+- [x] Live placement, cancellation, and reconciliation run in the Go engine only
+  when the gate is open. The engine persists a client order ID before the
+  network call, looks it up before retrying, and records a rejection without a
+  phantom open order.
+- [x] Live failures pause the bot and cancel open orders; there is no silent
+  fallback to paper. A closed gate pauses the bot and records
+  `risk.live_trading_disabled`.
+- [x] Testnet is the first live rollout target. Binance testnet requests use
+  `https://testnet.binance.vision` and refuse a custom relay or production host;
+  production real-money live requires an explicit operator yes.
 - [x] The kill switch writes `desired_status=paused`, publishes `kill_switch`, and
   cancels open live orders locally when the engine heartbeat is expired or the
   command cannot be published. `app/Actions/ActivateKillSwitch.php`.

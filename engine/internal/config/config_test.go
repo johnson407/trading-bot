@@ -46,6 +46,26 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("TradingDefaultExchange = %q, want binance", cfg.TradingDefaultExchange)
 	}
 
+	if cfg.TradingTickInterval != 60*time.Second {
+		t.Errorf("TradingTickInterval = %s, want 60s", cfg.TradingTickInterval)
+	}
+
+	if cfg.TradingOrderSync != 5*time.Second {
+		t.Errorf("TradingOrderSync = %s, want 5s", cfg.TradingOrderSync)
+	}
+
+	if cfg.TradingExchangeSandbox {
+		t.Error("TradingExchangeSandbox = true, want false by default")
+	}
+
+	if cfg.TradingExchangeBaseURL != "" {
+		t.Errorf("TradingExchangeBaseURL = %q, want empty", cfg.TradingExchangeBaseURL)
+	}
+
+	if cfg.MarketData.StaleAfter != 30*time.Second {
+		t.Errorf("MarketData.StaleAfter = %s, want 30s (half of the 60s tick interval)", cfg.MarketData.StaleAfter)
+	}
+
 	if cfg.BacktestJobTimeout != 600*time.Second {
 		t.Errorf("BacktestJobTimeout = %s, want 600s", cfg.BacktestJobTimeout)
 	}
@@ -53,6 +73,64 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.BacktestMaxFills != 25000 || cfg.BacktestEquityPoints != 1000 || cfg.BacktestProgressInterval != 500 {
 		t.Errorf("backtest caps = %d/%d/%d, want 25000/1000/500",
 			cfg.BacktestMaxFills, cfg.BacktestEquityPoints, cfg.BacktestProgressInterval)
+	}
+}
+
+func TestLoadComputesAndOverridesMarketDataStaleBound(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := load(map[string]string{"TRADING_TICK_INTERVAL": "120"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.MarketData.StaleAfter != 60*time.Second {
+		t.Errorf("StaleAfter = %s, want 60s (half of a 120s tick interval)", cfg.MarketData.StaleAfter)
+	}
+
+	cfg, err = load(map[string]string{
+		"TRADING_TICK_INTERVAL":          "120",
+		"ENGINE_MARKET_DATA_STALE_AFTER": "45s",
+	})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.MarketData.StaleAfter != 45*time.Second {
+		t.Errorf("StaleAfter = %s, want the 45s override", cfg.MarketData.StaleAfter)
+	}
+
+	if _, err := load(map[string]string{"ENGINE_MARKET_DATA_STALE_AFTER": "0s"}); err == nil {
+		t.Error("Load() error = nil, want a positive stale bound")
+	}
+}
+
+func TestLoadReadsExchangeSandboxAndTransport(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := load(map[string]string{
+		"TRADING_EXCHANGE_SANDBOX": "true",
+		"ENGINE_EXCHANGE_BASE_URL": "http://relay.internal:8080",
+		"APP_KEY":                  "base64:test-only",
+		"APP_PREVIOUS_KEYS":        "base64:one,base64:two",
+	})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if !cfg.TradingExchangeSandbox {
+		t.Error("TradingExchangeSandbox = false, want true")
+	}
+	if cfg.TradingExchangeBaseURL != "http://relay.internal:8080" {
+		t.Errorf("TradingExchangeBaseURL = %q", cfg.TradingExchangeBaseURL)
+	}
+	if cfg.AppKey != "base64:test-only" {
+		t.Error("APP_KEY was not loaded into memory")
+	}
+	if len(cfg.AppPreviousKeys) != 2 {
+		t.Errorf("AppPreviousKeys = %v, want two", cfg.AppPreviousKeys)
+	}
+
+	if _, err := load(map[string]string{"ENGINE_EXCHANGE_BASE_URL": "not a url"}); err == nil {
+		t.Error("Load() error = nil, want an invalid base URL error")
 	}
 }
 

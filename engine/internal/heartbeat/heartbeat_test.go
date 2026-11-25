@@ -30,7 +30,7 @@ func TestWritePlaceholderUsesDesignKeyAndTTL(t *testing.T) {
 	t.Parallel()
 
 	setter := &recordedSet{}
-	stub := heartbeat.NewStub(setter)
+	stub := heartbeat.NewWriter(setter)
 
 	if err := stub.WritePlaceholder(context.Background(), 0); err != nil {
 		t.Fatalf("WritePlaceholder() error = %v", err)
@@ -73,7 +73,7 @@ func TestWritePlaceholderIncrementsRevision(t *testing.T) {
 	t.Parallel()
 
 	setter := &recordedSet{}
-	stub := heartbeat.NewStub(setter)
+	stub := heartbeat.NewWriter(setter)
 
 	if err := stub.WritePlaceholder(context.Background(), 0); err != nil {
 		t.Fatalf("first WritePlaceholder() error = %v", err)

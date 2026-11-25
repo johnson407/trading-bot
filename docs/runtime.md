@@ -2,10 +2,10 @@
 
 > The hybrid runtime is documented in [engine.md](engine.md). Laravel owns the UI,
 > configuration, `desired_status`, and command publishing. The Go engine owns
-> bot runtime status, due-check ticks, grids, paper orders/fills, risk and exit
-> guards, backtest execution, and heartbeat. Live exchange execution remains
-> intentionally disabled in the Go engine; Laravel keeps the live gate and the
-> emergency `CancelBotOrders` safety net.
+> bot runtime status, due-check ticks, grids, paper and live orders/fills, risk
+> and exit guards, backtest execution, and heartbeat. Live execution is gated by
+> `TRADING_LIVE_ENABLED` (default false); testnet is the first rollout target,
+> and production real-money live use needs an explicit operator yes.
 
 ## Components
 
@@ -98,12 +98,14 @@ A retried control action republishes when the runtime status disagrees with
 The PHP tick and backtest engine has been removed and the Go trading runtime is
 wired: control commands, the due-check scheduler, grid sync, paper fills,
 strategy state, daily-loss and exit guards, and runtime status all run in the
-engine. Live exchange execution is deliberately not implemented yet: a live bot
-start is paused with a clear error. Live stops/kill-switch use Laravel's local
-`CancelBotOrders` safety net only when the heartbeat is unavailable or the
-command publish fails; single live-order cancellation goes through Laravel's
-retained exchange path. Public prices and candle backfill currently support
-Binance only; starting a bot on another exchange pauses it with a clear error.
+engine. Live placement, cancellation, and reconciliation also run in the engine
+when the gate is open. A closed gate pauses the live bot and records a risk
+event; it never switches the bot to paper. Live stops/kill-switch use Laravel's
+local `CancelBotOrders` safety net only when the heartbeat is unavailable or the
+command publish fails; single live-order cancellation continues through
+Laravel's local exchange path. Public prices and candle backfill currently support
+Binance only; starting a paper bot on another exchange pauses it with a clear
+error, while the MAX live adapter is fake-proven only.
 
 There is no PHP-to-Go drain, adopt, or no-overlap runbook; the cutover is a
 direct swap. Open orders written by the engine are durable in PostgreSQL and are
@@ -125,6 +127,10 @@ command. Laravel no longer schedules `backtests:fail-stale`.
 ## Cadences and latency
 
 - Each bot evaluates at its stored `tick_interval_seconds`, default 60 seconds.
+- Ticks read the cached public WebSocket last price. A missing cached price or
+  one older than `max(15s, TRADING_TICK_INTERVAL / 2)` triggers one public REST
+  snapshot; if that snapshot fails, the tick fails instead of using the old
+  price. No private credential is used for market data.
 - The dashboard polls every five seconds for persisted state and heartbeat; the
   poll never triggers a tick.
 - Paper fills and daily-loss evaluation happen when a tick runs. A price that

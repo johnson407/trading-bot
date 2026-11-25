@@ -24,6 +24,9 @@ services:
       QUEUE_CONNECTION: redis
       CACHE_STORE: redis
       TRADING_LIVE_ENABLED: ${TRADING_LIVE_ENABLED:-false}
+      ENGINE_PLAN_URL: http://engine:8080
+      ENGINE_INTERNAL_TOKEN: ${ENGINE_INTERNAL_TOKEN:-}
+      APP_PREVIOUS_KEYS: ${APP_PREVIOUS_KEYS:-}
       RUN_MIGRATIONS: "true"
     depends_on:
       postgres:
@@ -162,6 +165,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-local}
       APP_KEY: ${APP_KEY:-}
+      APP_PREVIOUS_KEYS: ${APP_PREVIOUS_KEYS:-}
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: 5432
@@ -171,6 +175,13 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       TRADING_LIVE_ENABLED: ${TRADING_LIVE_ENABLED:-false}
+      TRADING_EXCHANGE_SANDBOX: ${TRADING_EXCHANGE_SANDBOX:-false}
+      TRADING_TICK_INTERVAL: ${TRADING_TICK_INTERVAL:-60}
+      TRADING_ORDER_SYNC_SECONDS: ${TRADING_ORDER_SYNC_SECONDS:-5}
+      ENGINE_MARKET_DATA_WS_URL: ${ENGINE_MARKET_DATA_WS_URL:-wss://stream.binance.com:9443/ws}
+      ENGINE_MARKET_DATA_REST_URL: ${ENGINE_MARKET_DATA_REST_URL:-https://api.binance.com}
+      ENGINE_EXCHANGE_BASE_URL: ${ENGINE_EXCHANGE_BASE_URL:-}
+      ENGINE_INTERNAL_TOKEN: ${ENGINE_INTERNAL_TOKEN:-}
       ENGINE_LISTEN_ADDR: ":8080"
     depends_on:
       postgres:

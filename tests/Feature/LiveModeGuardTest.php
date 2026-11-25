@@ -67,6 +67,20 @@ it('rejects a live start when the quote balance is short', function () {
     expect($bot->fresh()->desired_status)->toBe(BotStatus::Idle);
 });
 
+it('refuses a live MAX start before any exchange balance call', function () {
+    config()->set('trading.live_enabled', true);
+    $bot = Bot::factory()->live()->create(['exchange' => 'max']);
+    $exchange = new FakeExchangeClient(quoteBalance: '1000');
+
+    expect(fn () => app(StartBot::class)->handle(
+        $bot,
+        new LiveStartConfirmation(LiveStartConfirmation::phrase($bot)),
+        $exchange,
+    ))->toThrow(LiveTradingDisabledException::class);
+
+    expect($bot->fresh()->desired_status)->toBe(BotStatus::Idle);
+});
+
 it('does not require live safeguards in paper mode', function () {
     config()->set('trading.live_enabled', false);
     $bot = Bot::factory()->create(['mode' => 'paper']);

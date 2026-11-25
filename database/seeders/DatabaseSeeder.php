@@ -48,13 +48,16 @@ class DatabaseSeeder extends Seeder
             'symbol' => 'BTC/USDT',
             'strategy_key' => 'simple-grid',
             'mode' => 'paper',
-            'status' => BotStatus::Idle,
             'capital_allocation' => '1000',
-            'quote_inventory' => '1000',
             'fee_rate' => '0',
             'tick_interval_seconds' => max(1, (int) config('trading.tick.interval_seconds')),
             'settings' => [],
         ]);
+
+        $bot->forceFill([
+            'status' => BotStatus::Idle,
+            'quote_inventory' => '1000',
+        ])->save();
 
         StrategyConfig::create([
             'bot_id' => $bot->id,

@@ -28,11 +28,19 @@ class CancelOrder
         /** @var Bot $bot */
         $bot = $order->bot;
 
-        if ($bot->isLive() && $order->exchange_order_id !== null && $order->exchange_order_id !== '') {
+        $hasExchangeID = $order->exchange_order_id !== null && $order->exchange_order_id !== '';
+        $hasClientID = $order->client_order_id !== null && $order->client_order_id !== '';
+
+        if ($bot->isLive() && ($hasExchangeID || $hasClientID)) {
             try {
                 $this->clients
                     ->forBot($bot)
-                    ->cancelOrder($bot, $bot->symbol, $order->exchange_order_id);
+                    ->cancelOrder(
+                        $bot,
+                        $bot->symbol,
+                        $hasExchangeID ? $order->exchange_order_id : null,
+                        $hasClientID ? $order->client_order_id : null,
+                    );
             } catch (ExchangeException $exception) {
                 if ($exception->type !== ExchangeErrorType::NotFound) {
                     $this->activity->recordUser(

@@ -110,6 +110,12 @@ func (b *Bot) riskBot() *risk.Bot {
 func (b *Bot) snapshot(open []openOrder) strategy.BotSnapshot {
 	orders := make([]strategy.OpenOrderSnapshot, 0, len(open))
 	for _, order := range open {
+		// A pending live intent has not necessarily reached the exchange. Keep
+		// it out of the strategy snapshot so the strategy re-emits the intent;
+		// placement then retries the same durable client order ID.
+		if order.Status == "pending" {
+			continue
+		}
 		orders = append(orders, strategy.OpenOrderSnapshot{
 			ClientOrderID: order.ClientOrderID, Side: strategy.Side(order.Side),
 			Price: order.Price, Quantity: order.Quantity, GridLevelSequence: order.Sequence,
@@ -124,22 +130,23 @@ func (b *Bot) snapshot(open []openOrder) strategy.BotSnapshot {
 }
 
 type openOrder struct {
-	ID             int64
-	ClientOrderID  string
-	Side           string
-	Price          decimal.Decimal
-	Quantity       decimal.Decimal
-	FilledQuantity decimal.Decimal
-	Status         string
-	GridID         *int64
-	GridLevelID    *int64
-	Sequence       *int
-	OpenedAt       *time.Time
+	ID              int64
+	ClientOrderID   string
+	ExchangeOrderID string
+	Side            string
+	Price           decimal.Decimal
+	Quantity        decimal.Decimal
+	FilledQuantity  decimal.Decimal
+	Status          string
+	GridID          *int64
+	GridLevelID     *int64
+	Sequence        *int
+	OpenedAt        *time.Time
 }
 
 func (r *Runtime) openOrders(ctx context.Context, botID int64) ([]openOrder, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT o.id, o.client_order_id, o.side, o.price::text, o.quantity::text,
+		`SELECT o.id, o.client_order_id, COALESCE(o.exchange_order_id, ''), o.side, o.price::text, o.quantity::text,
 		        o.filled_quantity::text, o.status, o.grid_id, o.grid_level_id, gl.sequence, o.opened_at
 		 FROM orders o
 		 LEFT JOIN grid_levels gl ON gl.id = o.grid_level_id
@@ -156,7 +163,7 @@ func (r *Runtime) openOrders(ctx context.Context, botID int64) ([]openOrder, err
 	for rows.Next() {
 		var order openOrder
 		var price, quantity, filled string
-		if err := rows.Scan(&order.ID, &order.ClientOrderID, &order.Side, &price, &quantity,
+		if err := rows.Scan(&order.ID, &order.ClientOrderID, &order.ExchangeOrderID, &order.Side, &price, &quantity,
 			&filled, &order.Status, &order.GridID, &order.GridLevelID, &order.Sequence, &order.OpenedAt); err != nil {
 			return nil, err
 		}

@@ -27,7 +27,12 @@ interface ExchangeClient
         string $clientOrderId,
     ): ExchangeOrder;
 
-    public function cancelOrder(Bot $bot, string $symbol, string $exchangeOrderId): void;
+    public function cancelOrder(
+        Bot $bot,
+        string $symbol,
+        ?string $exchangeOrderId,
+        ?string $clientOrderId = null,
+    ): void;
 
     public function order(Bot $bot, string $symbol, string $exchangeOrderId): ExchangeOrder;
 

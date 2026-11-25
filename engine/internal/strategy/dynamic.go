@@ -6,7 +6,7 @@ import (
 	"github.com/johnson407/trading-bot/engine/internal/decimal"
 )
 
-// DynamicGrid ports App\Strategies\DynamicGridStrategy.
+// DynamicGrid is the runtime dynamic-grid strategy.
 type DynamicGrid struct{}
 
 // NewDynamicGrid returns the dynamic-grid strategy.

@@ -245,6 +245,11 @@ const submit = () => {
                                 <option value="paper">Paper (default)</option>
                                 <option value="live">Live</option>
                             </select>
+                            <p class="mt-2 text-xs text-slate-400">
+                                Live can send real orders only when the engine live gate is enabled. Use testnet first
+                                (<code>TRADING_EXCHANGE_SANDBOX=true</code> or a testnet credential); testnet and
+                                real-money live are different. Paper bots never promote to live automatically.
+                            </p>
                             <InputError class="mt-2" :message="form.errors.mode" />
                         </div>
 

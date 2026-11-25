@@ -10,7 +10,7 @@ use App\Actions\StopBot;
 use App\Domain\Activity\ActivityRecorder;
 use App\Domain\Bot\Enums\BotStatus;
 use App\Domain\Exchange\ValueObjects\MarketData;
-use App\Domain\Grid\GridPlanEvaluator;
+use App\Domain\Grid\Exceptions\GridPlanUnavailableException;
 use App\Domain\Grid\PresetResolver;
 use App\Domain\Grid\ValueObjects\GridPlanRequest;
 use App\Domain\Order\Enums\OrderStatus;
@@ -30,6 +30,7 @@ use App\Models\Bot;
 use App\Models\Order;
 use App\Models\RiskEvent;
 use App\Services\Engine\CommandPublisher;
+use App\Services\Engine\GridPlanClient;
 use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
@@ -68,7 +69,7 @@ class BotController extends Controller
     public function create(StrategyRegistry $strategies, PresetResolver $presets): Response
     {
         return Inertia::render('Bots/Create', [
-            'strategies' => collect($strategies->all())->map(fn ($strategy) => ['key' => $strategy->key()])->values(),
+            'strategies' => array_map(fn (string $key) => ['key' => $key], $strategies->keys()),
             'exchanges' => array_values(config('trading.exchanges', ['binance'])),
             'presets' => $presets->all(),
             'feeRate' => (string) config('trading.paper.fee_rate', '0'),
@@ -77,10 +78,15 @@ class BotController extends Controller
 
     public function preview(
         PreviewBotRequest $request,
-        GridPlanEvaluator $evaluator,
+        GridPlanClient $plans,
         MarketDataResolver $markets,
     ): JsonResponse {
-        $plan = $evaluator->evaluate($request->gridPlanRequest());
+        try {
+            $plan = $plans->evaluate($request->gridPlanRequest());
+        } catch (GridPlanUnavailableException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 503);
+        }
+
         $limits = $request->effectiveLimits();
         $market = $markets->cached((string) $request->input('exchange'), (string) $request->input('symbol'));
 
@@ -223,7 +229,7 @@ class BotController extends Controller
 
     public function edit(
         Bot $bot,
-        GridPlanEvaluator $evaluator,
+        GridPlanClient $plans,
         MarketDataResolver $markets,
         RiskLimitService $riskLimits,
     ): Response {
@@ -234,27 +240,35 @@ class BotController extends Controller
         $market = $markets->cached($bot->exchange, $bot->symbol);
         $limits = $riskLimits->effectiveForBot($bot);
 
-        $plan = $configuration === []
-            ? null
-            : $evaluator->evaluate(new GridPlanRequest(
-                strategyKey: $bot->strategy_key,
-                configuration: $configuration,
-                symbol: $bot->symbol,
-                capitalAllocation: $bot->capital_allocation,
-                baseInventory: $bot->base_inventory,
-                marketPrice: $market?->last,
-                limits: $limits,
-                market: $market,
-            ));
+        $plan = null;
+        $previewError = null;
+
+        if ($configuration !== []) {
+            try {
+                $plan = $plans->evaluate(new GridPlanRequest(
+                    strategyKey: $bot->strategy_key,
+                    configuration: $configuration,
+                    symbol: $bot->symbol,
+                    capitalAllocation: $bot->capital_allocation,
+                    baseInventory: $bot->base_inventory,
+                    marketPrice: $market?->last,
+                    limits: $limits,
+                    market: $market,
+                ));
+            } catch (GridPlanUnavailableException $exception) {
+                $previewError = $exception->getMessage();
+            }
+        }
 
         return Inertia::render('Bots/Edit', [
             'bot' => BotSummaryResource::make($bot)->resolve(),
             'configuration' => $configuration,
             'editable' => in_array($bot->status, [BotStatus::Idle, BotStatus::Stopped], true),
-            'preview' => $plan === null ? null : [
-                'plan' => $plan->toArray(),
+            'preview' => $configuration === [] ? null : [
+                'plan' => $plan?->toArray(),
                 'limits' => $this->limitsPayload($limits),
                 'market' => $market === null ? null : $this->marketPayload($market),
+                'error' => $previewError,
             ],
         ]);
     }

@@ -316,6 +316,32 @@ func (d Decimal) Div(other Decimal) (Decimal, error) {
 	return normalize(quotient, Scale+1).Round(Scale, RoundHalfUp)
 }
 
+// TruncateToStep rounds the magnitude down to the nearest multiple of step.
+// Venue quantity and price filters express their precision as a step size, and
+// an order that is not an exact multiple is rejected by the venue.
+func (d Decimal) TruncateToStep(step Decimal) (Decimal, error) {
+	if !step.IsPositive() {
+		return Decimal{}, errors.New("Step must be positive.")
+	}
+	if d.IsZero() {
+		return Zero(), nil
+	}
+
+	numerator := new(big.Int).Set(d.coeff)
+	denominator := new(big.Int).Set(step.coeff)
+	exponent := step.scale - d.scale
+
+	if exponent >= 0 {
+		numerator.Mul(numerator, pow10(exponent))
+	} else {
+		denominator.Mul(denominator, pow10(-exponent))
+	}
+
+	quotient := new(big.Int).Quo(numerator, denominator)
+
+	return normalize(quotient, 0).Mul(step), nil
+}
+
 // Pow matches bcpow(..., Scale) for a non-negative integer exponent.
 func (d Decimal) Pow(exponent int) (Decimal, error) {
 	if exponent < 0 {

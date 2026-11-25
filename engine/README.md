@@ -1,17 +1,22 @@
 # Trading engine (Go)
 
 This directory is the Go trading engine for the hybrid layout described in
-`openspec/changes/adopt-hybrid-go-engine/`. **Phase 8 wires the bot runtime:
-control commands, due-check ticks, grids, paper fills, risk/exit guards, and
-backtests run here. Live exchange execution is deliberately not implemented:**
+`openspec/changes/adopt-hybrid-go-engine/`. The bot runtime — control commands,
+due-check ticks, grids, paper fills, live placement/reconciliation, risk/exit
+guards, and backtests — runs here. Live execution is implemented but gated:
 
 - paper orders and fills are simulated and persisted by the engine;
-- no private, signed, or user-data exchange calls and no API keys;
-- a live bot start is paused with a clear `last_error`; Laravel keeps the live
-  gate and the emergency `CancelBotOrders` path;
-- **public market data is enabled** — the runtime polls Binance's public REST
-  ticker for paper ticks and backtest backfill by default; no private endpoints
-  or credentials are used.
+- live placement, cancellation, and reconciliation call private exchange
+  endpoints only while `TRADING_LIVE_ENABLED=true`; the default is `false`;
+- a live bot start while the gate is closed pauses the bot with a clear
+  `last_error`, records a risk event, and never falls back to paper trading;
+- Binance is the first live venue, with its official testnet selected through
+  `TRADING_EXCHANGE_SANDBOX`; MAX is implemented against fakes only in this
+  build and refuses live/testnet credentials;
+- Laravel keeps the live gate, confirmation, balance pre-check, and the
+  emergency `CancelBotOrders` path;
+- **public market data is enabled** — the runtime follows bot symbols on
+  Binance's public WebSocket feed, with a bounded REST fallback for ticks.
 
 The command processor handles `bot.start`, `bot.pause`, `bot.stop`,
 `bot.config`, `order.cancel`, `kill_switch`, `backtest.run`, and
@@ -31,6 +36,7 @@ directly from the repository root and do not vendor a second copy.
 | --- | --- |
 | `GET /healthz` | Readiness. `200` only when PostgreSQL and Redis answer a ping and `engine:heartbeat` is fresh; `503` otherwise. Response lists dependency names and `ok` / `unavailable` only, never the underlying error. |
 | `GET /livez` | Liveness. Always `200` while the process is up; it never touches a dependency, so a database outage cannot restart the engine. |
+| `POST /v1/plan/evaluate` | Internal setup-plan evaluation used by Laravel preview and create/edit validation. Never persists a bot and never makes a private exchange call. Bound to the internal Compose network; set `ENGINE_INTERNAL_TOKEN` if the port is ever published beyond it. |
 
 On start the process:
 
@@ -47,10 +53,13 @@ On start the process:
 ### Public market data (phase 3)
 
 `internal/marketdata` implements the Binance public feed required by design §5.
-It is **idle unless explicitly configured**:
+It is **idle until a symbol is needed**:
 
 - subscribes to `<symbol>@trade` and `<symbol>@bookTicker` public streams, which
   supply last, bid, and ask without credentials;
+- follows the union of running/starting Binance bots plus the optional
+  `ENGINE_MARKET_DATA_SYMBOLS` watchlist, subscribing and unsubscribing as bots
+  start and stop;
 - reconnects with exponential backoff;
 - detects a trade-id gap or an unexpected quiet period, takes a public REST
   `24hr` ticker snapshot, then resubscribes;
@@ -59,10 +68,11 @@ It is **idle unless explicitly configured**:
 - marks recovery with `marketdata.recovered`.
 
 The feed never sends API keys, never touches signed or private endpoints, and
-never places orders. Phase 3 has no running-bot tick loop, so the process hook
-uses the optional `ENGINE_MARKET_DATA_SYMBOLS` list; phase 4 will pass the
-running bots' symbols instead. `/healthz` and `/livez` do not depend on the
-feed.
+never places orders. Ticks read its cached last price through
+`marketdata.PriceSource`; a cache miss or a quote older than
+`ENGINE_MARKET_DATA_STALE_AFTER` (default `max(15s, TRADING_TICK_INTERVAL / 2)`)
+triggers one public REST snapshot, and a failed snapshot fails the tick rather
+than trading on an old price. `/healthz` and `/livez` do not depend on the feed.
 
 The server listens on `ENGINE_LISTEN_ADDR` (default `:8080`). The Compose
 healthcheck runs `/engine healthcheck`, which performs an in-container
@@ -228,11 +238,13 @@ All values come from the environment, mirroring the `app` service:
 | `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1` / `6379` | Compose sets `redis` / `6379` |
 | `REDIS_PASSWORD` / `REDIS_DB` | empty / `0` | Optional |
 | `TRADING_LIVE_ENABLED` | `false` | Live gate enforced by `internal/risk`; false keeps live bots paused |
+| `TRADING_TICK_INTERVAL` | `60` | Seconds; sets the default stale-price bound (`max(15s, interval / 2)`) |
 | `TRADING_EXCHANGES` | `binance` | Comma-separated, case-sensitive exchange allowlist |
 | `TRADING_DEFAULT_EXCHANGE` | `binance` | Used when bot creation submits a blank exchange |
 | `ENGINE_MARKET_DATA_WS_URL` | empty | Full public WebSocket endpoint, e.g. `wss://stream.binance.com:9443/ws`. Empty means market data stays idle |
 | `ENGINE_MARKET_DATA_REST_URL` | empty | Public REST base URL, e.g. `https://api.binance.com`. Empty means market data stays idle |
-| `ENGINE_MARKET_DATA_SYMBOLS` | empty | Comma-separated opt-in symbol list; empty also keeps the feed idle |
+| `ENGINE_MARKET_DATA_SYMBOLS` | empty | Optional comma-separated watchlist pinned in addition to running bots' symbols |
+| `ENGINE_MARKET_DATA_STALE_AFTER` | `max(15s, tick / 2)` | Maximum cached-quote age a tick may use; a stale quote triggers a public REST snapshot |
 | `ENGINE_MARKET_DATA_QUIET_AFTER` | `30s` | Maximum silence before a REST snapshot and resubscribe |
 | `ENGINE_MARKET_DATA_REST_POLL_INTERVAL` | `5s` | REST ticker period while the socket is unavailable |
 | `ENGINE_MARKET_DATA_RECONNECT_MIN` / `_MAX` | `500ms` / `30s` | Exponential reconnect backoff bounds |
@@ -243,14 +255,15 @@ All values come from the environment, mirroring the `app` service:
 | `BACKTEST_PROGRESS_INTERVAL` | `500` | Candles between progress writes, mirroring `config/backtest.php` |
 
 Both market-data URLs must be set together; setting only one is a startup
-error. Leaving both empty is the default and keeps `marketdata.Run` idle, so
-the engine process opens **no** exchange connection. Local Compose does not set
-any `ENGINE_MARKET_DATA_*` variable.
+error. Leaving both empty keeps the feed idle, so the engine process opens
+**no** exchange connection and each tick uses one public REST snapshot. Local
+Compose sets the public Binance URLs, `TRADING_TICK_INTERVAL`, and no pinned
+symbol list, so subscriptions follow running bots.
 
-`APP_KEY` is passed by Compose but the engine process does **not** read it.
-The `credentials` library takes a key argument from its caller, and the golden
-tests use only the committed stub key. No secret is baked into the image or
-written to disk.
+`APP_KEY` and `APP_PREVIOUS_KEYS` are read only to decrypt stored exchange
+credentials in memory for live placement. The key material is never logged,
+written to disk, or attached to an event. The golden tests use only the
+committed stub key. No secret is baked into the image.
 
 ## Layout
 
@@ -263,6 +276,8 @@ engine/
   internal/idempotency/       engine:cmd:{id} store (>= 7 day TTL)
   internal/heartbeat/         engine:heartbeat writer and freshness check
   internal/marketdata/        public Binance WS feed, gap/quiet recovery, REST fallback
+  internal/plan/              internal setup-plan evaluator and HTTP handler
+  internal/exchange/          gated live clients (Binance, MAX), rules, backoff, redaction
   internal/decimal/           PHP Decimal scale-16 bcmath-compatible arithmetic
   internal/tick/              bots:dispatch due-check, overlap, stale threshold
   internal/grid/              grid generation, derivation, create/match/recenter
@@ -307,6 +322,11 @@ docker run --rm -v "$PWD/..:/src" -w /src/engine \
 
 Other targets: `make vet`, `make fmt` (lists unformatted files), `make tidy`,
 and `make build` (builds the `trading-bot-engine` image).
+
+The PostgreSQL-backed runtime tests are skipped unless `RUNTIME_TEST_DSN` is
+set; CI points it at the test database after Laravel has migrated it. The PHP
+suite's plan-preview tests call the real evaluator from `ENGINE_PLAN_URL` or a
+local Go toolchain, so run the engine (or `go run . plan-server`) before Pest.
 
 Consumer, idempotency, protocol, heartbeat, and market-data tests use
 `miniredis`, fake WebSocket servers, and `httptest`. They never contact
@@ -366,17 +386,43 @@ The default `make test` gate has no PostgreSQL service, so the DB runner,
 stale-run, candle-backfill, and runtime paths are covered by those opt-in tests.
 CI still needs a database service before those tests can become a merge gate.
 
+### Opt-in Binance testnet proof
+
+`TestBinanceTestnetPlaceCancelReconcile` is skipped unless explicitly enabled.
+It places, looks up, reconciles, and cancels one resting order on **Binance
+testnet only**:
+
+```bash
+BINANCE_TESTNET=1 \
+BINANCE_TESTNET_API_KEY=... \
+BINANCE_TESTNET_API_SECRET=... \
+  go test -tags binance_testnet ./internal/exchange -run TestBinanceTestnetPlaceCancelReconcile -v
+```
+
+The build tag means the default `go test ./...` does not compile or run this
+file even if a developer exports the environment variable.
+
+Guards: the suite hard-fails before any private request unless the keys are
+present, sandbox/testnet mode is on, and the resolved base URL is
+`https://testnet.binance.vision`. It refuses `ENGINE_EXCHANGE_BASE_URL` and any
+production host, because a relay that rewrites the request could turn a testnet
+key into a production request. Do not run it with production credentials. The
+default verify and CI never set `BINANCE_TESTNET`. There is no MAX live or MAX
+testnet suite in this change.
+
 ## Current limitations
 
-- Live execution is intentionally disabled. Starting a live bot pauses it with
-  a clear error; Laravel's live gate and emergency `CancelBotOrders` path remain.
-- Public market data and candle backfill support Binance only. Starting a bot on
-  another exchange pauses it instead of retrying every tick forever.
-- Live order placement, exchange order reconciliation, and live balance sync
-  are not implemented. Single live-order cancellation stays on Laravel's
-  retained exchange path.
-- The runtime owns paper orders and fills. It does not write Laravel's user
-  acknowledgement activity types.
+- Live placement is gated by `TRADING_LIVE_ENABLED` and defaults to off. A live
+  bot start while closed pauses it with a clear error and cancels any tracked
+  live orders; there is no automatic paper fallback.
+- Binance is the only live/testnet venue proven end to end. MAX compiles and is
+  covered by fakes but refuses live and testnet credentials in this build.
+- Public market data and candle backfill support Binance only. Starting a paper
+  bot on another exchange pauses it instead of retrying every tick forever.
+- Single live-order cancellation from the UI still uses Laravel's retained
+  exchange path; the engine owns stop, kill-switch, and in-band cancellation.
+- The runtime owns paper and live orders and fills. It does not write Laravel's
+  user acknowledgement activity types.
 
 ## Docker
 

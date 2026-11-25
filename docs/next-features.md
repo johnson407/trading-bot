@@ -58,7 +58,7 @@ and the Inertia dashboard.
 
 | Candidate | Status | Why it fits | Effort | Main risk |
 | --- | --- | --- | --- | --- |
-| Backtest / replay engine | Shipped | `StrategyInterface` is pure and already driven through `PaperExchangeClient`; the replay driver runs the same strategies over historical candles. | Large | Fill-model fidelity: last-price paper fills do not translate directly to candles, which need high/low plus fee/slippage rules. |
+| Backtest / replay engine | Shipped | The Go strategy implementations are pure and the replay driver runs them over historical candles; preview and save use the same Go evaluator. | Large | Fill-model fidelity: last-price paper fills do not translate directly to candles, which need high/low plus fee/slippage rules. |
 | Parameter sweep | Shipped | Runs the bounded cartesian product of center prices, spacing values, and level counts against one bot and period, then reuses comparison. | Medium | Queue burst and partial failure; both are bounded by the run cap and stale-run handling. |
 | Alerts and notifications | Shipped | `RiskEventRecorder` and `ActivityRecorder` are natural event sources; the alert recorder maps a curated catalog into an inbox and queued email. | Small | None significant. |
 | Equity curve and analytics | Shipped | Account snapshots are captured every five minutes and charted with return, peak, and drawdown metrics; history is forward-only. | Medium | Resolved: no backfill from fills or ledger entries. |

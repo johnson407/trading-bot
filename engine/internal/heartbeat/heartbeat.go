@@ -44,23 +44,21 @@ type Payload struct {
 	RunningBots int    `json:"running_bots"`
 }
 
-// Stub writes heartbeats. The name is kept from the phase-1 skeleton; it is now
-// wired into the engine process and performs no trading work.
-type Stub struct {
+// Writer writes heartbeats from the scheduler's running-bot count.
+type Writer struct {
 	setter   Setter
 	now      func() time.Time
 	revision int64
 }
 
-// NewStub returns a heartbeat writer backed by setter.
-func NewStub(setter Setter) *Stub {
-	return &Stub{setter: setter, now: time.Now}
+// NewWriter returns a heartbeat writer backed by setter.
+func NewWriter(setter Setter) *Writer {
+	return &Writer{setter: setter, now: time.Now}
 }
 
 // Write SETs engine:heartbeat with a TTL of ten seconds and a UTC RFC 3339
-// timestamp. runningBots comes from the engine's bot scheduler (zero until the
-// tick loop lands).
-func (s *Stub) Write(ctx context.Context, runningBots int) error {
+// timestamp. runningBots is the scheduler's current running count.
+func (s *Writer) Write(ctx context.Context, runningBots int) error {
 	s.revision++
 
 	payload := Payload{
@@ -78,14 +76,14 @@ func (s *Stub) Write(ctx context.Context, runningBots int) error {
 }
 
 // WritePlaceholder is the phase-1 name for Write.
-func (s *Stub) WritePlaceholder(ctx context.Context, runningBots int) error {
+func (s *Writer) WritePlaceholder(ctx context.Context, runningBots int) error {
 	return s.Write(ctx, runningBots)
 }
 
 // Run writes immediately and then refreshes every interval until ctx is
 // cancelled. It never pauses bots, cancels orders, or activates the
 // kill-switch; an expired key is a dashboard/readiness warning only.
-func (s *Stub) Run(ctx context.Context, interval time.Duration, runningBots func() int) {
+func (s *Writer) Run(ctx context.Context, interval time.Duration, runningBots func() int) {
 	if interval <= 0 {
 		interval = RefreshInterval
 	}

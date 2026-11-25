@@ -514,8 +514,20 @@ func TestFeedStaysIdleWithoutSymbols(t *testing.T) {
 		nil,
 	)
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	done := make(chan error, 1)
-	go func() { done <- feed.Run(context.Background(), nil) }()
+	go func() { done <- feed.Run(ctx) }()
+
+	waitFor(t, "idle feed", func() bool {
+		return feed.Status().Mode == marketdata.ModeIdle
+	})
+
+	if symbols := feed.Status().Symbols; len(symbols) != 0 {
+		t.Errorf("symbols = %v, want none", symbols)
+	}
+
+	cancel()
 
 	select {
 	case err := <-done:
@@ -523,10 +535,147 @@ func TestFeedStaysIdleWithoutSymbols(t *testing.T) {
 			t.Fatalf("Run() error = %v, want nil idle return", err)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("Run() did not stay idle without symbols")
+		t.Fatal("Run() did not stop after cancellation")
+	}
+}
+
+func TestFeedAddsAndRemovesRunningBotSymbols(t *testing.T) {
+	type request struct {
+		Method string   `json:"method"`
+		Params []string `json:"params"`
 	}
 
-	if status := feed.Status(); status.Mode != marketdata.ModeIdle {
-		t.Errorf("status = %+v, want idle", status)
+	requests := make(chan request, 16)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		connection, err := testUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = connection.Close() }()
+
+		for {
+			_, payload, err := connection.ReadMessage()
+			if err != nil {
+				return
+			}
+
+			var subscription request
+			if json.Unmarshal(payload, &subscription) != nil {
+				continue
+			}
+
+			select {
+			case requests <- subscription:
+			default:
+			}
+
+			for _, param := range subscription.Params {
+				symbol := strings.TrimSuffix(strings.TrimSuffix(param, "@trade"), "@bookTicker")
+				switch {
+				case strings.HasSuffix(param, "@trade"):
+					_ = connection.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(
+						`{"stream":%q,"data":{"e":"trade","s":%q,"t":1,"p":"100.00"}}`,
+						param, strings.ToUpper(symbol),
+					)))
+				case strings.HasSuffix(param, "@bookTicker"):
+					_ = connection.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(
+						`{"stream":%q,"data":{"s":%q,"b":"99.90","a":"100.10"}}`,
+						param, strings.ToUpper(symbol),
+					)))
+				}
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	cfg := testConfig(server.URL)
+	cfg.QuietAfter = 5 * time.Second
+
+	feed := marketdata.New(cfg, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)), nil)
+	feed.SetSymbols([]string{"BTCUSDT"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	go func() { _ = feed.Run(ctx) }()
+
+	waitFor(t, "initial BTC subscription", func() bool {
+		return feed.Status().Mode == marketdata.ModeWebSocket
+	})
+	waitFor(t, "BTC ticker", func() bool {
+		_, ok := feed.Snapshot("BTC/USDT")
+
+		return ok
+	})
+
+	first := <-requests
+	if first.Method != "SUBSCRIBE" {
+		t.Fatalf("first request = %+v, want SUBSCRIBE", first)
+	}
+
+	feed.SetSymbols([]string{"BTCUSDT", "ETHUSDT"})
+
+	waitFor(t, "ETH subscription request", func() bool {
+		for {
+			select {
+			case request := <-requests:
+				if request.Method != "SUBSCRIBE" {
+					continue
+				}
+
+				for _, param := range request.Params {
+					if strings.HasPrefix(param, "ethusdt@") {
+						return true
+					}
+				}
+			default:
+				return false
+			}
+		}
+	})
+
+	waitFor(t, "ETH ticker", func() bool {
+		_, ok := feed.Snapshot("ETH/USDT")
+
+		return ok
+	})
+
+	feed.SetSymbols([]string{"ETHUSDT"})
+
+	waitFor(t, "BTC unsubscribe request", func() bool {
+		for {
+			select {
+			case request := <-requests:
+				if request.Method != "UNSUBSCRIBE" {
+					continue
+				}
+
+				for _, param := range request.Params {
+					if strings.HasPrefix(param, "btcusdt@") {
+						return true
+					}
+				}
+			default:
+				return false
+			}
+		}
+	})
+
+	waitFor(t, "BTC ticker removed", func() bool {
+		_, ok := feed.Snapshot("BTC/USDT")
+
+		return !ok
+	})
+
+	if symbols := feed.Status().Symbols; len(symbols) != 1 || symbols[0] != "ETHUSDT" {
+		t.Errorf("status symbols = %v, want [ETHUSDT]", symbols)
+	}
+
+	// The server writes a BTC quote for the unsubscribe request too; the feed
+	// must ignore it because the symbol is no longer active.
+	time.Sleep(50 * time.Millisecond)
+	if _, ok := feed.Snapshot("BTC/USDT"); ok {
+		t.Error("removed symbol received a quote after unsubscribe")
 	}
 }

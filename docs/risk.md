@@ -71,12 +71,22 @@ Live trading requires all of the following:
 - The bot mode is `live` and the user has an exchange credential for the bot's exchange.
 - The start request confirms `<bot name> on <exchange>` exactly.
 - The credential's free quote-asset balance covers the bot's `capital_allocation` at start time.
+- The Go engine rechecks the gate, kill switch, status, open-order cap, exposure,
+  available inventory, and exchange precision immediately before every live
+  place. A blocked place records a risk event; an expected sell deferral with no
+  base inventory is not an error.
+
+The first live rollout target is Binance testnet. Testnet uses
+`https://testnet.binance.vision` and refuses a custom relay that could rewrite
+the request to production. MAX is adapter-tested with fakes only in this change.
+Production real-money live trading requires Johnson's explicit yes for that
+exact action.
 
 Paper mode is the default and never sends private exchange orders. There is no silent fallback from live to paper; a live failure pauses the bot and records the error.
 
 ## Risk events
 
-Risk events are queryable per bot and per user, newest first. Important types include `risk.position_limit`, `risk.open_order_limit`, `risk.daily_loss_limit`, `risk.kill_switch_cancel_failed`, `exchange.failure_threshold`, `risk.stop_loss_triggered`, `risk.take_profit_triggered`, `risk.range_exit_triggered`, and `risk.cancel_failed`. Each event stores severity, message, and JSON context.
+Risk events are queryable per bot and per user, newest first. Important types include `risk.position_limit`, `risk.open_order_limit`, `risk.daily_loss_limit`, `risk.kill_switch_cancel_failed`, `exchange.failure_threshold`, `risk.stop_loss_triggered`, `risk.take_profit_triggered`, `risk.range_exit_triggered`, `risk.cancel_failed`, `risk.live_trading_disabled`, `risk.live_start_refused`, and `risk.live_order_rejected`. Each event stores severity, message, and JSON context.
 
 ## Fees
 
@@ -88,4 +98,9 @@ Fees may be charged in the quote asset, the base asset, or a third asset (for ex
 
 Migration `2026_11_21_000100_remove_bot_scope_risk_limit_shadows` removes legacy auto-created bot-scope risk rows so the user-level limits apply again. Explicit per-bot overrides are still available through `RiskLimitService::updateForBot`.
 
-Live balance synchronization is not active while live execution is disabled in the Go runtime. When live execution returns, it will refresh a live bot's base and quote inventory from the exchange only when a single live bot uses that credential; shared-account sync will record `bot.balance_sync_skipped` with `reason: shared_account` instead of guessing per-bot attribution.
+Live inventory is updated from exchange order snapshots as fills and partial
+fills reconcile. The engine does not yet refresh a whole-account balance into a
+live bot on every tick: when shared-account balance sync lands it must refresh
+only when a single live bot uses that credential, and record
+`bot.balance_sync_skipped` with `reason: shared_account` instead of guessing
+per-bot attribution.

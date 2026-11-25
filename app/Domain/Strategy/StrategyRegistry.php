@@ -2,42 +2,30 @@
 
 namespace App\Domain\Strategy;
 
-use App\Domain\Strategy\Contracts\StrategyInterface;
-use App\Domain\Strategy\Exceptions\UnknownStrategyException;
-
+/**
+ * The engine's strategy catalog for form validation and backtest parameter
+ * sweeps. Strategy evaluation itself lives in the Go engine
+ * (engine/internal/strategy); this class deliberately has no PHP runtime
+ * implementations so there is only one evaluator.
+ */
 class StrategyRegistry
 {
-    /** @var array<string, StrategyInterface> */
-    private array $strategies = [];
-
-    public function register(StrategyInterface $strategy): void
-    {
-        $this->strategies[$strategy->key()] = $strategy;
-    }
+    /** @var list<string> */
+    private const KEYS = [
+        'simple-grid',
+        'trailing-grid',
+        'martingale-grid',
+        'dynamic-grid',
+    ];
 
     public function has(string $key): bool
     {
-        return isset($this->strategies[$key]);
-    }
-
-    public function get(string $key): StrategyInterface
-    {
-        if (! isset($this->strategies[$key])) {
-            throw UnknownStrategyException::forKey($key, array_keys($this->strategies));
-        }
-
-        return $this->strategies[$key];
+        return in_array($key, self::KEYS, true);
     }
 
     /** @return list<string> */
     public function keys(): array
     {
-        return array_keys($this->strategies);
-    }
-
-    /** @return array<string, StrategyInterface> */
-    public function all(): array
-    {
-        return $this->strategies;
+        return self::KEYS;
     }
 }

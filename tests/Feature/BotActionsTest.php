@@ -11,9 +11,15 @@ use App\Models\Bot;
 use App\Models\Order;
 use App\Services\Engine\CommandPublisher;
 use App\Services\Engine\EngineHeartbeat;
+use App\Services\Exchange\ExchangeClientFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Fixtures\FakeExchangeClient;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    app()->instance(ExchangeClientFactory::class, new ExchangeClientFactory(null, new FakeExchangeClient));
+});
 
 it('starts an idle bot and records the event once', function () {
     $bot = Bot::factory()->create(['status' => BotStatus::Idle]);
