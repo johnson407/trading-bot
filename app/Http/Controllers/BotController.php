@@ -191,6 +191,7 @@ class BotController extends Controller
             'openOrders' => $bot->orders->map(fn ($order) => [
                 'id' => $order->id,
                 'client_order_id' => $order->client_order_id,
+                'grid_level_id' => $order->grid_level_id,
                 'side' => $order->side->value,
                 'type' => $order->type->value,
                 'price' => $order->price,

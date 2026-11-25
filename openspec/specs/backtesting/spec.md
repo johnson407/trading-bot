@@ -78,6 +78,11 @@ The Go engine SHALL replay the snapshotted strategy through the same lifecycle u
 - **WHEN** more than one order fills on the same candle
 - **THEN** each fill updates the portfolio and is reported to the strategy before the next fill is processed
 
+#### Scenario: Same-candle gap may defer an opposite order
+
+- **WHEN** more than one buy order fills on the same candle and the adjacent higher level is still open
+- **THEN** the opposite sell for that fill is not placed during that candle, and the filled level remains disarmed for the rest of the replay unless a paired fill re-arms it
+
 #### Scenario: Simulation is isolated from live data
 
 - **WHEN** a backtest runs

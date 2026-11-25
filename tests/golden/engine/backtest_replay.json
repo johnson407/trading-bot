@@ -403,6 +403,14 @@
                         "fill_count": 4,
                         "last_fill_price": "110",
                         "disarmed_levels": {
+                            "70": {
+                                "side": "buy",
+                                "pair": "80"
+                            },
+                            "80": {
+                                "side": "buy",
+                                "pair": "90"
+                            },
                             "110": {
                                 "side": "sell",
                                 "pair": "90"
@@ -710,18 +718,18 @@
                     "end_reason": "range_end",
                     "final_equity": "10009.83",
                     "net_pnl": "9.83",
-                    "realized_pnl": "-0.17",
-                    "unrealized_pnl": "10",
+                    "realized_pnl": "9.83",
+                    "unrealized_pnl": "0",
                     "fees": "0.17",
                     "return_percent": "0.0983",
                     "max_drawdown": "0.08",
                     "max_drawdown_percent": "0.0008",
-                    "final_base_inventory": "2",
-                    "final_quote_inventory": "9829.83",
+                    "final_base_inventory": "0",
+                    "final_quote_inventory": "10009.83",
                     "final_price": "90",
                     "fill_count": 2,
-                    "buy_count": 2,
-                    "sell_count": 0,
+                    "buy_count": 1,
+                    "sell_count": 1,
                     "candles_processed": 3,
                     "duration_ms": 0
                 },
@@ -739,7 +747,7 @@
                     },
                     {
                         "sequence": 2,
-                        "side": "buy",
+                        "side": "sell",
                         "price": "90",
                         "quantity": "1",
                         "fee": "0.09",
@@ -771,13 +779,13 @@
                         "spacing_type": "arithmetic",
                         "spacing_value": "10",
                         "levels_per_side": 2,
-                        "last_fill_side": "buy",
+                        "last_fill_side": "sell",
                         "fill_count": 2,
                         "last_fill_price": "90",
                         "disarmed_levels": {
                             "90": {
-                                "side": "buy",
-                                "pair": "110"
+                                "side": "sell",
+                                "pair": "80"
                             }
                         }
                     }

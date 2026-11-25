@@ -114,6 +114,14 @@ func ApplyFillToLevelState(state State, fill FillEvent, next *GridLevelPlan) Sta
 			continue
 		}
 
+		// Only the opposite side of the original fill re-arms the level.
+		// Entries without a recorded side cannot be matched safely, so they
+		// stay disarmed rather than reintroducing same-side re-arming.
+		side, ok := values["side"].(string)
+		if !ok || side == string(fill.Side) {
+			continue
+		}
+
 		pair, ok := values["pair"].(string)
 		if ok && pair == price {
 			delete(disarmed, key)
@@ -133,6 +141,15 @@ func ApplyFillToLevelState(state State, fill FillEvent, next *GridLevelPlan) Sta
 	}
 
 	return state.Merge(map[string]any{"disarmed_levels": disarmed})
+}
+
+// oppositeSide returns the side that closes the filled position.
+func oppositeSide(side Side) Side {
+	if side == SideBuy {
+		return SideSell
+	}
+
+	return SideBuy
 }
 
 // LevelIsArmed ports GeneratesGridLevels::levelIsArmed.

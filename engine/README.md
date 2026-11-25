@@ -131,7 +131,9 @@ and max-increases caps, trailing recenter beyond the configured distance with
 outside-order cancellation, cancel bookkeeping, and the recorded validation
 errors. The `grid_sync.json` simple-grid and trailing-grid scenarios also model
 the paper fill/re-arm and recenter path, so their steps assert the exact orders
-and grid level states instead of only the grid structure.
+and grid level states instead of only the grid structure. A level keeps its
+center-based plan side; the post-fill order can be the opposite side at that
+level, and the order side is authoritative for fills and inventory.
 
 Nothing here is wired into `main`, dispatched as a tick, placed, persisted, or
 connected to an exchange.

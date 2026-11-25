@@ -166,7 +166,7 @@ func (d *DynamicGrid) OnFill(input Input, fill FillEvent) (Decision, error) {
 	var orders []OrderIntent
 	if adjacent != nil {
 		orders = append(orders, OrderIntent{
-			Side:              adjacent.Side,
+			Side:              oppositeSide(fill.Side),
 			Price:             adjacent.Price,
 			Quantity:          fill.Quantity,
 			GridLevelSequence: intPointer(adjacent.Sequence),

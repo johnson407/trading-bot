@@ -175,12 +175,19 @@ func (m *MartingaleGrid) OnFill(input Input, fill FillEvent) (Decision, error) {
 	adjacent := adjacentLevel(levels, fill.GridLevelSequence, fill.Side)
 	state = ApplyFillToLevelState(state, fill, adjacent)
 
+	quantity := next
+	if fill.Side == SideBuy {
+		// The take-profit sell must not exceed the quantity actually bought.
+		// The increased size still applies to the next entry.
+		quantity = fill.Quantity
+	}
+
 	var orders []OrderIntent
 	if adjacent != nil {
 		orders = append(orders, OrderIntent{
-			Side:              adjacent.Side,
+			Side:              oppositeSide(fill.Side),
 			Price:             adjacent.Price,
-			Quantity:          next,
+			Quantity:          quantity,
 			GridLevelSequence: intPointer(adjacent.Sequence),
 			Reason:            "strategy.opposite",
 		})

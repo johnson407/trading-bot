@@ -270,6 +270,8 @@ quantity `0.001`, capital `1000`.
 
 - 6 buys at 49,900 to 49,400 (~$299 notional total) and 6 sells at 50,100 to 50,600.
 - Initial quote inventory 1000 funds buys; base inventory 0 means all 6 sells are blocked by
-  `risk.insufficient_inventory` until buys fill. Each buy fill funds the adjacent sell.
+  `risk.insufficient_inventory` until buys fill. Each buy fill funds the adjacent sell. That
+  sell can sit at a level whose ladder plan is still `buy`; the plan side is the center-based
+  label, while the open order's side controls fills and inventory.
 - All 12 orders fit under the 20-order default; buy notional fits under 1000.
 - Tick interval 60s, fees 0.

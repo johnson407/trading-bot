@@ -42,6 +42,30 @@ it('renders the bot detail with grid, orders, fills, inventory and pnl', functio
             ->etc());
 });
 
+it('exposes the open order grid level so the ladder can show an opposite order side', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create();
+    $grid = Grid::factory()->for($bot)->create(['center_price' => '100']);
+    $buyLevel = GridLevel::factory()->for($grid)->create(['sequence' => 1, 'price' => '90', 'side' => 'buy']);
+    Order::factory()->for($bot)->create([
+        'status' => 'open',
+        'side' => 'sell',
+        'price' => '90',
+        'grid_level_id' => $buyLevel->id,
+    ]);
+
+    $this->actingAs($user)->get(route('bots.show', $bot))->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('openOrders.0.grid_level_id', $buyLevel->id)
+            ->where('openOrders.0.side', 'sell')
+            ->etc());
+
+    $show = file_get_contents(resource_path('js/Pages/Bots/Show.vue'));
+
+    expect($show)->toContain('orderForLevel(level)')
+        ->and($show)->toContain('orderForLevel(level).side !== level.side');
+});
+
 it('reflects a new fill on the next poll', function () {
     $user = User::factory()->create();
     $bot = Bot::factory()->for($user)->create();

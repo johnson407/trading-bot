@@ -2014,7 +2014,7 @@
                             {
                                 "side": "sell",
                                 "price": "110",
-                                "quantity": "2",
+                                "quantity": "1",
                                 "grid_level_sequence": 2,
                                 "reason": "strategy.opposite"
                             }
@@ -2127,7 +2127,7 @@
                             {
                                 "side": "sell",
                                 "price": "110",
-                                "quantity": "4",
+                                "quantity": "2",
                                 "grid_level_sequence": 2,
                                 "reason": "strategy.opposite"
                             }
@@ -2240,7 +2240,7 @@
                             {
                                 "side": "sell",
                                 "price": "110",
-                                "quantity": "3",
+                                "quantity": "2",
                                 "grid_level_sequence": 2,
                                 "reason": "strategy.opposite"
                             }
@@ -2364,7 +2364,7 @@
                             {
                                 "side": "sell",
                                 "price": "110",
-                                "quantity": "4",
+                                "quantity": "2",
                                 "grid_level_sequence": 2,
                                 "reason": "strategy.opposite"
                             }

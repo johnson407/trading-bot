@@ -2,7 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { formatMoney, formatSignedMoney, submittedMoney } from '@/Support/money.js';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
     bot: { type: Object, required: true },
@@ -31,6 +31,18 @@ onUnmounted(() => {
 });
 
 const timestamp = (value) => (value ? new Date(value).toLocaleString() : '—');
+
+const ordersByGridLevel = computed(() => {
+    const orders = {};
+    for (const order of props.openOrders) {
+        if (order.grid_level_id !== null && order.grid_level_id !== undefined) {
+            orders[order.grid_level_id] = order;
+        }
+    }
+
+    return orders;
+});
+const orderForLevel = (level) => ordersByGridLevel.value[level.id] ?? null;
 
 const page = usePage();
 const confirmation = ref('');
@@ -190,6 +202,7 @@ const levelState = (state) => ({
                         <div v-else class="mt-4 space-y-2">
                             <div v-for="level in [...grid.levels].reverse()" :key="level.id" class="flex items-center gap-3 rounded border px-3 py-2">
                                 <span class="w-16 text-xs font-medium uppercase" :class="level.side === 'buy' ? 'text-emerald-300' : 'text-rose-300'">{{ level.side }}</span>
+                                <span v-if="orderForLevel(level) && orderForLevel(level).side !== level.side" class="rounded px-2 py-0.5 text-xs uppercase" :class="orderForLevel(level).side === 'buy' ? 'bg-emerald-950 text-emerald-300' : 'bg-rose-950 text-rose-300'">order {{ orderForLevel(level).side }}</span>
                                 <span class="w-24 font-mono text-sm">{{ formatMoney(level.price) }}</span>
                                 <span class="rounded px-2 py-0.5 text-xs" :class="levelState(level.state)">{{ level.state }}</span>
                                 <span class="ml-auto text-xs text-slate-300">Level {{ level.sequence }}</span>

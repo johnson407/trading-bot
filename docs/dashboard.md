@@ -87,7 +87,8 @@ Feature tests: `tests/Feature/BotCreationTest.php`, `tests/Feature/BotPreviewTes
 ## Bot detail — `GET /bots/{bot}` (`bots.show`)
 
 Shows mode/status, realized and unrealized P&L, inventory, a grid ladder with
-price/side/state, open orders, recent fills, and risk limits. The mark price for
+the plan side, the actual open-order side when it differs, price, and state,
+open orders, recent fills, and risk limits. The mark price for
 unrealized P&L is the bot's stored mark (latest tick), otherwise the average entry
 price — the same source the bot list and dashboard use. The page polls every five seconds for
 `bot, grid, openOrders, recentFills, inventory, pnl`; a new fill appears on the

@@ -111,7 +111,7 @@ func (s *SimpleGrid) OnFill(input Input, fill FillEvent) (Decision, error) {
 	var orders []OrderIntent
 	if next != nil {
 		orders = append(orders, OrderIntent{
-			Side:              next.Side,
+			Side:              oppositeSide(fill.Side),
 			Price:             next.Price,
 			Quantity:          fill.Quantity,
 			GridLevelSequence: intPointer(next.Sequence),
