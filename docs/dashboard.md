@@ -35,7 +35,9 @@ Feature test: `tests/Feature/DashboardTest.php`.
 Shows the signed-in user's bots with name, symbol, exchange, mode, status,
 open-order count, realized P&L, unrealized P&L, and last tick. The page polls every
 five seconds with `router.reload({ only: ['bots'] })`, preserving scroll and
-component state. Bots belonging to other users never appear.
+component state. Bots belonging to other users never appear. The header places a
+danger-styled **Kill switch** button beside **Create bot**; it opens the
+confirmation page.
 
 Feature test: `tests/Feature/BotListTest.php`.
 
@@ -158,20 +160,30 @@ limited to the bot owner.
 
 Feature test: `tests/Feature/ActivityLogTest.php`.
 
-## Risk limits — `GET /risk-limits` (`risk-limits.edit`) and `PATCH /risk-limits` (`risk-limits.update`)
+## Settings — `GET /settings` (`settings.index`)
 
-Edits the account-wide maximum position notional, maximum open orders, and daily loss limit. These apply to every bot without a bot-scope override. A successful save flashes `Risk limits updated.` and validation errors appear under each field.
+The Settings hub groups account configuration. It links to exchange credentials
+and risk limits; each destination remains a separate, directly reachable page.
+The Settings link in both primary navigations is active across these pages.
+
+Feature test: `tests/Feature/SettingsUiTest.php`.
+
+## Risk limits — `GET /settings/risk-limits` (`risk-limits.edit`) and `PATCH /settings/risk-limits` (`risk-limits.update`)
+
+Edits the account-wide maximum position notional, maximum open orders, and daily loss limit. These apply to every bot without a bot-scope override. A successful save flashes `Risk limits updated.` and validation errors appear under each field. Reach the form through **Settings > Risk limits**.
 
 ## Kill switch — `GET /kill-switch` (`kill-switch.create`) and `POST /kill-switch` (`kill-switch.store`)
 
-The confirmation page shows how many bots and open orders will be affected.
-Submitting the exact phrase `KILL SWITCH` pauses every non-stopped bot for the
-user and cancels all open orders in parallel. Per-bot cancellation failures are
-reported; the bots are paused immediately regardless.
+Reach the confirmation page from the danger-styled **Kill switch** button beside
+**Create bot** on the bot list or from the dashboard quick link. The confirmation
+page shows how many bots and open orders will be affected. Submitting the exact
+phrase `KILL SWITCH` pauses every non-stopped bot for the user and cancels all open
+orders in parallel. Per-bot cancellation failures are reported; the bots are
+paused immediately regardless.
 
 Feature test: `tests/Feature/KillSwitchUiTest.php`.
 
-## Exchange credentials — `/exchange-credentials` resource
+## Exchange credentials — `/settings/credentials` resource
 
 Routes: `exchange-credentials.index`, `exchange-credentials.create`,
 `exchange-credentials.store`, `exchange-credentials.edit`,
@@ -246,6 +258,7 @@ protection; a failed action never leaves a partial state change visible.
 | Flow | Route | Test |
 | --- | --- | --- |
 | Dashboard | `dashboard` | `DashboardTest` |
+| Settings hub | `settings.index` | `SettingsUiTest` |
 | Bot list | `bots.index` | `BotListTest` |
 | Create bot | `bots.create`, `bots.store` | `BotCreationTest` |
 | Bot detail | `bots.show` | `BotDetailTest` |

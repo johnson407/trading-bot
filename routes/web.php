@@ -10,6 +10,7 @@ use App\Http\Controllers\ExchangeCredentialController;
 use App\Http\Controllers\KillSwitchController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RiskLimitController;
+use App\Http\Controllers\SettingsController;
 use App\Services\Engine\EngineHeartbeat;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -57,8 +58,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('backtests/{run}', [BacktestController::class, 'show'])->name('backtests.show');
     Route::delete('backtests/{run}', [BacktestController::class, 'destroy'])->name('backtests.destroy');
 
-    Route::get('risk-limits', [RiskLimitController::class, 'edit'])->name('risk-limits.edit');
-    Route::patch('risk-limits', [RiskLimitController::class, 'update'])->name('risk-limits.update')->middleware('throttle:bot-control');
+    Route::prefix('settings')->group(function () {
+        Route::get('/', [SettingsController::class, 'index'])->name('settings.index');
+
+        Route::get('risk-limits', [RiskLimitController::class, 'edit'])->name('risk-limits.edit');
+        Route::patch('risk-limits', [RiskLimitController::class, 'update'])->name('risk-limits.update')->middleware('throttle:bot-control');
+
+        Route::middleware('throttle:exchange-credentials')->group(function () {
+            Route::resource('credentials', ExchangeCredentialController::class)
+                ->except(['show'])
+                ->names('exchange-credentials')
+                ->parameters(['credentials' => 'exchangeCredential']);
+        });
+    });
 
     Route::get('kill-switch', [KillSwitchController::class, 'create'])->name('kill-switch.create');
     Route::post('kill-switch', [KillSwitchController::class, 'store'])->name('kill-switch.store')->middleware('throttle:kill-switch');
@@ -66,10 +78,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('alerts', [AlertController::class, 'index'])->name('alerts.index');
     Route::post('alerts/read-all', [AlertController::class, 'markAllRead'])->name('alerts.read-all');
     Route::post('alerts/{alert}/read', [AlertController::class, 'markRead'])->whereNumber('alert')->name('alerts.read');
-
-    Route::middleware('throttle:exchange-credentials')->group(function () {
-        Route::resource('exchange-credentials', ExchangeCredentialController::class)->except(['show']);
-    });
 });
 
 Route::middleware('auth')->group(function () {

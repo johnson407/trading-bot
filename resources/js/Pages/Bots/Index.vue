@@ -30,9 +30,12 @@ function timestamp(value) {
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <h2 class="text-xl font-semibold leading-tight text-slate-100">Bots</h2>
-                <Link :href="route('bots.create')" class="rounded-md bg-blue-700 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white">Create bot</Link>
+                <div class="flex flex-wrap items-center gap-3">
+                    <Link :href="route('kill-switch.create')" class="rounded-md border border-rose-400 bg-rose-950 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-rose-200 hover:bg-rose-900 focus:outline-none focus:ring-2 focus:ring-rose-300">Kill switch</Link>
+                    <Link :href="route('bots.create')" class="rounded-md bg-blue-700 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white">Create bot</Link>
+                </div>
             </div>
         </template>
 
