@@ -21,7 +21,7 @@ A dedicated Go engine process SHALL evaluate running bots, consume market data, 
 
 ### Requirement: Restart recovery
 
-On engine start the system SHALL resume bots that were running, reload their persisted strategy state, and reconcile local open orders with the exchange before processing new ticks. The engine SHALL also reconcile open live orders periodically while it is running. The Laravel scheduler SHALL NOT be responsible for pre-dispatch reconciliation after cutover.
+On engine start the system SHALL resume bots that were running and reload their persisted strategy state. For live bots the engine SHALL reconcile local open orders with the exchange before processing new ticks, and SHALL also reconcile those orders periodically while it is running. Paper bots SHALL reconcile locally and SHALL NOT make private exchange calls. The Laravel scheduler SHALL NOT be responsible for pre-dispatch reconciliation after cutover.
 
 #### Scenario: Resume a running bot
 
@@ -30,18 +30,33 @@ On engine start the system SHALL resume bots that were running, reload their per
 
 #### Scenario: Reconcile open orders
 
-- **WHEN** a resumed bot has locally open orders
-- **THEN** the system confirms each order's status with the exchange and updates or removes orders that are filled or canceled
+- **WHEN** a resumed live bot has locally open orders
+- **THEN** the system confirms each order's status with the exchange, applies partial fills to inventory while leaving the remainder open, and updates or removes orders that are fully filled or canceled
 
 #### Scenario: Reconcile before scheduling
 
-- **WHEN** the engine container starts
-- **THEN** open orders are reconciled before new ticks are evaluated
+- **WHEN** the engine container starts with running live bots
+- **THEN** those bots' open orders are reconciled before new ticks are evaluated
 
 #### Scenario: Periodic reconcile
 
 - **WHEN** a live bot has been running and the order-sync interval elapses
 - **THEN** the engine confirms open orders with the exchange again and updates local state to match
+
+#### Scenario: Paper reconcile stays local
+
+- **WHEN** a paper bot is resumed or reaches a sync interval
+- **THEN** it reconciles from local state and no private exchange request is sent
+
+#### Scenario: Partial fill is applied
+
+- **WHEN** reconcile sees a live order as partially filled
+- **THEN** inventory is updated for the filled quantity, the remainder stays open, and no invented fill is recorded
+
+#### Scenario: Reconcile respects rate limits
+
+- **WHEN** a live reconcile request is rejected as rate limited
+- **THEN** the engine backs off and does not immediately retry that request
 
 ## ADDED Requirements
 

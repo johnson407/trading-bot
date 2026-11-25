@@ -47,3 +47,5 @@ He later resolved the remaining open questions:
 - Run a proposal code review before apply; do not fix review findings until Johnson decides.
 
 Apply remains testnet- and fake-first. No task may call a real-money live account without Johnson's explicit yes for that exact action.
+
+A proposal review then required these hardenings, now recorded in design, tasks, and specs: persist client order IDs before any network place and look them up before retry or startup; bump ID generation only after fill or cancel; constrain IDs to venue format rules; hard-fail the Binance testnet suite on production hosts, keys, or URLs; fail closed if a relay would rewrite testnet to production; apply partial fills in live reconcile; keep paper reconcile local; bind the evaluate endpoint off the host (token if the port is published); cover MAX on fakes in named tests; prefer the real engine in Pest; respect rate-limit budgets; leave the opt-in suite off during default verify; and document enabling `max` on the allowlist without implying a MAX soak.

@@ -85,12 +85,50 @@ Tick evaluation SHALL read the cached public last price for the bot's exchange a
 
 ### Requirement: Live client order identifiers
 
-Every live place SHALL include a stable client order identifier derived from the order intent. A retry of the same intent SHALL reuse that identifier. The engine SHALL persist the identifier with the intent.
+Every live place SHALL include a stable client order identifier derived from the order intent. The engine SHALL persist that identifier durably before any network place call. A retry or startup resume of the same intent SHALL reuse that identifier, including when no exchange order identifier has been recorded yet, and SHALL NOT mint a new identifier for that intent.
+
+#### Scenario: Identifier is persisted before the network call
+
+- **WHEN** the engine is about to place a live order
+- **THEN** the client order identifier is durably stored before any private exchange request is sent
+
+#### Scenario: Startup looks up an in-flight intent
+
+- **WHEN** the engine starts and a live intent has a client order identifier but no exchange order identifier
+- **THEN** the engine looks up that identifier on the exchange before placing again and does not mint a new identifier
 
 #### Scenario: Retry reuses the client order identifier
 
 - **WHEN** the engine retries a place for the same order intent after a timeout or uncertain response
-- **THEN** it sends the same client order identifier and does not create a second intent
+- **THEN** it first looks up the order by the existing client order identifier, or follows the venue's duplicate-ack path, then reuses that identifier and does not create a second intent
+
+### Requirement: Lookup before an uncertain live retry
+
+After an uncertain live place, the engine SHALL query the exchange by the existing client order identifier, or follow a documented duplicate-ack path, before sending another place.
+
+#### Scenario: Timeout is looked up before a second place
+
+- **WHEN** a live place times out or returns an unknown outcome
+- **THEN** the engine queries the exchange by the existing client order identifier, or follows the duplicate-ack path, and does not send a second place first
+
+### Requirement: Live client order identifier generation
+
+The generation component of a client order identifier SHALL bump only when a new intent is created after the previous order on that key is filled or canceled. It SHALL NOT bump on an in-flight retry. Identifiers SHALL satisfy the selected venue's length and character rules. A completed identifier SHALL NOT be reused for a new intent.
+
+#### Scenario: Generation bumps after fill then re-arm
+
+- **WHEN** a live level is filled or canceled and the engine places a new order for that level
+- **THEN** the new intent uses a new generation and a new client order identifier
+
+#### Scenario: Generation does not bump on retry
+
+- **WHEN** a live place is retried while the original intent is still in flight
+- **THEN** the generation and client order identifier are unchanged
+
+#### Scenario: Identifier meets venue encoding rules
+
+- **WHEN** the engine assigns a client order identifier for a venue
+- **THEN** the identifier satisfies that venue's length and character rules
 
 ### Requirement: Testnet-first live proofs
 
@@ -110,3 +148,21 @@ Automated and apply-time proofs of live place, cancel, and reconcile SHALL use a
 
 - **WHEN** verify or apply proves the MAX adapter
 - **THEN** the proofs use a fake exchange and do not call MAX testnet or MAX production
+
+### Requirement: Opt-in testnet suite host guards
+
+The opt-in Binance testnet suite SHALL hard-fail without sending a private request if the resolved base URL is not a known Binance testnet host, if sandbox or credential testnet is not enabled, or if a production key or production URL is configured.
+
+#### Scenario: Suite refuses production configuration
+
+- **WHEN** the opt-in testnet suite is started with a production base URL or a non-testnet credential
+- **THEN** it fails without sending a private request
+
+### Requirement: Testnet transport isolation
+
+When testnet or sandbox is enabled, the engine SHALL send private requests only to official testnet base URLs. If a proxy, custom base URL, or NAS relay would rewrite those requests to a production host, the engine SHALL fail closed and SHALL NOT send the request. The opt-in suite SHALL NOT use a relay that cannot preserve testnet URLs.
+
+#### Scenario: Relay rewrite is refused
+
+- **WHEN** testnet is enabled and the configured transport would send the request to a production host
+- **THEN** the engine does not send the request and reports an error

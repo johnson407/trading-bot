@@ -53,7 +53,7 @@ Options considered:
 
 **Recommendation: option A.** Add a loopback / Docker-network HTTP handler, for example `POST /v1/plan/evaluate`, that accepts a non-persisted setup (strategy, symbol, exchange, grid and risk fields, optional mark price) and returns levels, totals, warnings, and the market data used. Laravel's preview action and the create/update validation path call the same endpoint. If the engine is unreachable, both fail with a clear user-visible error and persist nothing. A second, approximate PHP calculator is rejected because it would reintroduce drift.
 
-The endpoint is not published through public nginx. v1 authentication is network isolation (engine bound to the compose service network; Laravel is the only caller). A shared internal token MAY be added later if the bind is ever broader; it is not required to ship this change.
+The endpoint is not published through public nginx and is not published to the host. Bind it to the compose service network or loopback only, with Laravel as the only caller. If the engine HTTP port remains published to the host, v1 MUST require a shared internal token; network isolation alone is not enough in that case.
 
 Public market data may be used to anchor a preview. The endpoint MUST NOT make private (credentialed) exchange calls.
 
@@ -65,20 +65,20 @@ The Go engine becomes the private exchange client for live bots. Laravel continu
 
 **Client shape.** A small Go interface equivalent to the PHP `ExchangeClient` (place limit, cancel, fetch order, open orders, trading rules, balance, normalized errors, rate-limit backoff). Implement both a Binance adapter (including official testnet/sandbox base URLs already implied by `TRADING_EXCHANGE_SANDBOX` and credential `testnet`) and a MAX adapter now. There is no requirement to vendor a full CCXT port; behavior and error classes must match the existing PHP/CCXT allowlisted usage closely enough that risk, reconcile, and UI stay stable. The MAX adapter is proven with fakes only in this change.
 
-**Transport.** If the deployment already reaches an exchange through a NAS relay, HTTP proxy, or custom base URL, the Go client MUST honor those existing settings. This change does not add, remove, or redesign that relay.
+**Transport.** If the deployment already reaches an exchange through a NAS relay, HTTP proxy, or custom base URL, the Go client MUST honor those existing settings for non-testnet traffic. This change does not add, remove, or redesign that relay. Testnet or sandbox mode MUST use official testnet base URLs and MUST fail closed if the transport would rewrite them to a production host. If the existing relay cannot preserve testnet URLs, the opt-in Binance testnet suite MUST NOT use that relay.
 
 **Gate.** `TRADING_LIVE_ENABLED` defaults false. `parseBool` on empty stays false. Production compose stays `"false"`. When the gate is closed, a live bot is paused (or refused at start), a risk event is recorded, and the bot is not converted to paper. When the gate is open, a live bot still needs sufficient exchange balance before start, and every place is preceded by the existing risk gates (exposure, daily loss, kill switch, open-order caps, and any other already-ported checks).
 
-**Idempotency.** Every live place carries a stable client order ID derived from the order intent (bot, level or strategy key, side, and a generation that only changes when the intent itself is replaced). A retry of the same intent reuses the same ID. The engine persists the ID before or with the first attempt and uses it, plus the exchange order ID once returned, during reconcile.
+**Idempotency.** Every live place carries a stable client order ID derived from the order intent (bot, level or strategy key, side, and a generation). The generation bumps only when a new intent is created after the previous order on that key is filled or canceled; it MUST NOT bump on an in-flight retry. Identifiers MUST satisfy the selected venue's length and character rules (for example Binance `clientOrderId`). The engine persists the ID durably before any network place call. A retry or startup resume looks up the intent by that ID, including intents that still have no exchange order ID, and MUST NOT mint a new ID for the same intent. After an uncertain place (timeout or unknown outcome), the engine queries the exchange by client order ID, or follows a documented venue duplicate-ack path, before sending another place. A completed client order ID is never reused for a new intent.
 
-**Reconcile.** On engine start, resume running live bots and reconcile local open orders with the exchange before new ticks, as the current bot-runtime spec already requires. In addition, reconcile periodically using the existing `TRADING_ORDER_SYNC_SECONDS` interval (default 5s) or a documented engine equivalent. Reconcile never invents fills; it updates or removes orders that the exchange reports as filled or canceled and surfaces ambiguities as errors.
+**Reconcile.** Private startup and periodic reconcile run for live bots only. Paper bots reconcile locally and MUST NOT make private exchange calls. Live reconcile happens on engine start, before new ticks, and periodically using `TRADING_ORDER_SYNC_SECONDS` (default 5s) or a documented engine equivalent, subject to per-venue rate-limit budgets and backoff; a rate-limit response is respected and is not retried immediately. Reconcile never invents fills. It applies partial fills to inventory and leaves the remainder open, updates or removes orders the exchange reports as fully filled or canceled, and surfaces ambiguities as errors. Intents that have a client order ID but no exchange order ID are looked up by client order ID before any new place.
 
 **Emergency cancel.** Laravel `CancelBotOrders` / `CancelOrder` remain the emergency path when a user hits kill-switch or stop and the heartbeat is missing or expired, or command publish fails. The engine still consumes in-band `order.cancel` and `kill_switch` when it is healthy.
 
 **Phased rollout.**
 
 1. Interface + fakes + closed-gate tests (CI, no private network calls), including the MAX adapter.
-2. Binance testnet against official sandbox endpoints, behind an opt-in suite (a Go equivalent of today's `CCXT_TESTNET=1`), skipped by default. This is the first and only exchange soak in this change, and it is testnet only. There is no MAX testnet or MAX live proof.
+2. Binance testnet against official sandbox endpoints, behind an opt-in suite (a Go equivalent of today's `CCXT_TESTNET=1`), skipped by default and not enabled by default verify even if a developer environment already exports the flag. The suite hard-fails unless the resolved base URL is a known Binance testnet host and sandbox or credential `testnet` is enabled; production keys or production URLs are refused, not merely documented. This is the first and only exchange soak in this change. There is no MAX testnet or MAX live proof.
 3. Real-money live is not an apply task. It requires Johnson's explicit yes for that exact action, the gate flipped only in the environment he names, and a follow-up soak he authorizes.
 
 No task in `tasks.md` may run against a real-money live account without that yes.
@@ -95,9 +95,11 @@ No task in `tasks.md` may run against a real-money live account without that yes
 - **[Testnet ≠ production]** → Mitigation: treat testnet as proof of wiring and idempotency, not as a production soak. Real-money remains a separately approved action. Document known testnet quirks (balances, filters, rate limits).
 - **[MAX has no soak in this change]** → Mitigation: ship the MAX adapter and prove it on fakes only; do not call MAX testnet or MAX production. A later, separately approved change can add a MAX proof.
 - **[Engine down blocks preview and save]** → Mitigation: this is preferred over a drifting PHP calculator. Surface a clear "engine unavailable" error. The engine is already a required runtime process after cutover.
-- **[Internal HTTP surface]** → Mitigation: do not publish it on public nginx; bind to the compose network only.
+- **[Internal HTTP surface]** → Mitigation: do not publish the evaluate endpoint on public nginx or the host; require an internal token if the engine port stays published to the host.
+- **[Relay or proxy rewrites testnet to production]** → Mitigation: testnet mode uses official testnet URLs and fails closed if transport would rewrite them; the opt-in suite does not use a relay that cannot preserve those URLs.
 - **[Stale or wrong WS prices]** → Mitigation: staleness bound plus REST snapshot; fail the tick rather than trade on a too-old price.
-- **[Idempotent place still fills twice if the ID scheme is wrong]** → Mitigation: persist the client order ID with the intent; golden and fake-exchange tests cover retry, reconnect, and duplicate-ack.
+- **[Idempotent place still fills twice if the ID scheme is wrong]** → Mitigation: persist the client order ID before the network call; look up by that ID, including in-flight intents with no exchange ID, before retry or startup place; bump generation only after fill or cancel; respect venue ID format; cover these in fake-exchange tests.
+- **[Reconcile interval hits rate limits]** → Mitigation: keep the default interval but apply per-venue budgets and backoff; test that a rate-limit error is not retried immediately.
 - **[Emergency cancel vs engine cancel races]** → Mitigation: keep the existing heartbeat-gated Laravel path; reconcile treats already-canceled orders as success.
 
 ## Migration Plan
@@ -107,7 +109,7 @@ Apply in the isolated worktree (or a later apply worktree), not in the in-progre
 1. Land WebSocket-backed ticks and tests against fakes. Paper bots should behave as today, with fewer public REST calls in the happy path.
 2. Land the evaluate endpoint and switch Laravel preview / validation to it; delete PHP strategies; keep Pest preview cases green.
 3. Land the live client, gates, client order IDs, and reconcile against fakes. Keep `TRADING_LIVE_ENABLED=false` in default and production compose.
-4. Add the opt-in Binance testnet suite. Do not enable it in CI. Do not point it at a real-money key.
+4. Add the opt-in Binance testnet suite with hard URL and credential guards. Do not enable it in CI or default verify. Do not point it at a real-money key or a production-rewriting relay.
 5. Update docs and dashboard copy so live is described as implemented, testnet-first, and production-gated.
 6. Run the minor cleanups and the full verify set (`openspec validate … --strict`, Go tests, Pest, PHPStan).
 

@@ -42,9 +42,14 @@ The system SHALL provide an authenticated preview that persists no bot, no grid,
 
 ### Requirement: Engine evaluate interface is internal
 
-The engine evaluate interface used for preview and save validation SHALL be reachable only on the internal application network and SHALL NOT be published on the public HTTP surface.
+The engine evaluate interface used for preview and save validation SHALL be reachable only on the internal application network and SHALL NOT be published on the public HTTP surface or published to the host. If the engine HTTP port is published to the host, the evaluate interface SHALL require a shared internal token.
 
 #### Scenario: Preview endpoint is internal
 
 - **WHEN** an unauthenticated client on the public HTTP surface requests the engine evaluate path directly
 - **THEN** the path is not served by the public reverse proxy
+
+#### Scenario: Host-published port requires a token
+
+- **WHEN** the engine HTTP port is published to the host and a client calls the evaluate interface without the internal token
+- **THEN** the request is rejected and no plan is evaluated
