@@ -22,7 +22,7 @@ Apply this change in an isolated worktree. Do not switch or edit `~/Repos/tradin
 
 - [ ] 1.1 Drive the existing public market-data feed's symbol set from running (and starting) bots: subscribe on start, update on bot start/stop, and unsubscribe symbols that no running bot needs.
 - [ ] 1.2 Change `Runtime` last-price reads to use the cached feed price for `(exchange, symbol)`.
-- [ ] 1.3 When the cache is missing or older than the staleness bound (default 15s, or half of `TRADING_TICK_INTERVAL` if larger, overridable by config), take a public REST snapshot, record the degraded or stale state without secrets, and fail the tick rather than trade on a too-old price if no snapshot is available.
+- [ ] 1.3 When the cache is missing or older than the decided staleness bound (15 seconds, or half of `TRADING_TICK_INTERVAL` if larger, overridable by config), take a public REST snapshot, record the degraded or stale state without secrets, and fail the tick rather than trade on a too-old price if no snapshot is available.
 - [ ] 1.4 Keep private credentials out of all market-data paths. Venues without a WebSocket client may stay on REST, still through the same cache and staleness bound.
 - [ ] 1.5 Add Go tests with a fake feed and `httptest` covering subscribe/unsubscribe, cache hit, stale cache + REST snapshot, and REST fallback when the socket cannot connect. Do not use live exchange credentials.
 - [ ] 1.6 Update engine/runtime docs to describe the cached feed as the tick price source.
@@ -40,7 +40,7 @@ Apply this change in an isolated worktree. Do not switch or edit `~/Repos/tradin
 
 - [ ] 3.1 Introduce a Go exchange-client interface equivalent to the PHP `ExchangeClient` (place limit, cancel, fetch order, open orders, trading rules, balance, normalized errors, rate-limit backoff).
 - [ ] 3.2 Implement Binance against official REST (and testnet base URLs), decrypting credentials only in memory as already specified, with secrets redacted from logs.
-- [ ] 3.3 If `max` is already in repo scope / `TRADING_EXCHANGES`, add a MAX adapter behind the same interface. If MAX has no testnet, keep proofs on fakes (see open questions).
+- [ ] 3.3 Add a MAX adapter behind the same interface. Prove it only with fakes. Do not add or run a MAX live or MAX testnet suite in this change.
 - [ ] 3.4 Honor existing proxy, custom base URL, or NAS relay settings as transport only. Do not redesign the relay.
 - [ ] 3.5 Enforce `TRADING_LIVE_ENABLED` default false (empty parses as false). A closed gate pauses or refuses a live bot, records a risk event, and MUST NOT convert it to paper.
 - [ ] 3.6 Honor `TRADING_EXCHANGE_SANDBOX` and credential `testnet` so testnet keys never hit production base URLs.
@@ -59,7 +59,7 @@ Apply this change in an isolated worktree. Do not switch or edit `~/Repos/tradin
 
 - [ ] 5.1 Add an opt-in Go test suite (equivalent in spirit to PHP `CCXT_TESTNET=1`) that places, cancels, and reconciles on **Binance testnet only**, skipped by default in CI.
 - [ ] 5.2 Document how to run that suite with testnet keys, and that it MUST NOT be pointed at production keys or production URLs.
-- [ ] 5.3 Do not add a MAX or real-money soak task. If Johnson later wants one, it needs a new, explicit yes for that exact action.
+- [ ] 5.3 Do not add a MAX testnet, MAX live, or real-money soak task. MAX remains fake-only in this change. If Johnson later wants a MAX or real-money proof, it needs a new, explicit yes for that exact action.
 
 ## 6. Docs and UI
 

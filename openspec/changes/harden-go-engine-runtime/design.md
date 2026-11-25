@@ -16,8 +16,8 @@ Johnson's instruction for this change is to design real live execution in the Go
 
 - Use the existing public market-data WebSocket as the primary tick price source, subscribed to the symbols of currently running bots, with a last-price cache, REST fallback, and a staleness bound.
 - Make the Go strategy implementations the only evaluator used for ticks and for setup plan preview / create-update validation.
-- Implement a Go private exchange client for allowlisted venues (Binance first; MAX if it is already an allowlisted CCXT id), including place, cancel, and reconcile, behind `TRADING_LIVE_ENABLED` (default false; empty is false).
-- Prove the live path on fakes in CI and on exchange testnet in an opt-in suite. Keep emergency `CancelBotOrders`. Never fall a live bot back to paper.
+- Implement a Go private exchange client for Binance and MAX, including place, cancel, and reconcile, behind `TRADING_LIVE_ENABLED` (default false; empty is false).
+- Prove the live path on fakes in CI, and on Binance testnet only in an opt-in suite. Prove the MAX adapter on fakes only. Keep emergency `CancelBotOrders`. Never fall a live bot back to paper.
 
 **Non-Goals:**
 
@@ -26,7 +26,7 @@ Johnson's instruction for this change is to design real live execution in the Go
 - Starting or stopping laptop Horizon or the scheduler as part of this change.
 - Deleting, resetting, or merging `origin/hybrid-engine`.
 - Implementing unlisted CCXT venues beyond the configured allowlist.
-- A default apply task that soaks a real-money production account, or flipping `TRADING_LIVE_ENABLED=true` in production compose.
+- A default apply task that soaks a real-money production account, a MAX testnet or MAX live proof, or flipping `TRADING_LIVE_ENABLED=true` in production compose.
 - Reworking paper-mode fills, command streams, heartbeat TTL, or the already-ported risk rules except to invoke them immediately before a live place.
 
 ## Decisions
@@ -37,7 +37,7 @@ The engine already has a public feed. This change wires it to `Runtime`.
 
 - On start, and whenever a bot starts or stops, the feed's symbol set is the union of running (and starting) bots' symbols for exchanges the feed supports. Idle engines subscribe to nothing.
 - `Runtime.Last` reads the cached last price for `(exchange, symbol)`. If the cache is missing or older than the staleness bound, it takes a public REST snapshot, records the degraded or stale state without secrets, and uses that snapshot for the tick. A persistently stale cache does not invent a price.
-- Recommended default staleness bound: 15 seconds, or half of `TRADING_TICK_INTERVAL` when that is larger, overridable by config (for example `ENGINE_MARKET_DATA_STALE_AFTER`). The existing feed already has quiet-period / gap recovery; this bound is the last line before a tick uses a price.
+- Default staleness bound: 15 seconds, or half of `TRADING_TICK_INTERVAL` when that is larger, overridable by config (for example `ENGINE_MARKET_DATA_STALE_AFTER`). The existing feed already has quiet-period / gap recovery; this bound is the last line before a tick uses a price.
 - Public data only. No signed market-data endpoints. Multi-exchange: Binance uses the existing WS client; a venue without a WS client may stay on REST until a feed exists, but the cache and staleness bound still apply.
 - Tests use a fake feed and `httptest`, not a live socket.
 
@@ -63,7 +63,7 @@ PHP `app/Strategies/*`, their `AppServiceProvider` bindings, and the `GridPlanEv
 
 The Go engine becomes the private exchange client for live bots. Laravel continues to encrypt credentials at rest and to confirm a paper-to-live mode change. The engine decrypts in memory with `APP_KEY` / `previous_keys` as already specified, never persists plaintext, and never logs keys, secrets, or signatures.
 
-**Client shape.** A small Go interface equivalent to the PHP `ExchangeClient` (place limit, cancel, fetch order, open orders, trading rules, balance, normalized errors, rate-limit backoff). Binance is the first implementation, including official testnet/sandbox base URLs already implied by `TRADING_EXCHANGE_SANDBOX` and credential `testnet`. If `max` is on `TRADING_EXCHANGES` or otherwise already in repo scope, add a MAX implementation behind the same interface. There is no requirement to vendor a full CCXT port; behavior and error classes must match the existing PHP/CCXT allowlisted usage closely enough that risk, reconcile, and UI stay stable.
+**Client shape.** A small Go interface equivalent to the PHP `ExchangeClient` (place limit, cancel, fetch order, open orders, trading rules, balance, normalized errors, rate-limit backoff). Implement both a Binance adapter (including official testnet/sandbox base URLs already implied by `TRADING_EXCHANGE_SANDBOX` and credential `testnet`) and a MAX adapter now. There is no requirement to vendor a full CCXT port; behavior and error classes must match the existing PHP/CCXT allowlisted usage closely enough that risk, reconcile, and UI stay stable. The MAX adapter is proven with fakes only in this change.
 
 **Transport.** If the deployment already reaches an exchange through a NAS relay, HTTP proxy, or custom base URL, the Go client MUST honor those existing settings. This change does not add, remove, or redesign that relay.
 
@@ -77,10 +77,9 @@ The Go engine becomes the private exchange client for live bots. Laravel continu
 
 **Phased rollout.**
 
-1. Interface + fakes + closed-gate tests (CI, no private network calls).
-2. Binance testnet against official sandbox endpoints, behind an opt-in suite (a Go equivalent of today's `CCXT_TESTNET=1`), skipped by default. This is the first live phase that may talk to an exchange, and it is testnet only.
-3. MAX against a testnet/sandbox if one exists; otherwise MAX stays on fakes until a testnet is available or Johnson approves a later, named exception.
-4. Real-money live is not an apply task. It requires Johnson's explicit yes for that exact action, the gate flipped only in the environment he names, and a follow-up soak he authorizes.
+1. Interface + fakes + closed-gate tests (CI, no private network calls), including the MAX adapter.
+2. Binance testnet against official sandbox endpoints, behind an opt-in suite (a Go equivalent of today's `CCXT_TESTNET=1`), skipped by default. This is the first and only exchange soak in this change, and it is testnet only. There is no MAX testnet or MAX live proof.
+3. Real-money live is not an apply task. It requires Johnson's explicit yes for that exact action, the gate flipped only in the environment he names, and a follow-up soak he authorizes.
 
 No task in `tasks.md` may run against a real-money live account without that yes.
 
@@ -94,7 +93,7 @@ No task in `tasks.md` may run against a real-money live account without that yes
 ## Risks / Trade-offs
 
 - **[Testnet ≠ production]** → Mitigation: treat testnet as proof of wiring and idempotency, not as a production soak. Real-money remains a separately approved action. Document known testnet quirks (balances, filters, rate limits).
-- **[MAX testnet may not exist]** → Mitigation: ship MAX behind the interface and fakes; leave a real MAX live proof as an open question rather than hitting MAX production.
+- **[MAX has no soak in this change]** → Mitigation: ship the MAX adapter and prove it on fakes only; do not call MAX testnet or MAX production. A later, separately approved change can add a MAX proof.
 - **[Engine down blocks preview and save]** → Mitigation: this is preferred over a drifting PHP calculator. Surface a clear "engine unavailable" error. The engine is already a required runtime process after cutover.
 - **[Internal HTTP surface]** → Mitigation: do not publish it on public nginx; bind to the compose network only.
 - **[Stale or wrong WS prices]** → Mitigation: staleness bound plus REST snapshot; fail the tick rather than trade on a too-old price.
@@ -114,9 +113,3 @@ Apply in the isolated worktree (or a later apply worktree), not in the in-progre
 
 Rollback: revert the change branch. A closed live gate (`TRADING_LIVE_ENABLED=false`) remains the runtime kill for live orders even after the code lands. Emergency cancel continues to work. Preview rollback would temporarily require restoring PHP strategies, so the preview cut should be one revert-friendly commit if possible.
 
-## Open Questions
-
-- Confirm Binance testnet as the first (and, by default, only) exchange soak for this change. Recommended: yes.
-- Should MAX be implemented in this change, or deferred until after Binance testnet is proven? Recommended: implement the interface and a MAX adapter if `max` is already in repo scope, but do not require a live MAX proof here.
-- Does MAX provide a usable testnet or sandbox comparable to Binance's? If not, MAX stays on fakes.
-- Preferred staleness bound if 15 seconds (or half the tick interval) is too tight or too loose for Johnson's symbols.

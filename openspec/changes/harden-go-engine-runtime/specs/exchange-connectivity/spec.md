@@ -66,7 +66,7 @@ The market-data feed's subscribed symbols SHALL be the union of symbols used by 
 
 ### Requirement: Tick last-price cache
 
-Tick evaluation SHALL read the cached public last price for the bot's exchange and symbol. When the cache is missing or older than the configured staleness bound, the engine SHALL take a public REST snapshot and record the degraded or stale state without secrets. The engine SHALL NOT use a price older than the staleness bound when no fresh snapshot is available, and SHALL NOT use private credentials for market data.
+Tick evaluation SHALL read the cached public last price for the bot's exchange and symbol. The default staleness bound SHALL be 15 seconds, or half of `TRADING_TICK_INTERVAL` when that is larger. When the cache is missing or older than the bound, the engine SHALL take a public REST snapshot and record the stale state without secrets. The engine SHALL NOT use a too-old price when no fresh snapshot is available, and SHALL NOT use private credentials for market data.
 
 #### Scenario: Tick uses the cached last price
 
@@ -94,7 +94,7 @@ Every live place SHALL include a stable client order identifier derived from the
 
 ### Requirement: Testnet-first live proofs
 
-Automated and apply-time proofs of live place, cancel, and reconcile SHALL use a fake exchange or an official exchange testnet. Default CI and default compose SHALL NOT call a real-money account. An opt-in testnet suite MAY be provided and SHALL be skipped by default. A real-money live account SHALL be used only when the operator explicitly authorizes that exact action.
+Automated and apply-time proofs of live place, cancel, and reconcile SHALL use a fake exchange or Binance testnet. Default CI and default compose SHALL NOT call a real-money account. An opt-in suite MAY target Binance testnet only and SHALL be skipped by default. The MAX adapter SHALL be proven with fakes only. A real-money account SHALL be used only when the operator explicitly authorizes that exact action.
 
 #### Scenario: Default verify stays off real money
 
@@ -104,4 +104,9 @@ Automated and apply-time proofs of live place, cancel, and reconcile SHALL use a
 #### Scenario: Opt-in testnet suite
 
 - **WHEN** the operator enables the opt-in testnet suite with testnet credentials and sandbox URLs
-- **THEN** order operations are sent to the exchange testnet and not to production endpoints
+- **THEN** order operations are sent to Binance testnet and not to production endpoints or to MAX
+
+#### Scenario: MAX is proven on fakes only
+
+- **WHEN** verify or apply proves the MAX adapter
+- **THEN** the proofs use a fake exchange and do not call MAX testnet or MAX production

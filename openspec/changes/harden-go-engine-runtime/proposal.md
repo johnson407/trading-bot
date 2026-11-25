@@ -8,9 +8,9 @@ Johnson confirmed he wants live trading in this change, not a "live unavailable"
 
 ## What Changes
 
-- Subscribe the engine's public market-data feed to running bots' symbols dynamically. `Runtime` reads the cached last price, with REST fallback and a staleness bound. No private market-data calls.
+- Subscribe the engine's public market-data feed to running bots' symbols dynamically. `Runtime` reads the cached last price, with REST fallback and a staleness bound of 15 seconds or half of `TRADING_TICK_INTERVAL`, whichever is larger. No private market-data calls.
 - Finish PHP strategy cleanup: Go is the single source of truth for strategy evaluation and plan preview. Replace the PHP `onTick` preview path (`GridPlanEvaluator`, `app/Strategies/*`, `AppServiceProvider` bindings) with a thin Laravel client of an internal engine evaluate endpoint, so preview and save keep agreeing.
-- Implement real live place, cancel, and reconcile in the Go engine for the exchanges the repo already supports (Binance, and MAX if it is on the allowlist / CCXT id `max`). Use a CCXT-equivalent Go client; honor any existing NAS relay or proxy as transport only and do not change that relay. Enforce `TRADING_LIVE_ENABLED` default false, apply risk gates before every live order, use idempotent client order IDs, reconcile on startup and periodically, never fall back from live to paper, and keep the Laravel `CancelBotOrders` emergency path.
+- Implement real live place, cancel, and reconcile in the Go engine for Binance and a MAX adapter. Use a CCXT-equivalent Go client; honor any existing NAS relay or proxy as transport only and do not change that relay. Enforce `TRADING_LIVE_ENABLED` default false, apply risk gates before every live order, use idempotent client order IDs, reconcile on startup and periodically, never fall back from live to paper, and keep the Laravel `CancelBotOrders` emergency path. The first and default soak is Binance testnet only; the MAX adapter is proven on fakes only (no MAX live or testnet proof in this change).
 - Small cleanups: stale comments (`engine/main.go` command-processor comment, `heartbeat.NewStub` name), delete unused leftover PHP value objects after verification (`TickResult`, `ReconcileResult`, `CapacityReport`), and remove `last_error` plus other engine-owned columns from `Bot` `$fillable`.
 
 ## Capabilities
@@ -38,5 +38,12 @@ Johnson confirmed he wants live trading in this change, not a "live unavailable"
 ## Confirmed decisions
 
 Johnson asked for one OpenSpec change covering the three audit findings, then asked to get live trading into that same change rather than labeling live as unavailable.
+
+He later resolved the remaining open questions:
+
+- The first and default soak is Binance testnet only.
+- Build the MAX adapter in this change, but test it only on fakes. Do not run a MAX live or MAX testnet proof.
+- Keep the staleness bound at 15 seconds, or half of `TRADING_TICK_INTERVAL` when that is larger.
+- Run a proposal code review before apply; do not fix review findings until Johnson decides.
 
 Apply remains testnet- and fake-first. No task may call a real-money live account without Johnson's explicit yes for that exact action.
