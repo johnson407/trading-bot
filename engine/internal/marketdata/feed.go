@@ -128,6 +128,9 @@ type Feed struct {
 	status      Status
 	changed     chan struct{}
 	requestID   int
+
+	decodeWarnings    int
+	lastDecodeWarning time.Time
 }
 
 // New returns a feed. The caller must call Run to open any connection. New
@@ -487,109 +490,191 @@ func (f *Feed) read(ctx context.Context, connection *websocket.Conn) (string, bo
 	}
 }
 
-// applyMessage normalizes a trade or book-ticker message. Binance bookTicker
-// payloads have no event type, so the shape (p for a trade, b/a for book) is
-// used to distinguish them. It ignores symbols that are not actively
-// subscribed and reports whether a quote changed and whether the trade-id
-// sequence skipped.
+// applyMessage normalizes a trade or book-ticker message. It decodes the event
+// type before binding fields because Binance trade frames use numeric b/a for
+// buyer/seller order IDs, while bookTicker frames use b/a for best bid/ask.
+// BookTicker payloads may omit an event type, so the shape is used as a
+// fallback. It ignores symbols that are not actively subscribed and reports
+// whether a quote changed and whether the trade-id sequence skipped.
 func (f *Feed) applyMessage(payload []byte) (bool, bool) {
-	var message struct {
-		Stream     string          `json:"stream"`
-		Data       json.RawMessage `json:"data"`
-		Event      string          `json:"e"`
-		Symbol     string          `json:"s"`
-		TradeID    int64           `json:"t"`
-		TradePrice string          `json:"p"`
-		Bid        string          `json:"b"`
-		Ask        string          `json:"a"`
-		ID         *int64          `json:"id"`
+	var envelope struct {
+		Stream string          `json:"stream"`
+		Data   json.RawMessage `json:"data"`
+		ID     *int64          `json:"id"`
+		Result json.RawMessage `json:"result"`
 	}
 
-	if err := json.Unmarshal(payload, &message); err != nil {
-		f.logger.Warn("market data message is not JSON", "error_type", fmt.Sprintf("%T", err))
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		f.warnDecodeFailure(err)
 		return false, false
 	}
 
-	if len(message.Stream) > 0 {
-		if len(message.Data) == 0 {
+	if len(envelope.Stream) > 0 {
+		if len(envelope.Data) == 0 {
 			return false, false
 		}
 
-		if err := json.Unmarshal(message.Data, &message); err != nil {
-			f.logger.Warn("market data stream payload is not JSON", "error_type", fmt.Sprintf("%T", err))
-			return false, false
-		}
+		payload = envelope.Data
 	}
+
+	// A struct bind is unsafe here: encoding/json matches keys case-insensitively,
+	// so trade frames' E/T collide with e/t and bookTicker's B/A collide with b/a.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		f.warnDecodeFailure(err)
+		return false, false
+	}
+
+	event, _ := jsonString(fields["e"])
+	symbolText, _ := jsonString(fields["s"])
 
 	// Subscription acknowledgements carry only an id and a null result.
-	if message.ID != nil && message.Symbol == "" {
+	if envelope.ID != nil && symbolText == "" {
 		return false, false
 	}
 
-	symbol := normalizeSymbol(message.Symbol)
+	symbol := normalizeSymbol(symbolText)
 	if symbol == "" || !f.isActive(symbol) {
+		return false, false
+	}
+
+	tradeID, hasTradeID := jsonInt64(fields["t"])
+	tradePrice, hasTradePrice := jsonString(fields["p"])
+	bidRaw := fields["b"]
+	askRaw := fields["a"]
+
+	if event == "trade" || (event == "" && hasTradeID && hasTradePrice) {
+		return f.applyTrade(symbol, tradeID, hasTradeID, tradePrice)
+	}
+
+	if event == "bookTicker" || (event == "" && (len(bidRaw) > 0 || len(askRaw) > 0)) {
+		bid, _ := jsonString(bidRaw)
+		ask, _ := jsonString(askRaw)
+
+		return f.applyBookTicker(symbol, bid, ask), false
+	}
+
+	return false, false
+}
+
+func jsonString(raw json.RawMessage) (string, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", false
+	}
+
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", false
+	}
+
+	return value, true
+}
+
+func jsonInt64(raw json.RawMessage) (int64, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0, false
+	}
+
+	var value int64
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return 0, false
+	}
+
+	return value, true
+}
+
+func (f *Feed) applyTrade(symbol string, tradeID int64, hasTradeID bool, price string) (bool, bool) {
+	if !hasTradeID || tradeID <= 0 || price == "" {
+		return false, false
+	}
+
+	if !validDecimal(price) {
+		f.logger.Warn("market data trade has an invalid price", "symbol", symbol)
 		return false, false
 	}
 
 	now := f.now()
 
-	if message.TradeID > 0 && message.TradePrice != "" {
-		if !validDecimal(message.TradePrice) {
-			f.logger.Warn("market data trade has an invalid price", "symbol", symbol)
-			return false, false
-		}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-		f.mu.Lock()
-		previous := f.lastTradeID[symbol]
-		gap := previous > 0 && message.TradeID > previous+1
-		// Ignore stale or duplicate updates; only advance the sequence.
-		if message.TradeID <= previous {
-			f.mu.Unlock()
-			return false, false
-		}
-
-		f.lastTradeID[symbol] = message.TradeID
-		ticker := f.tickers[symbol]
-		ticker.Symbol = symbol
-		ticker.Last = message.TradePrice
-		ticker.UpdatedAt = now
-		ticker.TradeAt = now
-		f.tickers[symbol] = ticker
-		f.status.LastMessageAt = now
-		f.mu.Unlock()
-
-		return true, gap
+	previous := f.lastTradeID[symbol]
+	gap := previous > 0 && tradeID > previous+1
+	// Ignore stale or duplicate updates; only advance the sequence.
+	if tradeID <= previous {
+		return false, false
 	}
 
-	if message.Bid != "" || message.Ask != "" {
-		if message.Bid != "" && !validDecimal(message.Bid) {
-			f.logger.Warn("market data book has an invalid bid", "symbol", symbol)
-			return false, false
-		}
+	f.lastTradeID[symbol] = tradeID
+	ticker := f.tickers[symbol]
+	ticker.Symbol = symbol
+	ticker.Last = price
+	ticker.UpdatedAt = now
+	ticker.TradeAt = now
+	f.tickers[symbol] = ticker
+	f.status.LastMessageAt = now
 
-		if message.Ask != "" && !validDecimal(message.Ask) {
-			f.logger.Warn("market data book has an invalid ask", "symbol", symbol)
-			return false, false
-		}
+	return true, gap
+}
 
-		f.mu.Lock()
-		ticker := f.tickers[symbol]
-		ticker.Symbol = symbol
-		if message.Bid != "" {
-			ticker.Bid = message.Bid
-		}
-		if message.Ask != "" {
-			ticker.Ask = message.Ask
-		}
-		ticker.UpdatedAt = now
-		f.tickers[symbol] = ticker
-		f.status.LastMessageAt = now
-		f.mu.Unlock()
-
-		return true, false
+func (f *Feed) applyBookTicker(symbol, bid, ask string) bool {
+	if bid == "" && ask == "" {
+		return false
 	}
 
-	return false, false
+	if bid != "" && !validDecimal(bid) {
+		f.logger.Warn("market data book has an invalid bid", "symbol", symbol)
+		return false
+	}
+
+	if ask != "" && !validDecimal(ask) {
+		f.logger.Warn("market data book has an invalid ask", "symbol", symbol)
+		return false
+	}
+
+	now := f.now()
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	ticker := f.tickers[symbol]
+	ticker.Symbol = symbol
+	if bid != "" {
+		ticker.Bid = bid
+	}
+	if ask != "" {
+		ticker.Ask = ask
+	}
+	ticker.UpdatedAt = now
+	f.tickers[symbol] = ticker
+	f.status.LastMessageAt = now
+
+	return true
+}
+
+// warnDecodeFailure records malformed frames without flooding the log. The
+// first failure is logged, later failures within a minute are counted and
+// reported with the next visible warning.
+func (f *Feed) warnDecodeFailure(err error) {
+	f.mu.Lock()
+	now := f.now()
+	if !f.lastDecodeWarning.IsZero() && now.Sub(f.lastDecodeWarning) < time.Minute {
+		f.decodeWarnings++
+		f.mu.Unlock()
+		return
+	}
+
+	suppressed := f.decodeWarnings
+	f.decodeWarnings = 0
+	f.lastDecodeWarning = now
+	f.mu.Unlock()
+
+	attributes := []any{"error_type", fmt.Sprintf("%T", err)}
+	if suppressed > 0 {
+		attributes = append(attributes, "suppressed", suppressed)
+	}
+
+	f.logger.Warn("market data message could not be decoded", attributes...)
 }
 
 func (f *Feed) fetchREST(ctx context.Context) {
