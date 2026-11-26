@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -50,6 +51,12 @@ func payloadAt(t *testing.T, timestamp time.Time) []byte {
 		TS:          timestamp.UTC().Format(time.RFC3339),
 		Revision:    3,
 		RunningBots: 2,
+		StartedAt:   timestamp.Add(-time.Hour).UTC().Format(time.RFC3339),
+		MarketData: heartbeat.MarketData{
+			Configured: true,
+			Mode:       "websocket",
+			Symbols:    1,
+		},
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
@@ -65,6 +72,20 @@ func TestCheckFreshAcceptsRecentHeartbeat(t *testing.T) {
 	reader := fakeReader{value: payloadAt(t, now.Add(-2*time.Second))}
 
 	if err := heartbeat.CheckFresh(context.Background(), reader, now); err != nil {
+		t.Fatalf("CheckFresh() error = %v, want nil", err)
+	}
+}
+
+func TestCheckFreshIgnoresMalformedOptionalStatus(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	value := []byte(fmt.Sprintf(
+		`{"ts":%q,"revision":1,"running_bots":1,"started_at":"not-a-time","market_data":"not-an-object"}`,
+		now.Add(-2*time.Second).Format(time.RFC3339),
+	))
+
+	if err := heartbeat.CheckFresh(context.Background(), fakeReader{value: value}, now); err != nil {
 		t.Fatalf("CheckFresh() error = %v, want nil", err)
 	}
 }
@@ -99,7 +120,9 @@ func TestRunRefreshesAtLeastEveryFiveSeconds(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		writer.Run(ctx, 5*time.Millisecond, func() int { return 4 })
+		writer.Run(ctx, 5*time.Millisecond, func() heartbeat.Snapshot {
+			return heartbeat.Snapshot{RunningBots: 4}
+		})
 		close(done)
 	}()
 

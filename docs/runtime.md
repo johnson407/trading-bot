@@ -66,9 +66,12 @@ Docker deployment.
    the runtime `status`, `last_error`, grids, orders, and fills. Duplicate command
    ids are ignored.
 3. The engine writes `engine:heartbeat` every five seconds with a ten-second TTL.
-   Laravel reads it for the dashboard warning and for stop/kill-switch emergency
-   decisions. An expired heartbeat is a warning; it never pauses a bot or cancels
-   an order automatically.
+   The payload includes the engine start time, the authoritative live-trading
+   gate, and the public market-data mode/degraded state, in addition to the
+   timestamp, revision, and running-bot count. Laravel reads it for the dashboard
+   warning, the global engine status bar, bot-health stale detection, and
+   stop/kill-switch emergency decisions. An expired heartbeat is a warning; it
+   never pauses a bot or cancels an order automatically.
 4. Laravel never writes runtime `status` or `last_error` after creation, and it
    does not write engine-owned activity types or `grids`/`grid_levels` rows.
 
@@ -132,7 +135,9 @@ command. Laravel no longer schedules `backtests:fail-stale`.
   snapshot; if that snapshot fails, the tick fails instead of using the old
   price. No private credential is used for market data.
 - The dashboard polls every five seconds for persisted state and heartbeat; the
-  poll never triggers a tick.
+  poll never triggers a tick. The global engine status bar reuses
+  `/health/engine` at most once every ten seconds per tab, including across
+  Inertia navigation.
 - Paper fills and daily-loss evaluation happen when a tick runs. A price that
   crosses and recrosses a paper limit between ticks is not guaranteed to fill.
 - The kill switch does not wait for a tick; it publishes immediately and falls
@@ -161,7 +166,8 @@ backtests. The `backtests` supervisor was removed in phase 7; do not add it back
   `kill_switch.activated`, etc.) are written by Laravel; engine events such as
   `bot.stale`, `order.filled`, and `orders.synced` are written by the engine.
 - `GET /health/engine` returns the heartbeat JSON with HTTP 200 when fresh and 503
-  when missing/expired.
+  when missing/expired. It is marked `Cache-Control: no-store`; an older engine
+  payload without the optional status fields is reported as unknown, not off.
 - Horizon metrics cover the remaining default queue only.
 
 ## Deployment checklist

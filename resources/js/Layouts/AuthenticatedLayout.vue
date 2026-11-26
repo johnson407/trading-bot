@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Dropdown from '@/Components/Dropdown.vue';
+import EngineStatusBar from '@/Components/EngineStatusBar.vue';
 import FlashMessage from '@/Components/FlashMessage.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
@@ -266,6 +267,8 @@ const showingNavigationDropdown = ref(false);
                     </div>
                 </div>
             </nav>
+
+            <EngineStatusBar />
 
             <FlashMessage />
 

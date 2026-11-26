@@ -179,12 +179,36 @@ The engine `SET`s `engine:heartbeat` with TTL **10 seconds** and refreshes it at
 least every **5 seconds**:
 
 ```json
-{"ts":"2026-11-23T05:00:00Z","revision":42,"running_bots":3}
+{
+  "ts": "2026-11-23T05:00:00Z",
+  "revision": 42,
+  "running_bots": 3,
+  "started_at": "2026-11-23T04:55:00Z",
+  "live_trading": false,
+  "market_data": {
+    "configured": true,
+    "mode": "websocket",
+    "degraded": false,
+    "reason": "",
+    "symbols": 2,
+    "last_message_at": "2026-11-23T04:59:59Z"
+  }
+}
 ```
 
 - `ts` is UTC RFC 3339.
 - `revision` increases on each write by that process.
-- `running_bots` is the number of running bots (zero until the tick loop lands).
+- `running_bots` is the number of running bots.
+- `started_at` is the engine process start time in UTC RFC 3339. The dashboard
+  uses it to honour the engine restart grace when deciding whether a running bot
+  is stale.
+- `live_trading` is the engine's authoritative `TRADING_LIVE_ENABLED` value.
+- `market_data` reports whether public feed endpoints are configured
+  (`configured`), the feed mode (`idle`, `websocket`, or `rest`), whether the
+  feed is `degraded`, a short non-secret `reason`, the number of subscribed
+  `symbols`, and the optional `last_message_at` time.
+- `live_trading`, `configured`, and `degraded` are always serialized, including
+  when `false`; only `last_message_at` is omitted when there has been no message.
 - No credentials or secrets are included.
 
 Laravel health and the dashboard treat a missing or expired key as **engine
@@ -194,10 +218,17 @@ kill-switch. While the engine is down, live-order cancels happen only when the
 operator activates the kill-switch or stops a live bot (the emergency path
 above).
 
+The heartbeat fields other than `ts` are optional for compatibility with an
+older engine. Laravel parses them best-effort: a missing or malformed optional
+field is shown as **unknown**, never as `false` or "off". Heartbeat freshness
+depends only on `ts` and the TTL.
+
 `GET /healthz` includes a `heartbeat` readiness check that reads this key and
-accepts a timestamp no older than the TTL. It never calls an exchange.
+accepts a timestamp no older than the TTL. It decodes only `ts`, so malformed
+optional status fields do not fail readiness, and it never calls an exchange.
 Laravel exposes the same freshness check at `GET /health/engine`, returning
-`200` when fresh and `503` when missing or expired.
+`200` when fresh and `503` when missing or expired; the response is marked
+`Cache-Control: no-store`.
 `GET /livez` remains dependency-free.
 
 ## Runtime scheduling and shutdown

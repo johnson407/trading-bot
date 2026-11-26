@@ -33,6 +33,20 @@ it('starts an idle bot and records the event once', function () {
         ->and($bot->activityLogs()->where('type', 'bot.started')->count())->toBe(1);
 });
 
+it('records an engine-paused bot resume', function () {
+    $bot = Bot::factory()->create([
+        'status' => BotStatus::Paused,
+        'desired_status' => BotStatus::Running,
+    ]);
+
+    app(StartBot::class)->handle($bot);
+
+    $activity = $bot->activityLogs()->where('type', 'bot.started')->sole();
+
+    expect($activity->message)->toBe('Bot resumed')
+        ->and($activity->context['resumed'])->toBeTrue();
+});
+
 it('pauses a running bot while preserving its open orders', function () {
     $bot = Bot::factory()->running()->create();
     $order = Order::factory()->for($bot)->create(['status' => OrderStatus::Open]);

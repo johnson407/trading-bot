@@ -104,7 +104,7 @@ If reconciliation cannot match local state to the exchange, the system SHALL pau
 
 ### Requirement: Scheduled maintenance
 
-The engine SHALL run health checks, order sync, balance sync, and stale-backtest failure. Health checks SHALL pause a bot whose last successful tick is older than the effective stale threshold (the greater of the default 180 seconds and the bot interval plus the health-check interval). Balance sync SHALL refresh a live bot unless the account is shared, with a skip at most once per bot per UTC day. Laravel SHALL NOT schedule `bots:health` or `backtests:fail-stale` after cutover.
+The engine SHALL run health checks, order sync, balance sync, and stale-backtest failure. Health checks SHALL pause a bot whose last successful tick is older than the effective stale threshold (the greater of 180 seconds and the bot interval plus 30 seconds). Balance sync SHALL refresh a live bot unless the account is shared, with a skip at most once per bot per UTC day. Laravel SHALL NOT schedule `bots:health` or `backtests:fail-stale` after cutover.
 
 #### Scenario: Stale bot detected
 
@@ -113,7 +113,7 @@ The engine SHALL run health checks, order sync, balance sync, and stale-backtest
 
 #### Scenario: Not stale within one interval
 
-- **WHEN** a running bot with a 60-second interval last succeeded within its interval plus the health-check interval
+- **WHEN** a running bot with a 60-second interval last succeeded within its effective threshold
 - **THEN** the health check does not pause it
 
 #### Scenario: Balance synchronization
@@ -140,6 +140,11 @@ The engine SHALL run health checks, order sync, balance sync, and stale-backtest
 
 - **WHEN** a backtest run's worker disappears or exceeds the documented timeout
 - **THEN** the engine marks that run failed with a concise message
+
+#### Scenario: Threshold uses the 30-second allowance
+
+- **WHEN** a running bot has a 300-second interval and last succeeded 320 seconds ago
+- **THEN** the health check does not pause it because the effective threshold is 330 seconds
 
 ### Requirement: Execution capacity
 
@@ -206,6 +211,50 @@ The engine SHALL refresh a Redis heartbeat key at least every five seconds with 
 
 - **WHEN** the engine heartbeat is missing or expired and the user has not activated the kill-switch or stop
 - **THEN** Laravel does not pause bots, cancel orders, or activate the kill-switch, and only shows the engine as unavailable
+
+### Requirement: Engine status snapshot
+
+The engine SHALL include in its heartbeat a UTC engine start time, whether live trading is enabled, and a market-data snapshot with configured state, mode, degraded state, reason, symbol count, and last-message time. These fields SHALL exclude secrets, SHALL serialize boolean false values, and SHALL be optional to consumers so an older engine's heartbeat remains valid.
+
+#### Scenario: Snapshot is present while the engine is healthy
+
+- **WHEN** the engine is running with the market-data feed configured and connected
+- **THEN** the heartbeat reports the engine start time, the live-trading gate state, and a websocket, non-degraded market-data snapshot with the configured state true
+
+#### Scenario: Feed is not configured
+
+- **WHEN** the engine has no market-data endpoints configured
+- **THEN** the heartbeat reports an idle feed with the configured state false
+
+#### Scenario: Feed is configured but idle
+
+- **WHEN** the engine has market-data endpoints configured but no symbols subscribed
+- **THEN** the heartbeat reports the configured state true, idle mode, and no degradation
+
+#### Scenario: Feed has fallen back to REST
+
+- **WHEN** the market-data feed is degraded or using REST fallback
+- **THEN** the heartbeat reports the REST mode, the degraded state, and a reason
+
+#### Scenario: Live trading is enabled
+
+- **WHEN** the engine's live-trading gate is enabled
+- **THEN** the heartbeat reports live trading true
+
+#### Scenario: Live trading is disabled
+
+- **WHEN** the engine's live-trading gate is disabled
+- **THEN** the heartbeat reports live trading false rather than omitting the field
+
+#### Scenario: Older engine remains compatible
+
+- **WHEN** a consumer reads a heartbeat written by an older engine without the status fields
+- **THEN** it treats the missing status as unknown and still considers the heartbeat valid
+
+#### Scenario: Malformed optional status does not invalidate the heartbeat
+
+- **WHEN** a heartbeat has a valid timestamp but a malformed start time or market-data object
+- **THEN** the consumer still considers the heartbeat available and treats the malformed status as unknown
 
 ### Requirement: Command and event streams
 

@@ -248,6 +248,153 @@ it('supports a ninety-day range', function () {
             ->etc());
 });
 
+it('shares dashboard bot health for bots needing attention', function () {
+    $this->travelTo(Carbon::parse('2026-11-26 12:00:00'));
+
+    $heartbeat = app(EngineHeartbeat::class);
+    $heartbeat->available = true;
+    $heartbeat->startedAt = '2026-11-26T11:00:00+00:00';
+
+    $user = User::factory()->create();
+
+    $paused = Bot::factory()->for($user)->create([
+        'status' => BotStatus::Paused,
+        'desired_status' => BotStatus::Running,
+        'last_error' => 'Live trading is disabled by TRADING_LIVE_ENABLED=false.',
+        'last_successful_tick_at' => Carbon::parse('2026-11-26 11:59:00'),
+    ]);
+
+    $stale = Bot::factory()->for($user)->running()->create([
+        'desired_status' => BotStatus::Running,
+        'last_successful_tick_at' => Carbon::parse('2026-11-26 11:56:00'),
+    ]);
+
+    $error = Bot::factory()->for($user)->create([
+        'status' => BotStatus::Error,
+        'desired_status' => BotStatus::Running,
+        'last_error' => 'Exchange rejected the order.',
+        'last_successful_tick_at' => Carbon::parse('2026-11-26 11:59:00'),
+    ]);
+
+    Bot::factory()->for($user)->running()->create([
+        'desired_status' => BotStatus::Running,
+        'last_successful_tick_at' => Carbon::parse('2026-11-26 11:59:30'),
+    ]);
+
+    Bot::factory()->for($user)->create([
+        'status' => BotStatus::Paused,
+        'desired_status' => BotStatus::Running,
+        'last_error' => 'Archived bot.',
+        'deleted_at' => Carbon::parse('2026-11-26 11:59:00'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('botHealth', 3)
+            ->where('botHealth.0.id', $paused->id)
+            ->where('botHealth.0.issues', ['paused_by_engine'])
+            ->where('botHealth.0.can_resume', true)
+            ->where('botHealth.1.id', $stale->id)
+            ->where('botHealth.1.issues', ['stale'])
+            ->where('botHealth.1.can_resume', false)
+            ->where('botHealth.2.id', $error->id)
+            ->where('botHealth.2.issues', ['error'])
+            ->where('botHealth.2.can_resume', false)
+            ->etc());
+});
+
+it('does not mark bots stale without a fresh heartbeat or engine start time', function () {
+    $this->travelTo(Carbon::parse('2026-11-26 12:00:00'));
+
+    $heartbeat = app(EngineHeartbeat::class);
+    $heartbeat->available = false;
+
+    $user = User::factory()->create();
+    Bot::factory()->for($user)->running()->create([
+        'desired_status' => BotStatus::Running,
+        'last_successful_tick_at' => Carbon::parse('2026-11-26 11:50:00'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page->has('botHealth', 0)->etc());
+
+    $heartbeat->available = true;
+    $heartbeat->startedAt = null;
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page->has('botHealth', 0)->etc());
+});
+
+it('does not mark a bot stale during engine restart grace', function () {
+    $this->travelTo(Carbon::parse('2026-11-26 12:00:00'));
+
+    $heartbeat = app(EngineHeartbeat::class);
+    $heartbeat->available = true;
+    $heartbeat->startedAt = '2026-11-26T11:59:00+00:00';
+
+    $user = User::factory()->create();
+    Bot::factory()->for($user)->running()->create([
+        'desired_status' => BotStatus::Running,
+        'last_successful_tick_at' => Carbon::parse('2026-11-26 11:40:00'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page->has('botHealth', 0)->etc());
+});
+
+it('shares bot health in a partial reload', function () {
+    $this->travelTo(Carbon::parse('2026-11-26 12:00:00'));
+
+    $heartbeat = app(EngineHeartbeat::class);
+    $heartbeat->available = true;
+    $heartbeat->startedAt = '2026-11-26T11:00:00+00:00';
+
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create([
+        'status' => BotStatus::Paused,
+        'desired_status' => BotStatus::Running,
+        'last_error' => 'Paused by the engine.',
+    ]);
+
+    $response = $this->actingAs($user)
+        ->withHeaders([
+            'X-Inertia' => 'true',
+            'X-Inertia-Partial-Component' => 'Dashboard',
+            'X-Inertia-Partial-Data' => 'summary,botHealth',
+            'X-Inertia-Version' => app(HandleInertiaRequests::class)->version(request()),
+        ])
+        ->get(route('dashboard'));
+
+    $response->assertOk();
+
+    expect($response->json('props.botHealth'))->toHaveCount(1)
+        ->and($response->json('props.botHealth.0.id'))->toBe($bot->id);
+});
+
+it('surfaces a failed resume on the dashboard', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->live()->create([
+        'status' => BotStatus::Paused,
+        'desired_status' => BotStatus::Running,
+    ]);
+
+    $message = "Live trading is disabled by configuration; bot {$bot->id} cannot start in live mode.";
+
+    $this->actingAs($user)
+        ->from(route('dashboard'))
+        ->post(route('bots.start', $bot))
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHasErrors(['action' => $message]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page->where('errors.action', $message)->etc());
+});
+
 it('shows an expired engine heartbeat as a warning without mutating bots or orders', function () {
     $heartbeat = app(EngineHeartbeat::class);
     $heartbeat->available = false;
