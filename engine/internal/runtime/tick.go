@@ -967,6 +967,11 @@ func (r *Runtime) placeOrders(ctx context.Context, bot *Bot, active *gridState, 
 	maxNotional := mustDecimal(maxNotionalRaw)
 
 	placed := 0
+	positionLimitSkips := 0
+	projectedNotional := ""
+	defer func() {
+		r.recordPositionLimitSkips(ctx, bot, positionLimitSkips, projectedNotional)
+	}()
 	for index, intent := range intents {
 		if !intent.Price.IsPositive() || !intent.Quantity.IsPositive() {
 			r.riskEvent(ctx, bot.UserID, bot.ID, "risk.invalid_order", "critical", "Order skipped: price and quantity must be positive.", nil)
@@ -1001,7 +1006,8 @@ func (r *Runtime) placeOrders(ctx context.Context, bot *Bot, active *gridState, 
 			}
 		}
 		if projected.GreaterThan(maxNotional) {
-			r.riskEvent(ctx, bot.UserID, bot.ID, "risk.position_limit", "critical", "Order skipped: projected position exceeds the limit.", map[string]any{"projected_notional": projected.String()})
+			positionLimitSkips++
+			projectedNotional = projected.String()
 			continue
 		}
 

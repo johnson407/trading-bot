@@ -180,6 +180,27 @@ All risk and credential packages are proven against `risk.json` and
 and protective exits; paper order placement also applies its own open-order
 inventory and position reservations. Live order dispatch remains disabled.
 
+### Stale checks, risk-event throttling, and shutdown
+
+The runtime scheduler reconciles every second. A running bot is paused as stale
+only when **both** its last successful tick and this process's first scheduling
+of that bot are older than `max(180s, tick_interval_seconds + 30s)`. A restart
+therefore gives every running bot one full threshold to tick again; engine
+downtime alone does not pause it. If ticks keep failing through the grace, the
+normal `bot.stale` / `risk.stale_tick` pause-and-cancel path runs. Grace entries
+are dropped once a bot is no longer running.
+
+Position-limit blocks are counted per placement attempt. The runtime writes one
+`risk.position_limit` event with `orders_skipped` and `projected_notional`
+instead of one event per blocked order, and suppresses repeats for the same bot
+and event type for five minutes.
+
+On `SIGINT` or `SIGTERM` the engine cancels its root context, shuts down the
+HTTP server, and waits up to 20 seconds for the scheduler (including in-flight
+ticks), both Redis consumers, the heartbeat, the market-data feed and symbol
+syncer, and the stale-backtest sweeper. Both Compose files set
+`stop_grace_period: 25s`, so Docker does not preempt that drain.
+
 ### Backtest replay (phase 6.1–6.4)
 
 `internal/backtest` ports the PHP replay engine and runs it from the dedicated
