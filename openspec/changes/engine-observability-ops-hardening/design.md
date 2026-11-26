@@ -8,9 +8,10 @@ See `proposal.md` for motivation and the `bot-runtime` and `deployment` deltas f
 
 **Goals:**
 
-- One completion record per tick, including successful ticks, with enough fields to measure duration, order flow, fills, and grid replacement.
+- Exactly one completion record per started tick, including successful ticks, with enough fields to measure duration, outcome, order flow, fills, and grid replacement.
+- One correlation identifier shared by the completion record and the order, cancellation, fill, and reconciliation records produced by that tick.
 - Bounded production log growth and per-service memory, with values an operator can override.
-- Production fails closed when the plan listener is reachable beyond loopback without a token.
+- Production fails closed before trading starts when the plan listener is reachable beyond loopback without a token.
 - Keep changes out of order, risk, strategy, and fill semantics.
 
 **Non-Goals:**
@@ -22,37 +23,50 @@ See `proposal.md` for motivation and the `bot-runtime` and `deployment` deltas f
 
 ## Decisions
 
-### Tick-scoped statistics and one deferred completion record
+### Tick-scoped statistics, an explicit outcome, and one deferred record
 
-Add a `tickStats` value created after the bot is loaded and confirmed running. It carries a correlation ID, start time, outcome, and counters for orders placed and canceled, fills, and grid states. `tickBot` uses a named return and a deferred `logTickCompletion`, so every path that actually started a tick emits exactly one record. The deferred logger sets `outcome` to `failed` when the returned error is non-nil, `paused` when a pause path marked the stats, and `completed` otherwise. The correlation ID is `tick-<bot id>-<start UnixNano>`; it is included in the completion record and can be added to order/cancel records created within the tick.
+Add a `tickStats` value after the bot is loaded, confirmed running, and the tick claim succeeds. It carries a correlation ID, start time, outcome, failure detail, and counters for orders placed and canceled, fills, and grid states. The correlation ID is `tick-<bot id>-<start UnixNano>`.
 
-Counters are collected where the operation already happens: `placeOrders` returns the placed count, `applyCancels` and `syncGrid` report canceled orders, paper fills and live-applied fills report fill counts, and `syncGrid` reports created/matched/replaced plus level count. This avoids post-tick database queries and keeps the record accurate for the work the tick actually performed. `tickFailure` keeps its durable `last_error` and failure-count work but stops emitting a duplicate warning; the deferred record is the canonical per-tick record. `runDue` retains the panic log and adds duration.
+`tickBot` uses one deferred function for the whole tick. On panic it sets `outcome = panicked`, records the recovered value, emits the completion record, and re-panics so `runDue` keeps its existing panic handling. On a normal return it selects the outcome from explicit markers: `failed` when any failure path marked it, `paused` when the tick paused the bot, and `completed` otherwise. The deferred function emits exactly one record and never runs twice.
 
-Alternatives: query the database after each tick to reconstruct counts is more expensive and races with the next tick; log only at `runDue` cannot see grid or fill outcomes; a global metrics registry adds a dependency disproportionate to the need.
+The outcome is marked where the path is known, not inferred from a nil error:
 
-### Keep slog text output and let Docker supply JSON framing
+- `tickFailure` marks `failed` before it returns, including the first two failures where it intentionally returns nil. It keeps the durable `last_error` and consecutive-failure work but stops emitting its duplicate warning.
+- Every tick pause path marks `paused` before calling the pause helper.
+- A direct `return err` from a database or strategy update leaves no marker; the deferred function marks `failed` because the returned error is non-nil.
+- A panic is always `panicked`, even though the named return value is nil.
 
-The engine keeps `slog.NewTextHandler` and adds key/value fields. Docker's `json-file` driver already wraps each line as JSON for collection, and this avoids changing every existing log line and the local developer experience. The completion message is stable (`bot tick completed`) with machine-friendly field names.
+Counters are collected where the operation already happens: `placeOrders` returns the placed count, `applyCancels` and `syncGrid` report canceled orders, paper fills and live-applied fills report fill counts, and `syncGrid` reports created/matched/replaced plus level count. This avoids post-tick database queries and keeps the record accurate for the work the tick actually performed.
+
+The correlation ID is threaded through the tick's order placement, cancellation, paper-fill, live-fill, and reconciliation helpers so their records carry the same value. A helper that cannot currently emit a record still accepts the ID for future use; the completion record is the canonical tick record.
+
+Alternatives: query the database after each tick to reconstruct counts is more expensive and races with the next tick; log only at `runDue` cannot see grid or fill outcomes; inferring failure from a nil return is incorrect because `tickFailure` deliberately returns nil; a global metrics registry adds a dependency disproportionate to the need.
+
+### Keep slog text output and use Docker's json-file driver
+
+The engine keeps `slog.NewTextHandler` and adds key/value fields. Docker's `json-file` driver wraps each line as a JSON object with a `log` string; the completion message is stable (`bot tick completed`) with machine-friendly key/value fields inside that string. Documentation shows `jq -r .log` followed by field extraction rather than promising top-level JSON fields. The logging anchor sets `driver: json-file` explicitly because rotation options only apply to that driver.
 
 ### Static rotation with overridable memory limits
 
-Add a shared YAML logging anchor (`max-size: 10m`, `max-file: 3`, `compress: true`) to every production service. Add `mem_limit` to each service using environment-overridable defaults: app and Horizon 512 MiB, engine 512 MiB, PostgreSQL 512 MiB, scheduler 256 MiB, Redis 256 MiB, Nginx 128 MiB. Operators can raise a limit in `.env` without editing Compose. Values are deliberately conservative for a small NAS and are documented as starting points to tune from `docker stats`.
+Add a shared YAML logging anchor (`driver: json-file`, `max-size: 10m`, `max-file: 3`, `compress: true`) to every production service. Add `mem_limit` to each service using environment-overridable defaults: app and Horizon 512 MiB, engine 512 MiB, PostgreSQL 512 MiB, scheduler 256 MiB, Redis 256 MiB, Nginx 128 MiB. Operators can raise a limit in `.env` without editing Compose. Values are deliberately conservative for a small NAS and are documented as caps to tune from `docker stats`, not reservations.
 
-Alternatives: a single global limit cannot protect one runaway service; Swarm `deploy.resources` is ignored by plain Compose; unbounded logs already caused the operational concern.
+The default rotation favors bounded disk over long retention. A 60-second bot produces about 1,440 records per day, but ten one-second bots produce about 864,000 records per day; 10 MiB × 3 can rotate within hours at that rate. Documentation states the trade-off, shows how to raise the limits for the engine, and tells operators to check host RAM and disk before deploying.
 
-### Production-only fail-closed token validation
+Alternatives: a single global limit cannot protect one runaway service; Swarm `deploy.resources` is ignored by plain Compose; unbounded logs already caused the operational concern; JSON handler output would change every existing line and the local developer experience.
 
-The production Compose file requires `ENGINE_INTERNAL_TOKEN` with Compose's `${VAR:?message}` interpolation for both the app and engine services, so a missing value fails before containers start. The engine startup check replaces the current warning with an error only when `APP_ENV=production`, the listen host is not loopback, and the token is empty. Local development keeps the warning because its Compose network is trusted and its default token is empty.
+### Production-only fail-closed token validation before workers
 
-Alternatives: always failing would break the documented local stack; a warning alone leaves an exposed production endpoint unauthenticated; requiring TLS is out of scope for an internal Compose network.
+The production Compose file requires `ENGINE_INTERNAL_TOKEN` with Compose's `${VAR:?message}` interpolation for both the app and engine services, so a missing value fails before containers start. Independently, `config.Load` validates that a production configuration with a non-loopback listener has a non-empty token and returns an error. `main` calls `config.Load` before creating the database pool, Redis client, consumers, scheduler, or market feed, so a missing token cannot begin trading work. Local development keeps the warning because its Compose network is trusted and its default token is empty.
+
+Alternatives: validating next to the HTTP server starts workers first, which is too late for fail-closed; always failing would break the documented local stack; a warning alone leaves an exposed production endpoint unauthenticated; requiring TLS is out of scope for an internal Compose network.
 
 ## Risks / Trade-offs
 
-- [High-frequency tick logs add volume] → one record per tick at Info, bounded by 10 MiB × 3 per service; a 60-second bot produces 1,440 records per day.
+- [High-frequency tick logs add volume] → one record per tick at Info, bounded by 10 MiB × 3 per service; documentation states the retention trade-off and how to raise it for one-second bots.
 - [Counters may miss an operation performed inside a helper] → counters are added at the helper return points that already know the result, and a zero-count record still proves the tick ran.
-- [Memory limits can cause OOM restarts on a busy NAS] → defaults are overridable per service and documented; health-gated deployment surfaces restart loops.
+- [Memory limits can cause OOM restarts on a busy NAS] → defaults are overridable per service, documented as caps, and health-gated deployment surfaces restart loops.
 - [A missing token now blocks production startup] → this is the intended fail-closed behavior; the runbook documents generation and the Compose error names the variable.
-- [Log field changes can break ad-hoc parsers] → existing messages are kept; only new fields and the completion message are added.
+- [Log field changes can break ad-hoc parsers] → existing messages are kept; only new fields and the completion message are added, and docs describe the container-level JSON shape.
 
 ## Migration Plan
 

@@ -4,7 +4,7 @@
 
 ### Requirement: Automatic resume scope
 
-Automatic resume SHALL apply only to an engine-recorded stale-tick pause. A pause caused by a risk limit, protective exit, daily loss, kill-switch, reconciliation conflict, repeated tick failure, live-gate failure, or user action SHALL NOT resume automatically and SHALL remain paused until an operator explicitly resumes it.
+Automatic resume SHALL apply only to a non-archived paper bot with a current, engine-recorded stale-tick pause. A live bot, a bot on an unsupported paper exchange, and a pause caused by a risk limit, protective exit, daily loss, kill-switch, reconciliation conflict, repeated tick failure, live-gate failure, strategy stop, or user action SHALL NOT resume automatically and SHALL remain paused until an operator explicitly resumes it.
 
 #### Scenario: Risk-limit pause is not resumed
 
@@ -31,7 +31,17 @@ Automatic resume SHALL apply only to an engine-recorded stale-tick pause. A paus
 - **WHEN** a bot is paused after three consecutive tick failures
 - **THEN** it remains paused until an operator resumes it
 
-#### Scenario: Only stale pauses are eligible
+#### Scenario: Live bot is not resumed
 
-- **WHEN** a paused bot with desired status running is evaluated for auto-resume
-- **THEN** it resumes only when the recorded pause cause is a stale-tick pause
+- **WHEN** a live bot is paused with desired status running
+- **THEN** it does not resume automatically on engine start and requires an explicit user start through the live checks
+
+#### Scenario: Unsupported exchange is not resumed
+
+- **WHEN** a paper bot uses an exchange the Go runtime does not support for paper trading
+- **THEN** it does not resume automatically
+
+#### Scenario: Only current stale pauses are eligible
+
+- **WHEN** a paused paper bot with desired status running is evaluated for auto-resume
+- **THEN** it resumes only when the recorded pause cause is a current stale-tick pause
