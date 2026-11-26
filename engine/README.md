@@ -183,8 +183,8 @@ inventory and position reservations. Live order dispatch remains disabled.
 ### Stale checks, risk-event throttling, and shutdown
 
 The runtime scheduler reconciles every second. A running bot is paused as stale
-only when **both** its last successful tick and this process's first scheduling
-of that bot are older than `max(180s, tick_interval_seconds + 30s)`. A restart
+only when **both** its last successful tick and this process's first observation
+of it running are older than `max(180s, tick_interval_seconds + 30s)`. A restart
 therefore gives every running bot one full threshold to tick again; engine
 downtime alone does not pause it. If ticks keep failing through the grace, the
 normal `bot.stale` / `risk.stale_tick` pause-and-cancel path runs. Grace entries

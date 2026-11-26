@@ -302,11 +302,13 @@ func run() error {
 	// workers together within one bounded window.
 	stopEngine()
 
+	// HTTP shutdown and the worker drain share one absolute budget, so a slow
+	// HTTP shutdown cannot leave a second full timeout for the deferred path.
 	shutdownContext, cancel := context.WithTimeout(context.Background(), shutdownDrainTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownContext); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
+		logger.Warn("http server shutdown did not complete", "error", err)
 	}
 	if !drainWait(shutdownContext, &workers) {
 		logger.Warn("engine drain timed out", "timeout", shutdownDrainTimeout.String())

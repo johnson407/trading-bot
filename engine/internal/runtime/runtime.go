@@ -86,6 +86,11 @@ func WithNow(now func() time.Time) Option {
 	}
 }
 
+type riskEventKey struct {
+	botID int64
+	typ   string
+}
+
 // Runtime is a PostgreSQL-backed trading runtime.
 type Runtime struct {
 	pool               *pgxpool.Pool
@@ -101,7 +106,7 @@ type Runtime struct {
 	syncMu             sync.Mutex
 	firstScheduled     map[int64]time.Time
 	firstScheduledMu   sync.Mutex
-	riskEventNotBefore map[string]time.Time
+	riskEventNotBefore map[riskEventKey]time.Time
 	riskEventMu        sync.Mutex
 	ticks              sync.WaitGroup
 }
@@ -121,7 +126,7 @@ func New(pool *pgxpool.Pool, market Market, logger *slog.Logger, options ...Opti
 		lastOrderSync:      map[int64]time.Time{},
 		orderSyncNotBefore: map[int64]time.Time{},
 		firstScheduled:     map[int64]time.Time{},
-		riskEventNotBefore: map[string]time.Time{},
+		riskEventNotBefore: map[riskEventKey]time.Time{},
 	}
 	for _, option := range options {
 		option(runtime)
@@ -572,6 +577,7 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 		staleIDs = append(staleIDs, bot.id)
 	}
 	r.pruneFirstScheduled(runningIDs)
+	r.pruneRiskEventCooldowns(runningIDs)
 
 	for _, id := range staleIDs {
 		botID := id
@@ -770,6 +776,17 @@ func (r *Runtime) pruneFirstScheduled(running map[int64]struct{}) {
 	}
 }
 
+func (r *Runtime) pruneRiskEventCooldowns(running map[int64]struct{}) {
+	r.riskEventMu.Lock()
+	defer r.riskEventMu.Unlock()
+
+	for key := range r.riskEventNotBefore {
+		if _, ok := running[key.botID]; !ok {
+			delete(r.riskEventNotBefore, key)
+		}
+	}
+}
+
 // allowRiskEvent reports whether a risk event for this bot and type is outside
 // its cooldown, and records the next allowed time when it is. A zero bot ID or
 // cooldown skips throttling.
@@ -779,7 +796,7 @@ func (r *Runtime) allowRiskEvent(botID int64, typ string, cooldown time.Duration
 	}
 
 	at := r.now()
-	key := fmt.Sprintf("%d:%s", botID, typ)
+	key := riskEventKey{botID: botID, typ: typ}
 
 	r.riskEventMu.Lock()
 	defer r.riskEventMu.Unlock()
@@ -792,6 +809,15 @@ func (r *Runtime) allowRiskEvent(botID int64, typ string, cooldown time.Duration
 	return true
 }
 
+// releaseRiskEvent clears a reservation when the event could not be written, so
+// the next tick can retry instead of losing the event to the cooldown.
+func (r *Runtime) releaseRiskEvent(botID int64, typ string) {
+	r.riskEventMu.Lock()
+	defer r.riskEventMu.Unlock()
+
+	delete(r.riskEventNotBefore, riskEventKey{botID: botID, typ: typ})
+}
+
 // recordPositionLimitSkips writes at most one position-limit event per bot per
 // cooldown window, with the number of orders blocked during this attempt.
 func (r *Runtime) recordPositionLimitSkips(ctx context.Context, bot *Bot, skipped int, projectedNotional string) {
@@ -799,10 +825,12 @@ func (r *Runtime) recordPositionLimitSkips(ctx context.Context, bot *Bot, skippe
 		return
 	}
 
-	r.riskEvent(ctx, bot.UserID, bot.ID, "risk.position_limit", "critical",
+	if err := r.riskEvent(ctx, bot.UserID, bot.ID, "risk.position_limit", "critical",
 		fmt.Sprintf("%d order(s) skipped: projected position exceeds the limit.", skipped),
 		map[string]any{"orders_skipped": skipped, "projected_notional": projectedNotional},
-	)
+	); err != nil {
+		r.releaseRiskEvent(bot.ID, "risk.position_limit")
+	}
 }
 
 // FeedSymbols returns the distinct public symbols the market-data feed must
@@ -867,16 +895,23 @@ func (r *Runtime) activity(ctx context.Context, userID, botID int64, typ, severi
 	}
 }
 
-func (r *Runtime) riskEvent(ctx context.Context, userID, botID int64, typ, severity, message string, context map[string]any) {
-	encoded, _ := json.Marshal(context)
-	_, err := r.pool.Exec(ctx,
+func (r *Runtime) riskEvent(ctx context.Context, userID, botID int64, typ, severity, message string, context map[string]any) error {
+	encoded, err := json.Marshal(context)
+	if err != nil {
+		r.logger.Error("encode risk event context failed", "type", typ, "error_type", fmt.Sprintf("%T", err))
+		return err
+	}
+	_, err = r.pool.Exec(ctx,
 		`INSERT INTO risk_events (user_id, bot_id, type, severity, message, context, created_at)
 		 VALUES ($1, NULLIF($2, 0), $3, $4, $5, $6::jsonb, now())`,
 		userID, botID, typ, severity, message, string(encoded),
 	)
 	if err != nil {
 		r.logger.Error("record risk event failed", "type", typ, "error_type", fmt.Sprintf("%T", err))
+		return err
 	}
+
+	return nil
 }
 
 func fixed(value decimal.Decimal) string {

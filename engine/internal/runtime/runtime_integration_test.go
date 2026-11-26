@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +23,34 @@ type fixedMarket struct {
 
 func (m *fixedMarket) Last(context.Context, string, string) (decimal.Decimal, error) {
 	return decimal.MustParse(m.price), nil
+}
+
+// blockingMarket holds a tick in flight until its context is canceled and the
+// test releases it. It records both observations so the scheduler drain can be
+// asserted without sleeping for a fixed duration.
+type blockingMarket struct {
+	started    chan struct{}
+	canceled   chan struct{}
+	release    chan struct{}
+	startOnce  sync.Once
+	cancelOnce sync.Once
+}
+
+func newBlockingMarket() *blockingMarket {
+	return &blockingMarket{
+		started:  make(chan struct{}),
+		canceled: make(chan struct{}),
+		release:  make(chan struct{}),
+	}
+}
+
+func (m *blockingMarket) Last(ctx context.Context, _, _ string) (decimal.Decimal, error) {
+	m.startOnce.Do(func() { close(m.started) })
+	<-ctx.Done()
+	m.cancelOnce.Do(func() { close(m.canceled) })
+	<-m.release
+
+	return decimal.Decimal{}, ctx.Err()
 }
 
 // TestRuntimeControlAndTickIntegration exercises the PostgreSQL-backed control
@@ -869,6 +898,75 @@ func TestRestartGraceStillPausesAfterThreshold(t *testing.T) {
 	}
 	assertBotState(t, pool, botID, "paused", "running")
 	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.stale_tick'`, 1, botID)
+}
+
+func TestRunSchedulerDrainsInFlightTick(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	_, _ = insertStaleRunningBot(t, ctx, pool)
+
+	market := newBlockingMarket()
+	trading := runtime.New(pool, market, nil)
+
+	schedulerCtx, cancel := context.WithCancel(context.Background())
+	schedulerDone := make(chan struct{})
+	go func() {
+		defer close(schedulerDone)
+		trading.RunScheduler(schedulerCtx)
+	}()
+
+	defer func() {
+		cancel()
+		select {
+		case <-market.release:
+		default:
+			close(market.release)
+		}
+		select {
+		case <-schedulerDone:
+		case <-time.After(5 * time.Second):
+			t.Error("scheduler did not stop during cleanup")
+		}
+	}()
+
+	select {
+	case <-market.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("scheduler did not start an in-flight tick")
+	}
+
+	cancel()
+
+	select {
+	case <-market.canceled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("in-flight tick did not observe cancellation")
+	}
+
+	// The tick is still blocked in the market call, so RunScheduler must not
+	// return until the tick goroutine drains.
+	select {
+	case <-schedulerDone:
+		t.Fatal("RunScheduler returned before the in-flight tick drained")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	close(market.release)
+
+	select {
+	case <-schedulerDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunScheduler did not return after the tick drained")
+	}
 }
 
 func TestPositionLimitEventsAggregateAndThrottle(t *testing.T) {

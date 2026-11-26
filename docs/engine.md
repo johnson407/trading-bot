@@ -204,10 +204,10 @@ Laravel exposes the same freshness check at `GET /health/engine`, returning
 
 The tick scheduler reconciles once per second. A running bot is stale only
 when both its own last successful tick and the time this engine process first
-scheduled the bot are older than `max(180s, tick_interval_seconds + 30s)`. This
-per-bot restart grace means engine downtime longer than the threshold does not
-pause a bot before its first post-restart tick. If ticks keep failing for the
-full grace, the usual `bot.stale` / `risk.stale_tick` pause-and-cancel runs.
+observed it running are older than `max(180s, tick_interval_seconds + 30s)`.
+This per-bot restart grace means engine downtime longer than the threshold does
+not pause a bot before its first post-restart tick. If ticks keep failing for
+the full grace, the usual `bot.stale` / `risk.stale_tick` pause-and-cancel runs.
 
 Position-limit blocks are counted per placement attempt: the engine writes one
 `risk.position_limit` event with `orders_skipped` and `projected_notional` and
