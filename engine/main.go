@@ -87,6 +87,13 @@ func run() error {
 	}
 	defer pool.Close()
 
+	schemaContext, cancelSchemaWait := context.WithTimeout(context.Background(), 60*time.Second)
+	err = runtime.WaitForPauseProvenance(schemaContext, pool, logger)
+	cancelSchemaWait()
+	if err != nil {
+		return fmt.Errorf("pause provenance schema: %w", err)
+	}
+
 	redisClient := goredis.NewClient(&goredis.Options{
 		Addr:     cfg.Redis.Addr(),
 		Password: cfg.Redis.Password,

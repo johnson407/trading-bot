@@ -37,7 +37,9 @@ realized P&L, plus optional unrealized P&L at the current mark.
 - Archived bots are excluded from per-bot evaluation and order placement. Their
   realized P&L and residual balances still count in the account-wide daily-loss
   and equity aggregates, because archiving does not close the position.
-- A paused bot is never resumed by the monitor.
+- A paused bot is never resumed by the day's loss monitor. The startup-only
+  stale-tick recovery does not apply to a daily-loss, risk, protective-exit, or
+  kill-switch pause.
 
 ## Protective exits
 

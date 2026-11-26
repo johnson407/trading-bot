@@ -14,6 +14,7 @@ it('rejects engine-reserved activity types from user-facing writes', function (s
     'bot.stale',
     'bot.balance_synced',
     'bot.exit_guard_triggered',
+    'bot.auto_resumed',
     'order.filled',
     'orders.synced',
 ])->throws(InvalidArgumentException::class);

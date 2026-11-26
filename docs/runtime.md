@@ -111,8 +111,13 @@ There is no PHP-to-Go drain, adopt, or no-overlap runbook; the cutover is a
 direct swap. Open orders written by the engine are durable in PostgreSQL and are
 reconciled by the next tick after a restart.
 
-A risk or exit-guard breach pauses the bot and cancels its orders. Nothing resumes
-automatically; an operator must start it again.
+A risk, protective-exit, daily-loss, kill-switch, reconciliation, live-gate,
+strategy-stop, tick-failure, or user pause never resumes automatically; an
+operator must start it again. The one exception is startup recovery: once per
+engine process, before the stale check, a non-archived paper Binance bot whose
+recorded pause cause is `stale_tick` is resumed with a fresh first-tick grace.
+Live bots, every safety pause, and legacy rows with no recorded cause stay
+paused.
 
 ## Backtests
 

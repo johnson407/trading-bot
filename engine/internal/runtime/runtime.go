@@ -109,6 +109,7 @@ type Runtime struct {
 	riskEventNotBefore map[riskEventKey]time.Time
 	riskEventMu        sync.Mutex
 	ticks              sync.WaitGroup
+	autoResumePending  bool
 }
 
 // New builds a runtime. A nil logger discards logs.
@@ -127,6 +128,7 @@ func New(pool *pgxpool.Pool, market Market, logger *slog.Logger, options ...Opti
 		orderSyncNotBefore: map[int64]time.Time{},
 		firstScheduled:     map[int64]time.Time{},
 		riskEventNotBefore: map[riskEventKey]time.Time{},
+		autoResumePending:  true,
 	}
 	for _, option := range options {
 		option(runtime)
@@ -203,23 +205,22 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 			if bot.live() {
 				// Pausing must also remove any resting live orders. A refused
 				// start is not allowed to leave exchange orders working.
-				r.pause(ctx, bot, message, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
-
-				return nil
+				return r.pause(ctx, bot, pauseCauseLiveGate, message, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
 			}
 
 			_, err := r.pool.Exec(ctx,
-				`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
-				bot.ID, message,
+				`UPDATE bots
+				    SET status = 'paused', last_error = $2, pause_reason = $3,
+				        pause_reason_recorded_at = now(), updated_at = now()
+				  WHERE id = $1 AND deleted_at IS NULL`,
+				bot.ID, message, pauseCauseUnsupportedExchange.String(),
 			)
 
 			return err
 		}
 		if bot.live() {
 			if err := r.liveBalanceAllowsStart(ctx, bot); err != nil {
-				r.pause(ctx, bot, "Live start refused: "+err.Error(), "bot.live_start_refused", "risk.live_start_refused", "critical")
-
-				return nil
+				return r.pause(ctx, bot, pauseCauseLiveGate, "Live start refused: "+err.Error(), "bot.live_start_refused", "risk.live_start_refused", "critical")
 			}
 		}
 		if bot.StrategyReset {
@@ -246,13 +247,23 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 		_, err = r.pool.Exec(ctx,
 			`UPDATE bots
 			    SET status = 'running', last_tick_at = NULL, last_successful_tick_at = now(),
-			        consecutive_failures = 0, last_error = NULL, updated_at = now()
+			        consecutive_failures = 0, last_error = NULL,
+			        pause_reason = NULL, pause_reason_recorded_at = NULL, updated_at = now()
 			  WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
 			command.BotID, command.UserID,
 		)
+	} else if status == "paused" {
+		_, err = r.pool.Exec(ctx,
+			`UPDATE bots
+			    SET status = 'paused', pause_reason = $2, pause_reason_recorded_at = now(), updated_at = now()
+			  WHERE id = $1 AND user_id = $3 AND deleted_at IS NULL`,
+			command.BotID, pauseCauseUser.String(), command.UserID,
+		)
 	} else {
 		_, err = r.pool.Exec(ctx,
-			`UPDATE bots SET status = $2, updated_at = now() WHERE id = $1 AND user_id = $3 AND deleted_at IS NULL`,
+			`UPDATE bots
+			    SET status = $2, pause_reason = NULL, pause_reason_recorded_at = NULL, updated_at = now()
+			  WHERE id = $1 AND user_id = $3 AND deleted_at IS NULL`,
 			command.BotID, status, command.UserID,
 		)
 	}
@@ -385,15 +396,18 @@ func (r *Runtime) killSwitch(ctx context.Context, command protocol.Envelope) err
 		if err := runBotCommand(ctx, func(ctx context.Context) error {
 			message := "Kill-switch activated; bot paused and open orders canceled."
 			if _, err := r.pool.Exec(ctx,
-				`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
-				botID, message,
+				`UPDATE bots
+				    SET status = 'paused', last_error = $2, pause_reason = $3,
+				        pause_reason_recorded_at = now(), updated_at = now()
+				  WHERE id = $1 AND deleted_at IS NULL`,
+				botID, message, pauseCauseKillSwitch.String(),
 			); err != nil {
 				return fmt.Errorf("pause bot %d: %w", botID, err)
 			}
 			if _, err := r.cancelOpenOrders(ctx, command.UserID, botID, "kill_switch"); err != nil {
 				return fmt.Errorf("cancel bot %d orders: %w", botID, err)
 			}
-			if _, err := r.pool.Exec(ctx, `UPDATE bots SET kill_switch_requested_at = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, botID); err != nil {
+			if _, err := r.pool.Exec(ctx, `UPDATE bots SET kill_switch_requested_at = NULL WHERE id = $1 AND deleted_at IS NULL`, botID); err != nil {
 				return err
 			}
 
@@ -457,6 +471,12 @@ func (r *Runtime) Reconcile(ctx context.Context) error {
 }
 
 func (r *Runtime) reconcile(ctx context.Context) error {
+	if r.autoResumePending {
+		if err := r.autoResumeStalePausedBots(ctx); err != nil {
+			r.logger.Error("auto-resume of stale-paused bots failed", "error_type", fmt.Sprintf("%T", err))
+		}
+	}
+
 	rows, err := r.pool.Query(ctx,
 		`SELECT id FROM bots
 		 WHERE deleted_at IS NULL
@@ -592,12 +612,88 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 			if bot.Status != "running" {
 				return nil
 			}
-			r.pause(ctx, bot, "No successful tick within the stale-tick threshold. Bot paused and open orders canceled.", "bot.stale", "risk.stale_tick", "critical")
-			return nil
+			return r.pause(ctx, bot, pauseCauseStaleTick, "No successful tick within the stale-tick threshold. Bot paused and open orders canceled.", "bot.stale", "risk.stale_tick", "critical")
 		}); err != nil {
 			r.logger.Error("stale-bot reconciliation failed", "bot_id", botID, "error_type", fmt.Sprintf("%T", err))
 		}
 	}
+
+	return nil
+}
+
+// autoResumeStalePausedBots recovers paper bots that were stale-paused before
+// this process started. It runs once per process, before desired-status drift
+// and stale checks, and never resumes a live bot or a safety pause.
+func (r *Runtime) autoResumeStalePausedBots(ctx context.Context) error {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, user_id FROM bots
+		  WHERE deleted_at IS NULL
+		    AND status = 'paused'
+		    AND desired_status = 'running'
+		    AND mode = 'paper'
+		    AND exchange = 'binance'
+		    AND pause_reason = $1
+		    AND pause_reason_recorded_at = updated_at
+		    AND kill_switch_requested_at IS NULL
+		  ORDER BY id`,
+		pauseCauseStaleTick.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("load stale-paused bots: %w", err)
+	}
+	defer rows.Close()
+
+	type candidate struct {
+		id     int64
+		userID int64
+	}
+	var candidates []candidate
+	for rows.Next() {
+		var c candidate
+		if err := rows.Scan(&c.id, &c.userID); err != nil {
+			return err
+		}
+		candidates = append(candidates, c)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, c := range candidates {
+		candidate := c
+		if err := withBotLock(ctx, candidate.id, func(ctx context.Context) error {
+			tag, err := r.pool.Exec(ctx,
+				`UPDATE bots
+				    SET status = 'running', pause_reason = NULL, pause_reason_recorded_at = NULL,
+				        last_error = NULL, updated_at = now()
+				  WHERE id = $1
+				    AND deleted_at IS NULL
+				    AND status = 'paused'
+				    AND desired_status = 'running'
+				    AND mode = 'paper'
+				    AND exchange = 'binance'
+				    AND pause_reason = $2
+				    AND pause_reason_recorded_at = updated_at
+				    AND kill_switch_requested_at IS NULL`,
+				candidate.id, pauseCauseStaleTick.String(),
+			)
+			if err != nil {
+				return err
+			}
+			if tag.RowsAffected() == 0 {
+				return nil
+			}
+
+			r.activity(ctx, candidate.userID, candidate.id, "bot.auto_resumed", "info", "Bot auto-resumed after a stale-tick pause.", map[string]any{"cause": pauseCauseStaleTick.String()})
+			r.logger.Info("bot auto-resumed", "bot_id", candidate.id, "cause", pauseCauseStaleTick.String())
+
+			return nil
+		}); err != nil {
+			return fmt.Errorf("auto-resume bot %d: %w", candidate.id, err)
+		}
+	}
+
+	r.autoResumePending = false
 
 	return nil
 }
@@ -611,13 +707,18 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 		return err
 	}
 	if bot.KillSwitchAt != nil {
-		if _, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'paused', updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx,
+			`UPDATE bots
+			    SET status = 'paused', pause_reason = $2, pause_reason_recorded_at = now(), updated_at = now()
+			  WHERE id = $1 AND deleted_at IS NULL`,
+			bot.ID, pauseCauseKillSwitch.String(),
+		); err != nil {
 			return err
 		}
 		if _, err := r.cancelOpenOrders(ctx, bot.UserID, bot.ID, "kill_switch"); err != nil {
 			return err
 		}
-		if _, err := r.pool.Exec(ctx, `UPDATE bots SET kill_switch_requested_at = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx, `UPDATE bots SET kill_switch_requested_at = NULL WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
 			return err
 		}
 		return nil
@@ -657,30 +758,42 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 	switch bot.DesiredStatus {
 	case "running":
 		if bot.live() && !r.liveTrading {
-			r.pause(ctx, bot, liveDisabledMessage, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
-
-			return nil
+			return r.pause(ctx, bot, pauseCauseLiveGate, liveDisabledMessage, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
 		}
 		if bot.Exchange != "binance" && !bot.live() {
-			return r.markPaused(ctx, bot, fmt.Sprintf("Exchange %s is not supported by the Go runtime for paper bots yet. The bot was paused.", bot.Exchange))
+			return r.markPaused(ctx, bot, pauseCauseUnsupportedExchange, fmt.Sprintf("Exchange %s is not supported by the Go runtime for paper bots yet. The bot was paused.", bot.Exchange))
 		}
 		if bot.live() {
 			if err := r.liveBalanceAllowsStart(ctx, bot); err != nil {
-				r.pause(ctx, bot, "Live start refused: "+err.Error(), "bot.live_start_refused", "risk.live_start_refused", "critical")
-
-				return nil
+				return r.pause(ctx, bot, pauseCauseLiveGate, "Live start refused: "+err.Error(), "bot.live_start_refused", "risk.live_start_refused", "critical")
 			}
 		}
-		_, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'running', last_error = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
+		_, err := r.pool.Exec(ctx,
+			`UPDATE bots
+			    SET status = 'running', last_error = NULL,
+			        pause_reason = NULL, pause_reason_recorded_at = NULL, updated_at = now()
+			  WHERE id = $1 AND deleted_at IS NULL`,
+			bot.ID,
+		)
 		return err
 	case "paused":
-		_, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'paused', updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
+		_, err := r.pool.Exec(ctx,
+			`UPDATE bots
+			    SET status = 'paused', pause_reason = $2, pause_reason_recorded_at = now(), updated_at = now()
+			  WHERE id = $1 AND deleted_at IS NULL`,
+			bot.ID, pauseCauseUser.String(),
+		)
 		if err != nil {
 			return err
 		}
 		return nil
 	case "stopped":
-		if _, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'stopped', updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx,
+			`UPDATE bots
+			    SET status = 'stopped', pause_reason = NULL, pause_reason_recorded_at = NULL, updated_at = now()
+			  WHERE id = $1 AND deleted_at IS NULL`,
+			bot.ID,
+		); err != nil {
 			return err
 		}
 		_, err = r.cancelOpenOrders(ctx, bot.UserID, bot.ID, "bot.stop")
@@ -690,8 +803,15 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 	return nil
 }
 
-func (r *Runtime) markPaused(ctx context.Context, bot *Bot, message string) error {
-	_, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
+func (r *Runtime) markPaused(ctx context.Context, bot *Bot, cause pauseCause, message string) error {
+	cause = requirePauseCause(cause)
+	_, err := r.pool.Exec(ctx,
+		`UPDATE bots
+		    SET status = 'paused', last_error = $2, pause_reason = $3,
+		        pause_reason_recorded_at = now(), updated_at = now()
+		  WHERE id = $1 AND deleted_at IS NULL`,
+		bot.ID, message, cause.String(),
+	)
 	return err
 }
 

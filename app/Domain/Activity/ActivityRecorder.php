@@ -47,6 +47,7 @@ class ActivityRecorder
         'bot.daily_loss_paused',
         'bot.exit_guard_triggered',
         'bot.live_trading_disabled',
+        'bot.auto_resumed',
         'exchange.failure_threshold',
         'order.canceled',
         'order.cancel_failed',

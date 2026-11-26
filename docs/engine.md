@@ -209,6 +209,17 @@ This per-bot restart grace means engine downtime longer than the threshold does
 not pause a bot before its first post-restart tick. If ticks keep failing for
 the full grace, the usual `bot.stale` / `risk.stale_tick` pause-and-cancel runs.
 
+At startup, before desired-status drift and stale checks, the engine runs one
+recovery pass for stale-paused paper Binance bots. It resumes only rows with
+`status = paused`, `desired_status = running`, `pause_reason = stale_tick`,
+`pause_reason_recorded_at = updated_at`, no archive timestamp, and no pending
+kill-switch request. The pass runs once per process; live bots and every
+safety, user, reconciliation, live-gate, strategy-stop, and tick-failure pause
+stay paused. Recovery clears the pause provenance and leaves
+`last_successful_tick_at` unchanged, so the first-schedule grace covers the
+first tick after resume. It records a `bot.auto_resumed` activity and a
+structured `bot auto-resumed` log line.
+
 Position-limit blocks are counted per placement attempt: the engine writes one
 `risk.position_limit` event with `orders_skipped` and `projected_notional` and
 suppresses repeats for the same bot and event type for five minutes.
@@ -226,11 +237,13 @@ that drain before forcing termination.
 | `bots.desired_status` | Laravel | User intent: set on start, pause, stop, and kill-switch; `idle` on create. Added by a Laravel migration and backfilled from the old `status`. |
 | `bots.status` | Go engine | Runtime state. The engine applies `desired_status` and must not set running over a pause, stop, or kill-switch. |
 | `bots.last_error` | Go engine | Runtime failure text. Laravel does not write it after the ownership migration. |
+| `bots.pause_reason` | Go engine | Fixed cause of the latest pause: `stale_tick`, `risk_limit`, `protective_exit`, `daily_loss`, `kill_switch`, `reconciliation_conflict`, `tick_failure`, `live_gate`, `strategy_stop`, `unsupported_exchange`, or `user`. Written in the same update as `status` and `last_error`; cleared on user start, stop, and successful auto-resume. Null for legacy rows. |
+| `bots.pause_reason_recorded_at` | Go engine | Time the cause was recorded. Must equal `updated_at` for startup auto-resume; any later write without refreshing it makes the cause stale and ineligible. |
 
 Laravel now writes only `desired_status` on start, pause, stop, and kill-switch;
-it no longer writes `status` or `last_error`, and the PHP tick pipeline is no
-longer scheduled. The column exists so the cutover and the Go engine have a
-single source of user intent.
+it no longer writes `status`, `last_error`, or the pause-provenance columns, and
+the PHP tick pipeline is no longer scheduled. The column exists so the cutover
+and the Go engine have a single source of user intent.
 
 ## Audit and receipts
 

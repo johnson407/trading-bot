@@ -208,8 +208,7 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) (retErr error) {
 	defer func() { stats.finish(r, recover(), retErr) }()
 
 	if bot.live() && !r.liveTrading {
-		r.pause(ctx, bot, liveDisabledMessage, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
-		return nil
+		return r.pause(ctx, bot, pauseCauseLiveGate, liveDisabledMessage, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
 	}
 
 	// Apply exchange fills before the exit guard and daily-loss checks so a fill
@@ -241,8 +240,7 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) (retErr error) {
 	rules := risk.NewExitRules(bot.StopLossPercent, bot.TakeProfitPercent, bot.RangeLow, bot.RangeHigh)
 	if signal := rules.Evaluate(price.String(), bot.AverageEntry.String(), bot.Base.String()); signal != nil {
 		message := fmt.Sprintf("%s triggered at %s (threshold %s). Bot paused and open orders canceled.", signal.Label(), signal.MarkPrice, signal.Threshold)
-		r.pause(ctx, bot, message, "bot.exit_guard_triggered", signal.RiskEventType(), "warning")
-		return nil
+		return r.pause(ctx, bot, pauseCauseProtectiveExit, message, "bot.exit_guard_triggered", signal.RiskEventType(), "warning")
 	}
 
 	limit, loss, account, err := r.dailyLoss(ctx, bot, price)
@@ -254,7 +252,9 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) (retErr error) {
 		if account {
 			message = fmt.Sprintf("Account daily loss limit reached (%s). Bot paused and open orders canceled.", loss.String())
 		}
-		r.pause(ctx, bot, message, "bot.daily_loss_paused", "risk.daily_loss", "warning")
+		if err := r.pause(ctx, bot, pauseCauseDailyLoss, message, "bot.daily_loss_paused", "risk.daily_loss", "warning"); err != nil {
+			return err
+		}
 		if account {
 			r.pauseOtherBots(ctx, bot.UserID, bot.ID, message)
 		}
@@ -395,8 +395,7 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) (retErr error) {
 	}
 
 	if decision.Stop || impl.ShouldStop(input.WithState(decision.State)) {
-		r.pause(ctx, bot, "The strategy requested that the bot stop.", "bot.strategy_stop", "", "warning")
-		return nil
+		return r.pause(ctx, bot, pauseCauseStrategyStop, "The strategy requested that the bot stop.", "bot.strategy_stop", "", "warning")
 	}
 
 	if err := r.persistStrategy(ctx, bot.ID, decision.State, liveApplied); err != nil {
@@ -443,8 +442,7 @@ func (r *Runtime) tickFailure(ctx context.Context, bot *Bot, cause error) error 
 		return err
 	}
 	if failures >= 3 {
-		r.pause(ctx, bot, "Bot paused after 3 consecutive tick failures: "+message, "exchange.failure_threshold", "exchange.failure_threshold", "critical")
-		return nil
+		return r.pause(ctx, bot, pauseCauseTickFailure, "Bot paused after 3 consecutive tick failures: "+message, "exchange.failure_threshold", "exchange.failure_threshold", "critical")
 	}
 	return nil
 }
@@ -679,17 +677,27 @@ func (r *Runtime) pauseOtherBots(ctx context.Context, userID, currentBotID int64
 		if err != nil || other.Status != "running" {
 			continue
 		}
-		r.pause(withTickStats(ctx, nil), other, message, "bot.daily_loss_paused", "risk.daily_loss", "warning")
+		if err := r.pause(withTickStats(ctx, nil), other, pauseCauseDailyLoss, message, "bot.daily_loss_paused", "risk.daily_loss", "warning"); err != nil {
+			r.logger.Error("pause another bot after account daily loss failed", "bot_id", other.ID, "error_type", fmt.Sprintf("%T", err))
+		}
 	}
 }
 
-func (r *Runtime) pause(ctx context.Context, bot *Bot, message, activityType, riskType, severity string) {
+func (r *Runtime) pause(ctx context.Context, bot *Bot, cause pauseCause, message, activityType, riskType, severity string) error {
 	tickStatsFrom(ctx).markPaused()
 
-	_, _ = r.pool.Exec(ctx,
-		`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
-		bot.ID, message,
-	)
+	cause = requirePauseCause(cause)
+	if _, err := r.pool.Exec(ctx,
+		`UPDATE bots
+		    SET status = 'paused', last_error = $2, pause_reason = $3,
+		        pause_reason_recorded_at = now(), updated_at = now()
+		  WHERE id = $1 AND deleted_at IS NULL`,
+		bot.ID, message, cause.String(),
+	); err != nil {
+		r.logger.Error("pause write failed", "bot_id", bot.ID, "cause", cause.String(), "error_type", fmt.Sprintf("%T", err))
+
+		return fmt.Errorf("pause bot %d: %w", bot.ID, err)
+	}
 	if _, err := r.cancelOpenOrders(ctx, bot.UserID, bot.ID, activityType); err != nil {
 		_, _ = r.pool.Exec(ctx, `UPDATE bots SET cancel_retry_requested = true, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
 		r.logger.Error("pause could not cancel orders", "bot_id", bot.ID, "error_type", fmt.Sprintf("%T", err))
@@ -700,6 +708,8 @@ func (r *Runtime) pause(ctx context.Context, bot *Bot, message, activityType, ri
 	if riskType != "" {
 		r.riskEvent(ctx, bot.UserID, bot.ID, riskType, severity, message, nil)
 	}
+
+	return nil
 }
 
 func (r *Runtime) cancelOpenOrders(ctx context.Context, userID, botID int64, reason string) ([]openOrder, error) {
