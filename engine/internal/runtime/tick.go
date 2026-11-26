@@ -236,16 +236,7 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 }
 
 func (r *Runtime) decide(ctx context.Context, impl strategy.Strategy, input strategy.Input) (strategy.Decision, error) {
-	if !input.State.IsNew() {
-		return impl.OnTick(input)
-	}
-
-	initialized, err := impl.Initialize(input)
-	if err != nil {
-		return strategy.Decision{}, err
-	}
-
-	return impl.OnTick(input.WithState(initialized.State))
+	return impl.OnTick(input)
 }
 
 func (r *Runtime) tickFailure(ctx context.Context, bot *Bot, cause error) error {
