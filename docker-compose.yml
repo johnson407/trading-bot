@@ -162,6 +162,7 @@ services:
       dockerfile: Dockerfile
     image: trading-bot-engine
     restart: unless-stopped
+    stop_grace_period: 25s
     environment:
       APP_ENV: ${APP_ENV:-local}
       APP_KEY: ${APP_KEY:-}

@@ -32,6 +32,8 @@ const (
 	defaultMaxOpen      = 20
 	defaultMaxNotional  = "1000"
 	defaultDailyLoss    = "100"
+
+	positionLimitEventCooldown = 5 * time.Minute
 )
 
 // Option customises the runtime.
@@ -74,6 +76,21 @@ func WithOrderSyncInterval(interval time.Duration) Option {
 	}
 }
 
+// WithNow overrides the runtime clock. Tests use it to drive stale-check grace
+// and risk-event cooldowns without sleeping.
+func WithNow(now func() time.Time) Option {
+	return func(r *Runtime) {
+		if now != nil {
+			r.now = now
+		}
+	}
+}
+
+type riskEventKey struct {
+	botID int64
+	typ   string
+}
+
 // Runtime is a PostgreSQL-backed trading runtime.
 type Runtime struct {
 	pool               *pgxpool.Pool
@@ -87,6 +104,11 @@ type Runtime struct {
 	lastOrderSync      map[int64]time.Time
 	orderSyncNotBefore map[int64]time.Time
 	syncMu             sync.Mutex
+	firstScheduled     map[int64]time.Time
+	firstScheduledMu   sync.Mutex
+	riskEventNotBefore map[riskEventKey]time.Time
+	riskEventMu        sync.Mutex
+	ticks              sync.WaitGroup
 }
 
 // New builds a runtime. A nil logger discards logs.
@@ -103,6 +125,8 @@ func New(pool *pgxpool.Pool, market Market, logger *slog.Logger, options ...Opti
 		orderSyncInterval:  5 * time.Second,
 		lastOrderSync:      map[int64]time.Time{},
 		orderSyncNotBefore: map[int64]time.Time{},
+		firstScheduled:     map[int64]time.Time{},
+		riskEventNotBefore: map[riskEventKey]time.Time{},
 	}
 	for _, option := range options {
 		option(runtime)
@@ -408,6 +432,7 @@ func (r *Runtime) RunScheduler(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			r.ticks.Wait()
 			return
 		case <-ticker.C:
 			if err := r.reconcile(ctx); err != nil {
@@ -501,31 +526,60 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 		}
 	}
 
+	// A bot is stale only when both its own last successful tick and this
+	// process's first scheduling attempt for the bot are older than the
+	// effective threshold. The latter grants a restart grace so downtime does
+	// not pause every running bot before its first post-restart tick.
 	stale, err := r.pool.Query(ctx,
-		`SELECT id FROM bots
+		`SELECT id,
+		        COALESCE(last_successful_tick_at, last_tick_at, created_at),
+		        tick_interval_seconds
+		 FROM bots
 		 WHERE deleted_at IS NULL
 		   AND status = 'running'
-		   AND COALESCE(last_successful_tick_at, last_tick_at, created_at)
-		       < now() - make_interval(secs => GREATEST(180, tick_interval_seconds + 30))`,
+		 ORDER BY id`,
 	)
 	if err != nil {
-		return fmt.Errorf("load stale bots: %w", err)
+		return fmt.Errorf("load running bots for stale check: %w", err)
 	}
 	defer stale.Close()
 
-	ids = ids[:0]
+	type runningBot struct {
+		id             int64
+		lastSuccessful time.Time
+		interval       int
+	}
+	var running []runningBot
 	for stale.Next() {
-		var id int64
-		if err := stale.Scan(&id); err != nil {
+		var bot runningBot
+		if err := stale.Scan(&bot.id, &bot.lastSuccessful, &bot.interval); err != nil {
 			return err
 		}
-		ids = append(ids, id)
+		running = append(running, bot)
 	}
 	if err := stale.Err(); err != nil {
 		return err
 	}
 
-	for _, id := range ids {
+	now := r.now()
+	runningIDs := make(map[int64]struct{}, len(running))
+	var staleIDs []int64
+	for _, bot := range running {
+		runningIDs[bot.id] = struct{}{}
+		threshold := staleThreshold(bot.interval)
+		firstScheduled := r.firstScheduledAt(bot.id, now)
+		if !firstScheduled.Add(threshold).Before(now) {
+			continue
+		}
+		if !bot.lastSuccessful.Add(threshold).Before(now) {
+			continue
+		}
+		staleIDs = append(staleIDs, bot.id)
+	}
+	r.pruneFirstScheduled(runningIDs)
+	r.pruneRiskEventCooldowns(runningIDs)
+
+	for _, id := range staleIDs {
 		botID := id
 		if err := withBotLock(ctx, botID, func(ctx context.Context) error {
 			bot, err := r.loadBot(ctx, botID)
@@ -668,7 +722,9 @@ func (r *Runtime) runDue(ctx context.Context) error {
 			continue
 		}
 
+		r.ticks.Add(1)
 		go func(botID int64) {
+			defer r.ticks.Done()
 			defer r.started.Delete(botID)
 			defer func() {
 				if recovered := recover(); recovered != nil {
@@ -685,6 +741,96 @@ func (r *Runtime) runDue(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// staleThreshold is the per-bot window allowed between successful ticks. It
+// matches the previous SQL rule: at least three minutes, or the bot's interval
+// plus thirty seconds when that is longer.
+func staleThreshold(tickIntervalSeconds int) time.Duration {
+	threshold := time.Duration(tickIntervalSeconds+30) * time.Second
+	if threshold < 180*time.Second {
+		return 180 * time.Second
+	}
+	return threshold
+}
+
+func (r *Runtime) firstScheduledAt(botID int64, now time.Time) time.Time {
+	r.firstScheduledMu.Lock()
+	defer r.firstScheduledMu.Unlock()
+
+	if first, ok := r.firstScheduled[botID]; ok {
+		return first
+	}
+	r.firstScheduled[botID] = now
+	return now
+}
+
+func (r *Runtime) pruneFirstScheduled(running map[int64]struct{}) {
+	r.firstScheduledMu.Lock()
+	defer r.firstScheduledMu.Unlock()
+
+	for botID := range r.firstScheduled {
+		if _, ok := running[botID]; !ok {
+			delete(r.firstScheduled, botID)
+		}
+	}
+}
+
+func (r *Runtime) pruneRiskEventCooldowns(running map[int64]struct{}) {
+	r.riskEventMu.Lock()
+	defer r.riskEventMu.Unlock()
+
+	for key := range r.riskEventNotBefore {
+		if _, ok := running[key.botID]; !ok {
+			delete(r.riskEventNotBefore, key)
+		}
+	}
+}
+
+// allowRiskEvent reports whether a risk event for this bot and type is outside
+// its cooldown, and records the next allowed time when it is. A zero bot ID or
+// cooldown skips throttling.
+func (r *Runtime) allowRiskEvent(botID int64, typ string, cooldown time.Duration) bool {
+	if botID <= 0 || cooldown <= 0 {
+		return true
+	}
+
+	at := r.now()
+	key := riskEventKey{botID: botID, typ: typ}
+
+	r.riskEventMu.Lock()
+	defer r.riskEventMu.Unlock()
+
+	if next, ok := r.riskEventNotBefore[key]; ok && at.Before(next) {
+		return false
+	}
+	r.riskEventNotBefore[key] = at.Add(cooldown)
+
+	return true
+}
+
+// releaseRiskEvent clears a reservation when the event could not be written, so
+// the next tick can retry instead of losing the event to the cooldown.
+func (r *Runtime) releaseRiskEvent(botID int64, typ string) {
+	r.riskEventMu.Lock()
+	defer r.riskEventMu.Unlock()
+
+	delete(r.riskEventNotBefore, riskEventKey{botID: botID, typ: typ})
+}
+
+// recordPositionLimitSkips writes at most one position-limit event per bot per
+// cooldown window, with the number of orders blocked during this attempt.
+func (r *Runtime) recordPositionLimitSkips(ctx context.Context, bot *Bot, skipped int, projectedNotional string) {
+	if skipped == 0 || !r.allowRiskEvent(bot.ID, "risk.position_limit", positionLimitEventCooldown) {
+		return
+	}
+
+	if err := r.riskEvent(ctx, bot.UserID, bot.ID, "risk.position_limit", "critical",
+		fmt.Sprintf("%d order(s) skipped: projected position exceeds the limit.", skipped),
+		map[string]any{"orders_skipped": skipped, "projected_notional": projectedNotional},
+	); err != nil {
+		r.releaseRiskEvent(bot.ID, "risk.position_limit")
+	}
 }
 
 // FeedSymbols returns the distinct public symbols the market-data feed must
@@ -749,16 +895,23 @@ func (r *Runtime) activity(ctx context.Context, userID, botID int64, typ, severi
 	}
 }
 
-func (r *Runtime) riskEvent(ctx context.Context, userID, botID int64, typ, severity, message string, context map[string]any) {
-	encoded, _ := json.Marshal(context)
-	_, err := r.pool.Exec(ctx,
+func (r *Runtime) riskEvent(ctx context.Context, userID, botID int64, typ, severity, message string, context map[string]any) error {
+	encoded, err := json.Marshal(context)
+	if err != nil {
+		r.logger.Error("encode risk event context failed", "type", typ, "error_type", fmt.Sprintf("%T", err))
+		return err
+	}
+	_, err = r.pool.Exec(ctx,
 		`INSERT INTO risk_events (user_id, bot_id, type, severity, message, context, created_at)
 		 VALUES ($1, NULLIF($2, 0), $3, $4, $5, $6::jsonb, now())`,
 		userID, botID, typ, severity, message, string(encoded),
 	)
 	if err != nil {
 		r.logger.Error("record risk event failed", "type", typ, "error_type", fmt.Sprintf("%T", err))
+		return err
 	}
+
+	return nil
 }
 
 func fixed(value decimal.Decimal) string {

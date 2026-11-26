@@ -200,6 +200,25 @@ Laravel exposes the same freshness check at `GET /health/engine`, returning
 `200` when fresh and `503` when missing or expired.
 `GET /livez` remains dependency-free.
 
+## Runtime scheduling and shutdown
+
+The tick scheduler reconciles once per second. A running bot is stale only
+when both its own last successful tick and the time this engine process first
+observed it running are older than `max(180s, tick_interval_seconds + 30s)`.
+This per-bot restart grace means engine downtime longer than the threshold does
+not pause a bot before its first post-restart tick. If ticks keep failing for
+the full grace, the usual `bot.stale` / `risk.stale_tick` pause-and-cancel runs.
+
+Position-limit blocks are counted per placement attempt: the engine writes one
+`risk.position_limit` event with `orders_skipped` and `projected_notional` and
+suppresses repeats for the same bot and event type for five minutes.
+
+On `SIGINT` or `SIGTERM` the engine cancels its root context, stops the HTTP
+server, and drains in-flight ticks, both command consumers, the heartbeat,
+market-data work, and the stale-backtest sweeper for up to **20 seconds**.
+Compose sets `stop_grace_period: 25s` on the engine service so Docker waits for
+that drain before forcing termination.
+
 ## Status ownership
 
 | Column | Writer | Rule |

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -94,7 +95,30 @@ func run() error {
 	defer func() { _ = redisClient.Close() }()
 
 	engineContext, stopEngine := context.WithCancel(context.Background())
-	defer stopEngine()
+	var workers sync.WaitGroup
+	var drained bool
+	startWorker := func(run func()) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			run()
+		}()
+	}
+
+	// Every exit path stops the engine before the database and Redis pools
+	// close. The bounded wait keeps a wedged worker from holding the process
+	// past Docker's stop grace period.
+	defer func() {
+		stopEngine()
+		if drained {
+			return
+		}
+		drainContext, cancel := context.WithTimeout(context.Background(), shutdownDrainTimeout)
+		defer cancel()
+		if !drainWait(drainContext, &workers) {
+			logger.Warn("engine drain timed out", "timeout", shutdownDrainTimeout.String())
+		}
+	}()
 
 	publicREST := newPublicREST(cfg.MarketData.RESTURL, cfg.MarketData.RequestTimeout)
 
@@ -161,8 +185,10 @@ func run() error {
 		logger.Warn("initial heartbeat write failed", "error_type", fmt.Sprintf("%T", err))
 	}
 
-	go heartbeatWriter.Run(engineContext, heartbeat.RefreshInterval, func() int {
-		return tradingRuntime.RunningCount(engineContext)
+	startWorker(func() {
+		heartbeatWriter.Run(engineContext, heartbeat.RefreshInterval, func() int {
+			return tradingRuntime.RunningCount(engineContext)
+		})
 	})
 
 	backtestStore := backtest.NewStore(
@@ -197,32 +223,34 @@ func run() error {
 		backtestConfig,
 	)
 
-	go func() {
+	startWorker(func() {
 		if err := commandConsumer.Run(engineContext); err != nil {
 			logger.Error("command consumer stopped", "error_type", fmt.Sprintf("%T", err))
 		}
-	}()
+	})
 
-	go func() {
+	startWorker(func() {
 		if err := backtestConsumer.Run(engineContext); err != nil {
 			logger.Error("backtest consumer stopped", "error_type", fmt.Sprintf("%T", err))
 		}
-	}()
+	})
 
-	go runStaleBacktestSweeper(engineContext, backtestStore, cfg.BacktestJobTimeout, logger)
-	go tradingRuntime.RunScheduler(engineContext)
+	startWorker(func() { runStaleBacktestSweeper(engineContext, backtestStore, cfg.BacktestJobTimeout, logger) })
+	startWorker(func() { tradingRuntime.RunScheduler(engineContext) })
 
 	// The feed subscribes to the union of running/starting Binance bots'
 	// symbols, plus any operator-pinned ENGINE_MARKET_DATA_SYMBOLS. It stays
 	// idle unless both public endpoints are configured; ticks then fall back to
 	// one public REST snapshot per evaluation.
 	if cfg.MarketData.Configured() {
-		go func() {
+		startWorker(func() {
 			if err := marketFeed.Run(engineContext); err != nil {
 				logger.Error("market data feed stopped", "error_type", fmt.Sprintf("%T", err))
 			}
-		}()
-		go runMarketSymbols(engineContext, tradingRuntime, marketFeed, cfg.MarketData.Symbols, logger)
+		})
+		startWorker(func() {
+			runMarketSymbols(engineContext, tradingRuntime, marketFeed, cfg.MarketData.Symbols, logger)
+		})
 		logger.Info("market data enabled for running bots",
 			"pinned_symbols", len(cfg.MarketData.Symbols),
 			"stale_after", cfg.MarketData.StaleAfter.String(),
@@ -270,14 +298,46 @@ func run() error {
 		logger.Info("shutdown requested", "signal", received.String())
 	}
 
-	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Stop starting new work first, then drain HTTP and tracked background
+	// workers together within one bounded window.
+	stopEngine()
+
+	// HTTP shutdown and the worker drain share one absolute budget, so a slow
+	// HTTP shutdown cannot leave a second full timeout for the deferred path.
+	shutdownContext, cancel := context.WithTimeout(context.Background(), shutdownDrainTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownContext); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
+		logger.Warn("http server shutdown did not complete", "error", err)
 	}
+	if !drainWait(shutdownContext, &workers) {
+		logger.Warn("engine drain timed out", "timeout", shutdownDrainTimeout.String())
+	}
+	drained = true
 
 	return nil
+}
+
+// shutdownDrainTimeout bounds how long the engine waits for in-flight ticks,
+// consumers, heartbeat writes, market-data work, and the backtest sweeper. The
+// Compose stop grace period is longer so Docker does not kill the drain.
+const shutdownDrainTimeout = 20 * time.Second
+
+// drainWait waits for the workers to finish or ctx to expire. It reports
+// whether the drain completed before the deadline.
+func drainWait(ctx context.Context, workers *sync.WaitGroup) bool {
+	done := make(chan struct{})
+	go func() {
+		workers.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // runPlanServer serves only the internal setup-plan endpoint. It opens no

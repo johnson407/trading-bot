@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +23,34 @@ type fixedMarket struct {
 
 func (m *fixedMarket) Last(context.Context, string, string) (decimal.Decimal, error) {
 	return decimal.MustParse(m.price), nil
+}
+
+// blockingMarket holds a tick in flight until its context is canceled and the
+// test releases it. It records both observations so the scheduler drain can be
+// asserted without sleeping for a fixed duration.
+type blockingMarket struct {
+	started    chan struct{}
+	canceled   chan struct{}
+	release    chan struct{}
+	startOnce  sync.Once
+	cancelOnce sync.Once
+}
+
+func newBlockingMarket() *blockingMarket {
+	return &blockingMarket{
+		started:  make(chan struct{}),
+		canceled: make(chan struct{}),
+		release:  make(chan struct{}),
+	}
+}
+
+func (m *blockingMarket) Last(ctx context.Context, _, _ string) (decimal.Decimal, error) {
+	m.startOnce.Do(func() { close(m.started) })
+	<-ctx.Done()
+	m.cancelOnce.Do(func() { close(m.canceled) })
+	<-m.release
+
+	return decimal.Decimal{}, ctx.Err()
 }
 
 // TestRuntimeControlAndTickIntegration exercises the PostgreSQL-backed control
@@ -803,4 +832,235 @@ func TestAccountDailyLossIncludesArchivedBalances(t *testing.T) {
 		t.Fatalf("active bot last_error = %v, want account daily loss message", lastError)
 	}
 	assertBotState(t, pool, archivedID, "stopped", "stopped")
+}
+
+func TestRestartGraceKeepsRunningBotAfterDowntime(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	_, botID := insertStaleRunningBot(t, ctx, pool)
+
+	clock := time.Now().UTC()
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil, runtime.WithNow(func() time.Time { return clock }))
+
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	assertBotState(t, pool, botID, "running", "running")
+
+	// Long downtime is not enough for staleness: the process has not yet
+	// scheduled the bot for the full threshold. Confirm the bot survives
+	// most of the grace window, not just the first pass.
+	clock = clock.Add(179 * time.Second)
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+	assertBotState(t, pool, botID, "running", "running")
+	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.stale_tick'`, 0, botID)
+	assertCount(t, pool, `SELECT COUNT(*) FROM activity_logs WHERE bot_id=$1`, 0, botID)
+}
+
+func TestRestartGraceStillPausesAfterThreshold(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	_, botID := insertStaleRunningBot(t, ctx, pool)
+
+	clock := time.Now().UTC()
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil, runtime.WithNow(func() time.Time { return clock }))
+
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	assertBotState(t, pool, botID, "running", "running")
+
+	// Ticks keep failing, so neither the per-bot grace nor the stale window
+	// has been satisfied until both elapse.
+	clock = clock.Add(181 * time.Second)
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile after grace: %v", err)
+	}
+	assertBotState(t, pool, botID, "paused", "running")
+	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.stale_tick'`, 1, botID)
+}
+
+func TestRunSchedulerDrainsInFlightTick(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	_, _ = insertStaleRunningBot(t, ctx, pool)
+
+	market := newBlockingMarket()
+	trading := runtime.New(pool, market, nil)
+
+	schedulerCtx, cancel := context.WithCancel(context.Background())
+	schedulerDone := make(chan struct{})
+	go func() {
+		defer close(schedulerDone)
+		trading.RunScheduler(schedulerCtx)
+	}()
+
+	defer func() {
+		cancel()
+		select {
+		case <-market.release:
+		default:
+			close(market.release)
+		}
+		select {
+		case <-schedulerDone:
+		case <-time.After(5 * time.Second):
+			t.Error("scheduler did not stop during cleanup")
+		}
+	}()
+
+	select {
+	case <-market.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("scheduler did not start an in-flight tick")
+	}
+
+	cancel()
+
+	select {
+	case <-market.canceled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("in-flight tick did not observe cancellation")
+	}
+
+	// The tick is still blocked in the market call, so RunScheduler must not
+	// return until the tick goroutine drains.
+	select {
+	case <-schedulerDone:
+		t.Fatal("RunScheduler returned before the in-flight tick drained")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	close(market.release)
+
+	select {
+	case <-schedulerDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunScheduler did not return after the tick drained")
+	}
+}
+
+func TestPositionLimitEventsAggregateAndThrottle(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	suffix := time.Now().UnixNano()
+	var userID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO users (name, email, password, created_at, updated_at)
+		 VALUES ('Position limit', $1, 'x', now(), now()) RETURNING id`,
+		fmt.Sprintf("position-limit-%d@example.test", suffix)).Scan(&userID); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID) })
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO risk_limits (scope, user_id, max_position_notional, max_open_orders, daily_loss_limit, created_at, updated_at)
+		 VALUES ('user', $1, '100', 20, '1000', now(), now())`, userID); err != nil {
+		t.Fatalf("insert risk limit: %v", err)
+	}
+
+	var botID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
+		 capital_allocation, base_inventory, quote_inventory, fee_rate, tick_interval_seconds, settings, created_at, updated_at)
+		 VALUES ($1, 'Position limit bot', 'binance', 'BTC/USDT', 'simple-grid', 'paper', 'idle', 'running',
+		 '1000', '10', '1000', '0', 1, '{}', now(), now())
+		 RETURNING id`, userID).Scan(&botID); err != nil {
+		t.Fatalf("insert bot: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO strategy_configs (bot_id, strategy_key, configuration, state_version, created_at, updated_at)
+		 VALUES ($1, 'simple-grid', $2::jsonb, 1, now(), now())`, botID,
+		`{"center_price":"100","levels_per_side":2,"spacing_type":"arithmetic","spacing_value":"10","order_quantity":"0.1"}`); err != nil {
+		t.Fatalf("insert strategy config: %v", err)
+	}
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+	if err := trading.Process(ctx, command(protocol.CommandBotStart, userID, botID, nil)); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := trading.TickBot(ctx, botID); err != nil {
+		t.Fatalf("first tick: %v", err)
+	}
+
+	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.position_limit'`, 1, botID)
+	var skipped int
+	if err := pool.QueryRow(ctx,
+		`SELECT (context->>'orders_skipped')::int FROM risk_events WHERE bot_id=$1 AND type='risk.position_limit'`,
+		botID,
+	).Scan(&skipped); err != nil {
+		t.Fatalf("read orders_skipped: %v", err)
+	}
+	if skipped < 2 {
+		t.Fatalf("orders_skipped = %d, want at least 2", skipped)
+	}
+
+	if err := trading.TickBot(ctx, botID); err != nil {
+		t.Fatalf("second tick: %v", err)
+	}
+	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.position_limit'`, 1, botID)
+}
+
+func insertStaleRunningBot(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (int64, int64) {
+	t.Helper()
+
+	suffix := time.Now().UnixNano()
+	var userID, botID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO users (name, email, password, created_at, updated_at)
+		 VALUES ('Restart grace', $1, 'x', now(), now()) RETURNING id`,
+		fmt.Sprintf("restart-grace-%d@example.test", suffix)).Scan(&userID); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID) })
+
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
+		 capital_allocation, quote_inventory, tick_interval_seconds, settings,
+		 last_tick_at, last_successful_tick_at, created_at, updated_at)
+		 VALUES ($1, 'Restart grace bot', 'binance', 'BTC/USDT', 'simple-grid', 'paper', 'running', 'running',
+		 '1000', '1000', 1, '{}'::jsonb, now() - interval '1 hour', now() - interval '1 hour', now(), now())
+		 RETURNING id`, userID).Scan(&botID); err != nil {
+		t.Fatalf("insert bot: %v", err)
+	}
+
+	return userID, botID
 }
