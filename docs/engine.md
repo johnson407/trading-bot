@@ -310,6 +310,9 @@ and paper fills are persisted by `internal/runtime`. `internal/decimal` matches 
   confirmation, free quote balance, no live-to-paper fallback);
 - position notional, open-order, and sell-inventory reservation checks;
 - per-bot and account-wide daily loss pause/cancel with engine-owned baselines;
+  the runtime resolves limits bot override → account → default per column and
+  fails the tick closed when the stored limit or account day-start baseline
+  cannot be read;
 - protective stop-loss, take-profit, and range exits (pause/cancel only, no
   market flatten, no automatic resume);
 - consecutive exchange failure threshold pause/cancel;

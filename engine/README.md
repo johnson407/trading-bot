@@ -156,6 +156,10 @@ order.
   keeping a bot-scope baseline in the engine-owned
   `settings.daily_loss_baseline` key and the account baseline on the user
   `risk_limits` row. It never resumes a paused bot.
+- `Runtime.dailyLoss` (the SQL-backed tick path) resolves the per-bot limit
+  from a bot-scope override, then the account row, then the built-in default,
+  per column. An unreadable stored limit or account day-start baseline fails
+  the tick closed instead of trading on fallback values.
 - `ExitGuardMonitor` implements stop-loss, take-profit, and range exits with
   stop-loss → take-profit → range precedence. It pauses and cancels but never
   market-flattens, and a second evaluation of a paused bot is a no-op.

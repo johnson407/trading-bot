@@ -88,7 +88,11 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 		return nil
 	}
 
-	if limit, loss, account := r.dailyLoss(ctx, bot, price); loss.GreaterThanOrEqual(limit) {
+	limit, loss, account, err := r.dailyLoss(ctx, bot, price)
+	if err != nil {
+		return r.tickFailure(ctx, bot, err)
+	}
+	if loss.GreaterThanOrEqual(limit) {
 		message := fmt.Sprintf("Daily loss limit reached (%s). Bot paused and open orders canceled.", loss.String())
 		if account {
 			message = fmt.Sprintf("Account daily loss limit reached (%s). Bot paused and open orders canceled.", loss.String())
@@ -349,19 +353,23 @@ func divOr(a, b decimal.Decimal) decimal.Decimal {
 	return value
 }
 
-func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal) (decimal.Decimal, decimal.Decimal, bool) {
-	maxNotional, maxOpen, limit := defaultMaxNotional, defaultMaxOpen, defaultDailyLoss
-	_ = r.pool.QueryRow(ctx,
-		`SELECT COALESCE(max_position_notional::text, $3), COALESCE(max_open_orders, $4), COALESCE(daily_loss_limit::text, $5)
-		 FROM risk_limits WHERE bot_id = $1
-		 UNION ALL
-		 SELECT COALESCE(max_position_notional::text, $3), COALESCE(max_open_orders, $4), COALESCE(daily_loss_limit::text, $5)
-		 FROM risk_limits WHERE user_id = $2 AND scope = 'user' AND bot_id IS NULL
-		 LIMIT 1`,
-		bot.ID, bot.UserID, defaultMaxNotional, defaultMaxOpen, defaultDailyLoss,
-	).Scan(&maxNotional, &maxOpen, &limit)
-	_ = maxNotional
-	_ = maxOpen
+func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal) (decimal.Decimal, decimal.Decimal, bool, error) {
+	var limitRaw string
+	err := r.pool.QueryRow(ctx,
+		`SELECT COALESCE(
+			(SELECT daily_loss_limit::text FROM risk_limits
+			 WHERE bot_id = $1 AND daily_loss_limit IS NOT NULL
+			 ORDER BY id DESC LIMIT 1),
+			(SELECT daily_loss_limit::text FROM risk_limits
+			 WHERE user_id = $2 AND scope = 'user' AND bot_id IS NULL AND daily_loss_limit IS NOT NULL
+			 ORDER BY id DESC LIMIT 1),
+			$3::text
+		)`,
+		bot.ID, bot.UserID, defaultDailyLoss,
+	).Scan(&limitRaw)
+	if err != nil {
+		return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("load daily loss limit: %w", err)
+	}
 
 	today := r.now().Format("2006-01-02")
 	baseline := decimal.Zero()
@@ -382,11 +390,15 @@ func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal)
 	// account's exposure even though their own risk rules no longer run.
 	var userLimitRaw, userBaselineRaw = defaultDailyLoss, "0"
 	var dayStart *time.Time
-	_ = r.pool.QueryRow(ctx,
+	err = r.pool.QueryRow(ctx,
 		`SELECT COALESCE(daily_loss_limit::text, $2), day_start, COALESCE(day_start_realized_pnl::text, '0')
-		 FROM risk_limits WHERE user_id = $1 AND scope = 'user' AND bot_id IS NULL LIMIT 1`,
+		 FROM risk_limits WHERE user_id = $1 AND scope = 'user' AND bot_id IS NULL
+		 ORDER BY id DESC LIMIT 1`,
 		bot.UserID, defaultDailyLoss,
 	).Scan(&userLimitRaw, &dayStart, &userBaselineRaw)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("load account daily loss limit and baseline: %w", err)
+	}
 
 	if dayStart == nil || dayStart.UTC().Format("2006-01-02") != today {
 		var realized = decimal.Zero()
@@ -401,11 +413,13 @@ func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal)
 			rows.Close()
 		}
 		userBaselineRaw = realized.String()
-		_, _ = r.pool.Exec(ctx,
+		if _, err := r.pool.Exec(ctx,
 			`UPDATE risk_limits SET day_start = now(), day_start_realized_pnl = $2, updated_at = now()
 			 WHERE user_id = $1 AND scope = 'user' AND bot_id IS NULL`,
 			bot.UserID, userBaselineRaw,
-		)
+		); err != nil {
+			r.logger.Error("persist account daily loss baseline failed", "user_id", bot.UserID, "error_type", fmt.Sprintf("%T", err))
+		}
 	}
 
 	userLoss := decimal.Zero()
@@ -438,10 +452,10 @@ func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal)
 
 	userLimit := mustDecimal(userLimitRaw)
 	if userLoss.GreaterThanOrEqual(userLimit) {
-		return userLimit, userLoss, true
+		return userLimit, userLoss, true, nil
 	}
 
-	return mustDecimal(limit), loss, false
+	return mustDecimal(limitRaw), loss, false, nil
 }
 
 func dailyLossValue(bot *Bot, baseline, mark decimal.Decimal) decimal.Decimal {
