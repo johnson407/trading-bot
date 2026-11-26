@@ -25,8 +25,8 @@ class EquitySnapshotter
         $capturedAt = $this->bucketStart();
 
         User::query()
-            ->whereHas('bots')
-            ->with('bots')
+            ->whereHas('bots', fn ($query) => $query->withTrashed())
+            ->with(['bots' => fn ($query) => $query->withTrashed()])
             ->each(function (User $user) use (&$captured, $capturedAt): void {
                 try {
                     $this->snapshotUser($user, $capturedAt);

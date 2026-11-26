@@ -39,8 +39,15 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 	}
 
 	tickStart := r.now()
-	if _, err := r.pool.Exec(ctx, `UPDATE bots SET last_tick_at = $2, updated_at = now() WHERE id = $1`, bot.ID, tickStart); err != nil {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE bots SET last_tick_at = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
+		bot.ID, tickStart,
+	)
+	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil
 	}
 
 	if bot.live() && !r.liveTrading {
@@ -166,6 +173,9 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 	}
 
 	if current, err := r.loadBot(ctx, bot.ID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
 		return err
 	} else if current.Status != "running" || current.DesiredStatus != "running" {
 		return nil
@@ -191,6 +201,9 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 	for _, fill := range fills {
 		refreshed, err := r.loadBot(ctx, bot.ID)
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
 			return err
 		}
 		orders, err := r.openOrders(ctx, bot.ID)
@@ -224,12 +237,16 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 		return r.tickFailure(ctx, bot, err)
 	}
 
-	_, err = r.pool.Exec(ctx,
-		`UPDATE bots SET last_successful_tick_at = now(), last_error = NULL, consecutive_failures = 0, updated_at = now() WHERE id = $1`,
+	tag, err = r.pool.Exec(ctx,
+		`UPDATE bots SET last_successful_tick_at = now(), last_error = NULL, consecutive_failures = 0, updated_at = now()
+		 WHERE id = $1 AND deleted_at IS NULL`,
 		bot.ID,
 	)
 	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil
 	}
 
 	return nil
@@ -248,9 +265,12 @@ func (r *Runtime) tickFailure(ctx context.Context, bot *Bot, cause error) error 
 	var failures int
 	err := r.pool.QueryRow(ctx,
 		`UPDATE bots SET last_error = $2, consecutive_failures = consecutive_failures + 1, updated_at = now()
-		 WHERE id = $1 RETURNING consecutive_failures`,
+		 WHERE id = $1 AND deleted_at IS NULL RETURNING consecutive_failures`,
 		bot.ID, message,
 	).Scan(&failures)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -277,9 +297,15 @@ func (r *Runtime) rememberPrice(ctx context.Context, bot *Bot, price decimal.Dec
 	bot.Settings["recent_prices"] = raw
 
 	encoded, _ := json.Marshal(bot.Settings)
-	_, err := r.pool.Exec(ctx, `UPDATE bots SET settings = $2::jsonb, updated_at = now() WHERE id = $1`, bot.ID, string(encoded))
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE bots SET settings = $2::jsonb, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
+		bot.ID, string(encoded),
+	)
 	if err != nil {
 		r.logger.Error("persist market settings failed", "bot_id", bot.ID)
+		return nil
+	}
+	if tag.RowsAffected() == 0 {
 		return nil
 	}
 	return bot
@@ -351,7 +377,9 @@ func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal)
 	loss := dailyLossValue(bot, baseline, mark)
 
 	// Account-wide loss uses the same UTC-day baseline and evaluates every
-	// user bot, not only the bot being ticked.
+	// user bot, not only the bot being ticked. Archived bots are intentionally
+	// included: their realized P&L and residual inventory remain part of the
+	// account's exposure even though their own risk rules no longer run.
 	var userLimitRaw, userBaselineRaw = defaultDailyLoss, "0"
 	var dayStart *time.Time
 	_ = r.pool.QueryRow(ctx,
@@ -448,12 +476,12 @@ func (r *Runtime) persistSettings(ctx context.Context, bot *Bot) {
 	if err != nil {
 		return
 	}
-	_, _ = r.pool.Exec(ctx, `UPDATE bots SET settings = $2::jsonb, updated_at = now() WHERE id = $1`, bot.ID, string(encoded))
+	_, _ = r.pool.Exec(ctx, `UPDATE bots SET settings = $2::jsonb, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, string(encoded))
 }
 
 func (r *Runtime) pauseOtherBots(ctx context.Context, userID, currentBotID int64, message string) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id FROM bots WHERE user_id = $1 AND id <> $2 AND status = 'running' ORDER BY id`,
+		`SELECT id FROM bots WHERE user_id = $1 AND id <> $2 AND status = 'running' AND deleted_at IS NULL ORDER BY id`,
 		userID, currentBotID,
 	)
 	if err != nil {
@@ -480,11 +508,11 @@ func (r *Runtime) pauseOtherBots(ctx context.Context, userID, currentBotID int64
 
 func (r *Runtime) pause(ctx context.Context, bot *Bot, message, activityType, riskType, severity string) {
 	_, _ = r.pool.Exec(ctx,
-		`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1`,
+		`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
 		bot.ID, message,
 	)
 	if _, err := r.cancelOpenOrders(ctx, bot.UserID, bot.ID, activityType); err != nil {
-		_, _ = r.pool.Exec(ctx, `UPDATE bots SET cancel_retry_requested = true, updated_at = now() WHERE id = $1`, bot.ID)
+		_, _ = r.pool.Exec(ctx, `UPDATE bots SET cancel_retry_requested = true, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
 		r.logger.Error("pause could not cancel orders", "bot_id", bot.ID, "error_type", fmt.Sprintf("%T", err))
 	}
 	if activityType != "" {
@@ -688,6 +716,17 @@ func (r *Runtime) persistStrategy(ctx context.Context, botID int64, state strate
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	var activeBotID int64
+	if err := tx.QueryRow(ctx,
+		`SELECT id FROM bots WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+		botID,
+	).Scan(&activeBotID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("persist strategy state: %w", err)
+	}
+
 	if _, err := tx.Exec(ctx,
 		`UPDATE strategy_configs SET state = $2::jsonb, state_version = $3, updated_at = now() WHERE bot_id = $1`,
 		botID, string(encoded), state.Version,
@@ -734,6 +773,17 @@ func (r *Runtime) syncGrid(ctx context.Context, bot *Bot, levels []strategy.Grid
 		return nil, false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	var activeBotID int64
+	if err := tx.QueryRow(ctx,
+		`SELECT id FROM bots WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+		bot.ID,
+	).Scan(&activeBotID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return active, false, nil
+		}
+		return nil, false, err
+	}
 
 	if active != nil {
 		if bot.live() {
@@ -881,7 +931,7 @@ func (r *Runtime) placeOrders(ctx context.Context, bot *Bot, active *gridState, 
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var status, desired string
-	if err := tx.QueryRow(ctx, `SELECT status, desired_status FROM bots WHERE id = $1 FOR UPDATE`, bot.ID).Scan(&status, &desired); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT status, desired_status FROM bots WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, bot.ID).Scan(&status, &desired); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, nil
 		}
@@ -974,7 +1024,7 @@ func (r *Runtime) placeOrders(ctx context.Context, bot *Bot, active *gridState, 
 		err := tx.QueryRow(ctx,
 			`INSERT INTO orders (bot_id, grid_id, grid_level_id, client_order_id, mode, side, type, price, quantity, filled_quantity, status, requested_at, opened_at, created_at, updated_at)
 			 SELECT $1, $2, $3, $4, $5, $6, 'limit', $7, $8, 0, 'open', now(), now(), now(), now()
-			 WHERE EXISTS (SELECT 1 FROM bots WHERE id = $1 AND status = 'running' AND desired_status = 'running')
+			 WHERE EXISTS (SELECT 1 FROM bots WHERE id = $1 AND status = 'running' AND desired_status = 'running' AND deleted_at IS NULL)
 			 RETURNING id`,
 			bot.ID, active.ID, levelID, clientID, bot.Mode, string(intent.Side), intent.Price.String(), intent.Quantity.String(),
 		).Scan(&orderID)
@@ -1062,6 +1112,17 @@ func (r *Runtime) processPaperFills(ctx context.Context, bot *Bot, active *gridS
 
 		tx, err := r.pool.Begin(ctx)
 		if err != nil {
+			return nil, err
+		}
+		var activeBotID int64
+		if err := tx.QueryRow(ctx,
+			`SELECT id FROM bots WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+			bot.ID,
+		).Scan(&activeBotID); err != nil {
+			_ = tx.Rollback(ctx)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, nil
+			}
 			return nil, err
 		}
 		tag, err := tx.Exec(ctx,

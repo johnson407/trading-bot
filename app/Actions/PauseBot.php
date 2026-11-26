@@ -6,6 +6,7 @@ use App\Domain\Activity\ActivityRecorder;
 use App\Domain\Bot\Enums\BotStatus;
 use App\Models\Bot;
 use App\Services\Engine\CommandPublisher;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Throwable;
 
 class PauseBot
@@ -23,12 +24,20 @@ class PauseBot
 
         $previous = $bot->desired_status;
 
-        $bot->update(['desired_status' => BotStatus::Paused]);
+        $updated = Bot::query()
+            ->whereKey($bot->getKey())
+            ->update(['desired_status' => BotStatus::Paused->value]);
+
+        if ($updated === 0) {
+            throw (new ModelNotFoundException)->setModel(Bot::class, [$bot->getKey()]);
+        }
 
         try {
             $this->commands->publish('bot.pause', $bot->user_id, $bot->id);
         } catch (Throwable $exception) {
-            $bot->update(['desired_status' => $previous]);
+            Bot::query()
+                ->whereKey($bot->getKey())
+                ->update(['desired_status' => $previous->value]);
 
             throw $exception;
         }

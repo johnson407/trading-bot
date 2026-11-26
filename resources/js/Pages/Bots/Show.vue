@@ -12,6 +12,7 @@ const props = defineProps({
     inventory: { type: Object, required: true },
     pnl: { type: Object, required: true },
     riskLimits: { type: Array, default: () => [] },
+    canArchive: { type: Boolean, default: false },
 });
 
 let timer = null;
@@ -19,7 +20,7 @@ let timer = null;
 onMounted(() => {
     timer = setInterval(() => {
         router.reload({
-            only: ['bot', 'grid', 'openOrders', 'recentFills', 'inventory', 'pnl'],
+            only: ['bot', 'grid', 'openOrders', 'recentFills', 'inventory', 'pnl', 'canArchive'],
             preserveScroll: true,
             preserveState: true,
         });
@@ -94,6 +95,11 @@ watch(
 const start = () => router.post(route('bots.start', props.bot.id), { confirmation: confirmation.value }, { preserveScroll: true });
 const pause = () => router.post(route('bots.pause', props.bot.id), {}, { preserveScroll: true });
 const stop = () => router.post(route('bots.stop', props.bot.id), {}, { preserveScroll: true });
+const archive = () => {
+    if (confirm(`Archive ${props.bot.name}? It will disappear from the active list. Residual inventory is not sold.`)) {
+        router.delete(route('bots.destroy', props.bot.id), { preserveScroll: true });
+    }
+};
 const cancelOrder = (order) => router.post(route('bots.orders.cancel', [props.bot.id, order.id]), {}, { preserveScroll: true });
 const levelState = (state) => ({
     idle: 'bg-slate-700 text-slate-300',
@@ -150,6 +156,7 @@ const levelState = (state) => ({
                             <button v-if="bot.status !== 'running'" type="button" class="rounded bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800" @click="start">Start</button>
                             <button v-if="bot.status === 'running'" type="button" class="rounded bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800" @click="pause">Pause</button>
                             <button v-if="bot.status !== 'stopped'" type="button" class="rounded bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700" @click="stop">Stop</button>
+                            <button v-if="canArchive" type="button" class="rounded border border-rose-400 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-rose-950" @click="archive">Archive</button>
                         </div>
                     </div>
                     <div v-if="bot.mode === 'live' && bot.status !== 'running'" class="mt-4">

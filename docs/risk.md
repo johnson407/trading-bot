@@ -33,7 +33,10 @@ realized P&L, plus optional unrealized P&L at the current mark.
 - The baseline resets at the first evaluation after UTC midnight: `day_start` becomes the new day and `day_start_realized_pnl` captures the bot's realized P&L at that moment.
 - A bot without a bot-scope override stores its own baseline in its settings instead of mutating the shared user row.
 - A per-bot breach pauses that bot and cancels its pending, open, and partially-filled orders.
-- A global breach pauses all of the user's bots and cancels their open orders.
+- A global breach pauses all of the user's active bots and cancels their open orders.
+- Archived bots are excluded from per-bot evaluation and order placement. Their
+  realized P&L and residual balances still count in the account-wide daily-loss
+  and equity aggregates, because archiving does not close the position.
 - A paused bot is never resumed by the monitor.
 
 ## Protective exits
@@ -54,11 +57,11 @@ A cancellation failure during the exit is recorded as `risk.cancel_failed` and d
 
 ## Kill-switch
 
-Laravel writes `desired_status=paused` for every non-stopped bot owned by the
-user and publishes one `kill_switch` command. The engine pauses each bot and
-cancels its orders. If the heartbeat is missing/expired or publishing fails,
-Laravel immediately cancels open orders on the user's live bots through
-`CancelBotOrders`. A failure on one order is recorded as a
+Laravel writes `desired_status=paused` for every non-stopped active bot owned by
+the user and publishes one `kill_switch` command. Archived bots are excluded. The
+engine pauses each bot and cancels its orders. If the heartbeat is missing/expired
+or publishing fails, Laravel immediately cancels open orders on the user's live
+bots through `CancelBotOrders`. A failure on one order is recorded as a
 `risk.kill_switch_cancel_failed` risk event and reported in the result; other
 orders and bots continue. This is the emergency control for live trading and it
 does not wait for a tick.

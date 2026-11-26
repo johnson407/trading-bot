@@ -36,7 +36,9 @@ Creation snapshots the bot's name, exchange, symbol, strategy key, strategy
 configuration, capital allocation, fee rate, effective risk limits, protective
 exit rules, and period.
 The snapshot is stored immutably on the run. Later edits to the bot do not change
-an existing run. If the bot is deleted, the run remains readable.
+an existing run. Archived bots are not offered in the create selector. If a bot is
+archived, its existing runs keep the association and name. Permanently deleting a
+bot leaves the run readable but sets its `bot_id` to null.
 
 ## Historical candles
 
@@ -246,8 +248,10 @@ Each generated run stores `sweep_id` and a name describing its combination, and
 behaves like a normal backtest: it has its own snapshot, status, progress, end
 reason, metrics, equity curve, and fills. Sweeps do not have a user-facing delete
 action. If a sweep row is removed at the database level (or through user
-deletion), `sweep_id` is nulled on its runs without deleting them; deleting a bot
-also leaves the runs readable.
+deletion), `sweep_id` is nulled on its runs without deleting them; archiving a bot
+keeps the sweep and its runs associated with the bot, while permanently deleting
+a bot leaves the runs readable with `bot_id` nulled. Archived bots are not offered
+when creating a sweep.
 
 Sweep status is derived from its runs rather than stored:
 
@@ -282,8 +286,10 @@ Every run detail page repeats these limitations:
 
 - Candle reading is public and does not require an exchange credential.
 - Backtest tables are additive and never read by live trading code.
-- Deleting a user removes their runs and fills. Deleting a bot sets the run's
-  `bot_id` to null without deleting the run.
+- Deleting a user removes their runs and fills. Archiving a bot keeps the run's
+  `bot_id` and name, so the run remains associated with the archived bot.
+  Permanently deleting a bot sets the run's `bot_id` to null without deleting the
+  run.
 - The source bot, strategy configuration, and risk limit rows are not modified.
 - The engine and database must be healthy; a run that cannot read data fails
   visibly rather than silently completing with no trades.
@@ -326,6 +332,7 @@ The Go fixtures under `tests/golden/engine/backtest_replay.json` and
 | Stale and orphan runs | `engine/internal/backtest/stale_test.go`, opt-in DB test |
 | Sweep schema and run link | `BacktestSweepMigrationTest` |
 | Sweep model relations and cascade behavior | `BacktestSweepModelTest` |
+| Archived bot retention | `BotArchiveTest` |
 | Sweep configuration cap | `BacktestSweepConfigTest` |
 | Cartesian creation, overrides, rollback, publish failure | `BacktestSweepTest` |
 | Snapshot strategy overrides | `BacktestSnapshotBuilderTest` |

@@ -9,6 +9,7 @@ use App\Domain\Risk\LiveModeGuard;
 use App\Domain\Risk\ValueObjects\LiveStartConfirmation;
 use App\Models\Bot;
 use App\Services\Engine\CommandPublisher;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Throwable;
 
 class StartBot
@@ -33,12 +34,20 @@ class StartBot
         $previous = $bot->desired_status;
         $wasDesiredRunning = $previous === BotStatus::Running;
 
-        $bot->update(['desired_status' => BotStatus::Running]);
+        $updated = Bot::query()
+            ->whereKey($bot->getKey())
+            ->update(['desired_status' => BotStatus::Running->value]);
+
+        if ($updated === 0) {
+            throw (new ModelNotFoundException)->setModel(Bot::class, [$bot->getKey()]);
+        }
 
         try {
             $this->commands->publish('bot.start', $bot->user_id, $bot->id);
         } catch (Throwable $exception) {
-            $bot->update(['desired_status' => $previous]);
+            Bot::query()
+                ->whereKey($bot->getKey())
+                ->update(['desired_status' => $previous->value]);
 
             throw $exception;
         }

@@ -6,6 +6,7 @@ import { onMounted, onUnmounted } from 'vue';
 
 defineProps({
     bots: { type: Array, default: () => [] },
+    archived: { type: Boolean, default: false },
 });
 
 let poller = null;
@@ -23,6 +24,12 @@ onUnmounted(() => {
 function timestamp(value) {
     return value ? new Date(value).toLocaleString() : '—';
 }
+
+function restore(bot) {
+    if (confirm(`Restore ${bot.name}? It will return to the active list, still stopped.`)) {
+        router.post(route('bots.restore', bot.id));
+    }
+}
 </script>
 
 <template>
@@ -33,8 +40,12 @@ function timestamp(value) {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <h2 class="text-xl font-semibold leading-tight text-slate-100">Bots</h2>
                 <div class="flex flex-wrap items-center gap-3">
-                    <Link :href="route('kill-switch.create')" class="rounded-md border border-rose-400 bg-rose-950 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-rose-200 hover:bg-rose-900 focus:outline-none focus:ring-2 focus:ring-rose-300">Kill switch</Link>
-                    <Link :href="route('bots.create')" class="rounded-md bg-blue-700 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white">Create bot</Link>
+                    <template v-if="!archived">
+                        <Link :href="route('bots.index', { archived: 1 })" class="rounded-md border border-slate-500 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-200 hover:bg-slate-800">Archived</Link>
+                        <Link :href="route('kill-switch.create')" class="rounded-md border border-rose-400 bg-rose-950 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-rose-200 hover:bg-rose-900 focus:outline-none focus:ring-2 focus:ring-rose-300">Kill switch</Link>
+                        <Link :href="route('bots.create')" class="rounded-md bg-blue-700 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white">Create bot</Link>
+                    </template>
+                    <Link v-else :href="route('bots.index')" class="rounded-md bg-blue-700 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white">Active bots</Link>
                 </div>
             </div>
         </template>
@@ -54,12 +65,14 @@ function timestamp(value) {
                                 <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-300">Realized P&amp;L</th>
                                 <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-300">Unrealized P&amp;L</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-300">Last tick</th>
+                                <th v-if="archived" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-300">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-700 bg-slate-800">
                             <tr v-for="bot in bots" :key="bot.id">
                                 <td class="px-6 py-4 text-sm text-slate-100">
-                                    <Link :href="route('bots.show', bot.id)" class="font-medium underline">{{ bot.name }}</Link>
+                                    <Link v-if="!archived" :href="route('bots.show', bot.id)" class="font-medium underline">{{ bot.name }}</Link>
+                                    <span v-else class="font-medium">{{ bot.name }}</span>
                                     <p v-if="bot.last_error" class="mt-1 text-xs text-red-300">{{ bot.last_error }}</p>
                                 </td>
                                 <td class="px-6 py-4 text-sm text-slate-300">{{ bot.symbol }}</td>
@@ -72,9 +85,12 @@ function timestamp(value) {
                                 <td class="px-6 py-4 text-right text-sm" :class="Number(bot.realized_pnl) < 0 ? 'text-red-300' : 'text-green-300'">{{ formatSignedMoney(bot.realized_pnl) }}</td>
                                 <td class="px-6 py-4 text-right text-sm" :class="Number(bot.unrealized_pnl) < 0 ? 'text-red-300' : 'text-green-300'">{{ formatSignedMoney(bot.unrealized_pnl) }}</td>
                                 <td class="px-6 py-4 text-sm text-slate-300">{{ timestamp(bot.last_tick_at) }}</td>
+                                <td v-if="archived" class="px-6 py-4 text-right text-sm">
+                                    <button type="button" class="rounded-md border border-blue-400 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-blue-200 hover:bg-blue-950" @click="restore(bot)">Restore</button>
+                                </td>
                             </tr>
                             <tr v-if="bots.length === 0">
-                                <td colspan="9" class="px-6 py-8 text-center text-sm text-slate-300">No bots yet.</td>
+                                <td :colspan="archived ? 10 : 9" class="px-6 py-8 text-center text-sm text-slate-300">{{ archived ? 'No archived bots.' : 'No bots yet.' }}</td>
                             </tr>
                         </tbody>
                     </table>

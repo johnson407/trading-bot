@@ -28,3 +28,14 @@ it('accepts the user-facing activity types', function () {
         'type' => 'bot.paused',
     ]);
 });
+
+it('accepts the archive lifecycle activity types', function (string $type) {
+    $bot = Bot::factory()->create();
+
+    app(ActivityRecorder::class)->recordUser($type, 'Archive lifecycle event.', $bot);
+
+    $this->assertDatabaseHas('activity_logs', [
+        'bot_id' => $bot->id,
+        'type' => $type,
+    ]);
+})->with(['bot.archived', 'bot.restored']);

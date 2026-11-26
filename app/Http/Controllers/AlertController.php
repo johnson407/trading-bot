@@ -16,7 +16,7 @@ class AlertController extends Controller
         $botId = $this->ownedBotId($request);
 
         $alerts = $user->alerts()
-            ->with('bot:id,name')
+            ->with('bot:id,name,deleted_at')
             ->when($botId !== null, fn ($query) => $query->where('bot_id', $botId))
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -32,6 +32,7 @@ class AlertController extends Controller
                 'bot' => $alert->bot === null ? null : [
                     'id' => $alert->bot->id,
                     'name' => $alert->bot->name,
+                    'archived' => $alert->bot->trashed(),
                 ],
                 'read_at' => $alert->read_at?->toIso8601String(),
                 'created_at' => $alert->created_at->toIso8601String(),

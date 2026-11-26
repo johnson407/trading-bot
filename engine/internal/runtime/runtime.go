@@ -185,7 +185,7 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 			}
 
 			_, err := r.pool.Exec(ctx,
-				`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1`,
+				`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
 				bot.ID, message,
 			)
 
@@ -199,10 +199,15 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 			}
 		}
 		if bot.StrategyReset {
-			if _, err := r.pool.Exec(ctx, `UPDATE strategy_configs SET state = NULL, updated_at = now() WHERE bot_id = $1`, bot.ID); err != nil {
+			if _, err := r.pool.Exec(ctx,
+				`UPDATE strategy_configs SET state = NULL, updated_at = now()
+				 WHERE bot_id = $1
+				   AND EXISTS (SELECT 1 FROM bots WHERE bots.id = $1 AND bots.deleted_at IS NULL)`,
+				bot.ID,
+			); err != nil {
 				return err
 			}
-			if _, err := r.pool.Exec(ctx, `UPDATE bots SET strategy_reset_pending = false, updated_at = now() WHERE id = $1`, bot.ID); err != nil {
+			if _, err := r.pool.Exec(ctx, `UPDATE bots SET strategy_reset_pending = false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
 				return err
 			}
 		}
@@ -218,12 +223,12 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 			`UPDATE bots
 			    SET status = 'running', last_tick_at = NULL, last_successful_tick_at = now(),
 			        consecutive_failures = 0, last_error = NULL, updated_at = now()
-			  WHERE id = $1 AND user_id = $2`,
+			  WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
 			command.BotID, command.UserID,
 		)
 	} else {
 		_, err = r.pool.Exec(ctx,
-			`UPDATE bots SET status = $2, updated_at = now() WHERE id = $1 AND user_id = $3`,
+			`UPDATE bots SET status = $2, updated_at = now() WHERE id = $1 AND user_id = $3 AND deleted_at IS NULL`,
 			command.BotID, status, command.UserID,
 		)
 	}
@@ -249,13 +254,13 @@ func (r *Runtime) resetStrategyState(ctx context.Context, command protocol.Envel
 		_, err := r.pool.Exec(ctx,
 			`UPDATE strategy_configs SET state = NULL, updated_at = now()
 			 WHERE bot_id = $1
-			   AND EXISTS (SELECT 1 FROM bots WHERE bots.id = $1 AND bots.user_id = $2)`,
+			   AND EXISTS (SELECT 1 FROM bots WHERE bots.id = $1 AND bots.user_id = $2 AND bots.deleted_at IS NULL)`,
 			command.BotID, command.UserID,
 		)
 		if err != nil {
 			return fmt.Errorf("reset strategy state: %w", err)
 		}
-		_, err = r.pool.Exec(ctx, `UPDATE bots SET strategy_reset_pending = false, updated_at = now() WHERE id = $1 AND user_id = $2`, command.BotID, command.UserID)
+		_, err = r.pool.Exec(ctx, `UPDATE bots SET strategy_reset_pending = false, updated_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`, command.BotID, command.UserID)
 
 		return err
 	})
@@ -279,6 +284,7 @@ func (r *Runtime) cancelOrder(ctx context.Context, command protocol.Envelope) er
 			        COALESCE(orders.exchange_order_id, ''), orders.filled_quantity::text
 			 FROM orders JOIN bots ON bots.id = orders.bot_id
 			 WHERE orders.id = $1 AND orders.bot_id = $2 AND bots.user_id = $3
+			   AND bots.deleted_at IS NULL
 			   AND orders.status IN ('pending','open','partially_filled')`,
 			orderID, command.BotID, command.UserID,
 		).Scan(&botID, &gridLevelID, &mode, &clientOrderID, &exchangeOrderID, &filledQuantity)
@@ -328,7 +334,7 @@ func (r *Runtime) killSwitch(ctx context.Context, command protocol.Envelope) err
 	}
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT id FROM bots WHERE user_id = $1 AND status <> 'stopped' AND desired_status = 'paused' ORDER BY id`,
+		`SELECT id FROM bots WHERE user_id = $1 AND status <> 'stopped' AND desired_status = 'paused' AND deleted_at IS NULL ORDER BY id`,
 		command.UserID,
 	)
 	if err != nil {
@@ -355,7 +361,7 @@ func (r *Runtime) killSwitch(ctx context.Context, command protocol.Envelope) err
 		if err := runBotCommand(ctx, func(ctx context.Context) error {
 			message := "Kill-switch activated; bot paused and open orders canceled."
 			if _, err := r.pool.Exec(ctx,
-				`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1`,
+				`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
 				botID, message,
 			); err != nil {
 				return fmt.Errorf("pause bot %d: %w", botID, err)
@@ -363,7 +369,7 @@ func (r *Runtime) killSwitch(ctx context.Context, command protocol.Envelope) err
 			if _, err := r.cancelOpenOrders(ctx, command.UserID, botID, "kill_switch"); err != nil {
 				return fmt.Errorf("cancel bot %d orders: %w", botID, err)
 			}
-			if _, err := r.pool.Exec(ctx, `UPDATE bots SET kill_switch_requested_at = NULL, updated_at = now() WHERE id = $1`, botID); err != nil {
+			if _, err := r.pool.Exec(ctx, `UPDATE bots SET kill_switch_requested_at = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, botID); err != nil {
 				return err
 			}
 
@@ -385,7 +391,7 @@ func (r *Runtime) killSwitch(ctx context.Context, command protocol.Envelope) err
 // RunningCount reports bots currently claimed as running for the heartbeat.
 func (r *Runtime) RunningCount(ctx context.Context) int {
 	var count int
-	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM bots WHERE status = 'running'`).Scan(&count); err != nil {
+	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM bots WHERE status = 'running' AND deleted_at IS NULL`).Scan(&count); err != nil {
 		return 0
 	}
 
@@ -428,12 +434,13 @@ func (r *Runtime) Reconcile(ctx context.Context) error {
 func (r *Runtime) reconcile(ctx context.Context) error {
 	rows, err := r.pool.Query(ctx,
 		`SELECT id FROM bots
-		 WHERE (status = 'running' AND desired_status IN ('paused','stopped'))
+		 WHERE deleted_at IS NULL
+		   AND ((status = 'running' AND desired_status IN ('paused','stopped'))
 		    OR (status = 'paused' AND desired_status = 'stopped')
 		    OR (status = 'stopped' AND desired_status = 'running')
 		    OR (status = 'idle' AND desired_status = 'running')
 		    OR kill_switch_requested_at IS NOT NULL
-		    OR cancel_retry_requested = true`,
+		    OR cancel_retry_requested = true)`,
 	)
 	if err != nil {
 		return fmt.Errorf("load desired-status drift: %w", err)
@@ -465,7 +472,7 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 	// after the status update committed.
 	stopped, err := r.pool.Query(ctx,
 		`SELECT DISTINCT b.id, b.user_id FROM bots b JOIN orders o ON o.bot_id = b.id
-		 WHERE b.status = 'stopped' AND o.status IN ('pending','open','partially_filled')`,
+		 WHERE b.deleted_at IS NULL AND b.status = 'stopped' AND o.status IN ('pending','open','partially_filled')`,
 	)
 	if err != nil {
 		return fmt.Errorf("load stopped bots with open orders: %w", err)
@@ -496,7 +503,8 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 
 	stale, err := r.pool.Query(ctx,
 		`SELECT id FROM bots
-		 WHERE status = 'running'
+		 WHERE deleted_at IS NULL
+		   AND status = 'running'
 		   AND COALESCE(last_successful_tick_at, last_tick_at, created_at)
 		       < now() - make_interval(secs => GREATEST(180, tick_interval_seconds + 30))`,
 	)
@@ -549,13 +557,13 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 		return err
 	}
 	if bot.KillSwitchAt != nil {
-		if _, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'paused', updated_at = now() WHERE id = $1`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'paused', updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
 			return err
 		}
 		if _, err := r.cancelOpenOrders(ctx, bot.UserID, bot.ID, "kill_switch"); err != nil {
 			return err
 		}
-		if _, err := r.pool.Exec(ctx, `UPDATE bots SET kill_switch_requested_at = NULL, updated_at = now() WHERE id = $1`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx, `UPDATE bots SET kill_switch_requested_at = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
 			return err
 		}
 		return nil
@@ -565,16 +573,21 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 		if _, err := r.cancelOpenOrders(ctx, bot.UserID, bot.ID, "cancel_retry"); err != nil {
 			return err
 		}
-		if _, err := r.pool.Exec(ctx, `UPDATE bots SET cancel_retry_requested = false, updated_at = now() WHERE id = $1`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx, `UPDATE bots SET cancel_retry_requested = false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
 			return err
 		}
 	}
 
 	if bot.StrategyReset {
-		if _, err := r.pool.Exec(ctx, `UPDATE strategy_configs SET state = NULL, updated_at = now() WHERE bot_id = $1`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx,
+			`UPDATE strategy_configs SET state = NULL, updated_at = now()
+			 WHERE bot_id = $1
+			   AND EXISTS (SELECT 1 FROM bots WHERE id = $1 AND deleted_at IS NULL)`,
+			bot.ID,
+		); err != nil {
 			return err
 		}
-		if _, err := r.pool.Exec(ctx, `UPDATE bots SET strategy_reset_pending = false, updated_at = now() WHERE id = $1`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx, `UPDATE bots SET strategy_reset_pending = false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
 			return err
 		}
 	}
@@ -604,16 +617,16 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 				return nil
 			}
 		}
-		_, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'running', last_error = NULL, updated_at = now() WHERE id = $1`, bot.ID)
+		_, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'running', last_error = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
 		return err
 	case "paused":
-		_, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'paused', updated_at = now() WHERE id = $1`, bot.ID)
+		_, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'paused', updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
 		if err != nil {
 			return err
 		}
 		return nil
 	case "stopped":
-		if _, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'stopped', updated_at = now() WHERE id = $1`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'stopped', updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
 			return err
 		}
 		_, err = r.cancelOpenOrders(ctx, bot.UserID, bot.ID, "bot.stop")
@@ -624,14 +637,15 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 }
 
 func (r *Runtime) markPaused(ctx context.Context, bot *Bot, message string) error {
-	_, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1`, bot.ID, message)
+	_, err := r.pool.Exec(ctx, `UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
 	return err
 }
 
 func (r *Runtime) runDue(ctx context.Context) error {
 	rows, err := r.pool.Query(ctx,
 		`SELECT id FROM bots
-		 WHERE status = 'running'
+		 WHERE deleted_at IS NULL
+		   AND status = 'running'
 		   AND (last_tick_at IS NULL OR last_tick_at <= now() - make_interval(secs => GREATEST(tick_interval_seconds, 1)))
 		 ORDER BY id`,
 	)
@@ -679,7 +693,7 @@ func (r *Runtime) runDue(ctx context.Context) error {
 func (r *Runtime) FeedSymbols(ctx context.Context) ([]string, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT DISTINCT symbol FROM bots
-		 WHERE exchange = 'binance' AND status IN ('starting','running')
+		 WHERE deleted_at IS NULL AND exchange = 'binance' AND status IN ('starting','running')
 		   AND symbol IS NOT NULL AND symbol <> ''
 		 ORDER BY symbol`,
 	)
@@ -704,7 +718,7 @@ func (r *Runtime) FeedSymbols(ctx context.Context) ([]string, error) {
 // due-check helper.
 func (r *Runtime) Source(ctx context.Context) ([]tick.Bot, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, status, tick_interval_seconds, last_tick_at FROM bots WHERE status = 'running'`,
+		`SELECT id, status, tick_interval_seconds, last_tick_at FROM bots WHERE status = 'running' AND deleted_at IS NULL`,
 	)
 	if err != nil {
 		return nil, err

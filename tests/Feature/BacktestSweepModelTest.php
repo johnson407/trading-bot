@@ -50,7 +50,22 @@ it('keeps sweep runs when the sweep or bot is deleted', function () {
         ->and(BacktestRun::query()->whereKey($run->id)->exists())->toBeTrue();
 });
 
-it('keeps sweep runs and the sweep when the bot is deleted', function () {
+it('keeps sweep runs and the sweep when the bot is permanently deleted', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create();
+    $sweep = BacktestSweep::factory()->for($user)->for($bot)->create();
+    $run = BacktestRun::factory()->for($user)->forBot($bot)->create(['sweep_id' => $sweep->id]);
+
+    $bot->forceDelete();
+
+    expect($sweep->refresh()->bot_id)->toBeNull()
+        ->and($run->refresh()->bot_id)->toBeNull()
+        ->and($run->sweep_id)->toBe($sweep->id)
+        ->and(BacktestSweep::query()->whereKey($sweep->id)->exists())->toBeTrue()
+        ->and(BacktestRun::query()->whereKey($run->id)->exists())->toBeTrue();
+});
+
+it('keeps sweep runs and the sweep associated with an archived bot', function () {
     $user = User::factory()->create();
     $bot = Bot::factory()->for($user)->create();
     $sweep = BacktestSweep::factory()->for($user)->for($bot)->create();
@@ -58,8 +73,11 @@ it('keeps sweep runs and the sweep when the bot is deleted', function () {
 
     $bot->delete();
 
-    expect($sweep->refresh()->bot_id)->toBeNull()
-        ->and($run->refresh()->bot_id)->toBeNull()
+    expect($sweep->refresh()->bot_id)->toBe($bot->id)
+        ->and($run->refresh()->bot_id)->toBe($bot->id)
+        ->and($sweep->bot?->is($bot))->toBeTrue()
+        ->and($run->bot?->is($bot))->toBeTrue()
+        ->and($sweep->bot?->name)->toBe($bot->name)
         ->and($run->sweep_id)->toBe($sweep->id)
         ->and(BacktestSweep::query()->whereKey($sweep->id)->exists())->toBeTrue()
         ->and(BacktestRun::query()->whereKey($run->id)->exists())->toBeTrue();

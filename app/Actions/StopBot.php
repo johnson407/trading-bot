@@ -8,6 +8,7 @@ use App\Domain\Bot\Enums\BotStatus;
 use App\Models\Bot;
 use App\Services\Engine\CommandPublisher;
 use App\Services\Engine\EngineHeartbeat;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -26,7 +27,13 @@ class StopBot
             return $bot;
         }
 
-        $bot->update(['desired_status' => BotStatus::Stopped]);
+        $updated = Bot::query()
+            ->whereKey($bot->getKey())
+            ->update(['desired_status' => BotStatus::Stopped->value]);
+
+        if ($updated === 0) {
+            throw (new ModelNotFoundException)->setModel(Bot::class, [$bot->getKey()]);
+        }
 
         $published = false;
 

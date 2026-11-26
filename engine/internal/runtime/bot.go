@@ -59,7 +59,7 @@ func (r *Runtime) loadBot(ctx context.Context, id int64) (*Bot, error) {
 		        average_entry_price::text, realized_pnl::text, fees_paid::text, fee_rate::text,
 		        tick_interval_seconds, last_tick_at, last_successful_tick_at, last_error, settings,
 		        stop_loss_percent::text, take_profit_percent::text, range_low::text, range_high::text
-		 FROM bots WHERE id = $1`,
+		 FROM bots WHERE id = $1 AND deleted_at IS NULL`,
 		id,
 	).Scan(
 		&bot.ID, &bot.UserID, &bot.Name, &bot.Mode, &bot.Status, &bot.DesiredStatus,

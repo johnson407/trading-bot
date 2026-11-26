@@ -13,7 +13,7 @@ The dashboard keeps a rolling, account-level history of equity so you can see wh
 | Default chart range | 30 days | `ANALYTICS_DEFAULT_RANGE_DAYS` |
 | Chart point cap | 500 | `ANALYTICS_CHART_POINTS` |
 
-The schedule uses `withoutOverlapping`, so a slow capture does not stack runs. Only users with at least one bot are captured. A failure for one account is logged and skipped; other accounts are still captured.
+The schedule uses `withoutOverlapping`, so a slow capture does not stack runs. Only users with at least one bot are captured, including users whose bots are all archived. A failure for one account is logged and skipped; other accounts are still captured.
 
 ### Bucket idempotency
 
@@ -21,13 +21,18 @@ The schedule uses `withoutOverlapping`, so a slow capture does not stack runs. O
 
 ## Equity definition
 
-For each bot:
+For each bot, including archived bots:
 
 ```
 quote value = quote_inventory
 base value  = base_inventory * mark price
 equity      = quote value + base value
 ```
+
+Archiving never sells inventory, so an archived bot still contributes its quote
+and base inventory, realized P&L, fees, and bot count to the account snapshot.
+This keeps account equity and P&L continuous across archiving; operational counts
+and bot lists exclude archived bots.
 
 The mark price is `settings.mark_price` when positive, then `average_entry_price` when positive, then zero. A bot with neither mark nor average entry contributes only its quote inventory. A quote-only bot contributes only its quote inventory.
 
@@ -76,6 +81,7 @@ An empty range has no history and shows the empty state. A single snapshot is sh
 | Behavior | Test |
 | --- | --- |
 | Snapshot sums and bucket idempotency | `EquitySnapshotterTest` |
+| Archived bots and all-archived accounts | `BotArchiveTest` |
 | Capture command | `EquityCaptureCommandTest` |
 | Retention and source preservation | `EquityRetentionTest` |
 | Period metrics and downsampling | `EquityHistoryTest` |

@@ -35,10 +35,12 @@ class ActivateKillSwitch
         DB::transaction(function () use ($bots) {
             foreach ($bots as $bot) {
                 if ($bot->desired_status !== BotStatus::Stopped) {
-                    $bot->forceFill([
-                        'desired_status' => BotStatus::Paused,
-                        'kill_switch_requested_at' => now(),
-                    ])->save();
+                    Bot::query()
+                        ->whereKey($bot->getKey())
+                        ->update([
+                            'desired_status' => BotStatus::Paused->value,
+                            'kill_switch_requested_at' => now(),
+                        ]);
                 }
             }
         });

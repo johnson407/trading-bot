@@ -17,16 +17,17 @@ names the code that implements it and the test or command used to verify it.
 
 ## Authorization
 
-- [x] Bot ownership is enforced for view, update, delete, and control.
+- [x] Bot ownership is enforced for view, update, archive, restore, and control.
   `app/Policies/BotPolicy.php`.
 - [x] Exchange credential ownership is enforced for view, update, and delete.
   `app/Policies/ExchangeCredentialPolicy.php`.
 - [x] Controllers call `authorize()` before sensitive actions:
-  `BotController::show/activity/start/pause/stop`,
+  `BotController::show/activity/start/pause/stop/destroy/restore`,
   `ExchangeCredentialController::edit/update/destroy`.
 - [x] Cross-user access is denied with 403 and denied guests are redirected.
   Evidence: `tests/Feature/AuthorizationTest.php`,
   `tests/Feature/BotControlTest.php`,
+  `tests/Feature/BotArchiveTest.php`,
   `tests/Feature/ExchangeCredentialUiTest.php`,
   `tests/Feature/ActivityLogTest.php`.
 
@@ -72,7 +73,7 @@ names the code that implements it and the test or command used to verify it.
 | --- | --- | --- |
 | Login | 5 attempts per email + IP | `LoginRequest` manual limiter |
 | Email verification / password reset | 6 per minute | `routes/auth.php` |
-| Bot creation and start/pause/stop | 30 per minute per user/IP | `RateLimiter::for('bot-control')` |
+| Bot creation and start/pause/stop/archive/restore | 30 per minute per user/IP | `RateLimiter::for('bot-control')` |
 | Kill switch | 5 per minute per user/IP | `RateLimiter::for('kill-switch')` |
 | Exchange credential mutations | 10 per minute per user/IP | `RateLimiter::for('exchange-credentials')` |
 
@@ -96,6 +97,10 @@ Evidence: `tests/Feature/RateLimitTest.php`.
 - [x] Testnet is the first live rollout target. Binance testnet requests use
   `https://testnet.binance.vision` and refuse a custom relay or production host;
   production real-money live requires an explicit operator yes.
+- [x] Archiving requires both status and desired status to be stopped, no pending,
+  open, or partially-filled orders, and a fresh engine heartbeat for a live bot.
+  Archived bots are inert and excluded from engine ticks, operational lists,
+  selectors, and the kill switch. `BotController::destroy`.
 - [x] The kill switch writes `desired_status=paused`, publishes `kill_switch`, and
   cancels open live orders locally when the engine heartbeat is expired or the
   command cannot be published. `app/Actions/ActivateKillSwitch.php`.

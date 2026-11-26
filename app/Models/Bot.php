@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
@@ -42,6 +43,7 @@ use Illuminate\Support\Carbon;
  * @property array<array-key, mixed>|null $settings
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property Carbon|null $deleted_at
  * @property-read Grid|null $activeGrid
  * @property-read Collection<int, ActivityLog> $activityLogs
  * @property-read int|null $activity_logs_count
@@ -66,8 +68,10 @@ use Illuminate\Support\Carbon;
  * @method static \Database\Factories\BotFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot onlyTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot running()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot withTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot whereAverageEntryPrice($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot whereBaseInventory($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Bot whereCapitalAllocation($value)
@@ -98,6 +102,7 @@ use Illuminate\Support\Carbon;
 class Bot extends Model
 {
     use HasFactory;
+    use SoftDeletes;
 
     /**
      * Settings owned by the Go engine. Laravel merges around these keys and

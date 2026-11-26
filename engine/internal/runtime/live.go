@@ -152,7 +152,7 @@ func (r *Runtime) persistLiveIntent(ctx context.Context, bot *Bot, active *gridS
 	err := r.pool.QueryRow(ctx,
 		`INSERT INTO orders (bot_id, grid_id, grid_level_id, client_order_id, mode, side, type, price, quantity, filled_quantity, status, requested_at, opened_at, created_at, updated_at)
 		 SELECT $1, $2, $3, $4, $5, $6, 'limit', $7, $8, 0, 'pending', now(), now(), now(), now()
-		 WHERE EXISTS (SELECT 1 FROM bots WHERE id = $1 AND status = 'running' AND desired_status = 'running')
+		 WHERE EXISTS (SELECT 1 FROM bots WHERE id = $1 AND status = 'running' AND desired_status = 'running' AND deleted_at IS NULL)
 		 ON CONFLICT (bot_id, client_order_id) DO NOTHING
 		 RETURNING id`,
 		bot.ID, active.ID, levelID, clientID, bot.Mode, string(intent.Side), intent.Price.String(), intent.Quantity.String(),
@@ -278,7 +278,7 @@ func (r *Runtime) placeLiveOrders(ctx context.Context, bot *Bot, active *gridSta
 		var status, desired string
 		var killSwitch *time.Time
 		if err := r.pool.QueryRow(ctx,
-			`SELECT status, desired_status, kill_switch_requested_at FROM bots WHERE id = $1`,
+			`SELECT status, desired_status, kill_switch_requested_at FROM bots WHERE id = $1 AND deleted_at IS NULL`,
 			bot.ID,
 		).Scan(&status, &desired, &killSwitch); err != nil {
 			return placed, err
@@ -447,7 +447,7 @@ func (r *Runtime) livePlacementFailure(ctx context.Context, bot *Bot, message st
 	var failures int
 	err := r.pool.QueryRow(ctx,
 		`UPDATE bots SET last_error = $2, consecutive_failures = consecutive_failures + 1, updated_at = now()
-		 WHERE id = $1 RETURNING consecutive_failures`,
+		 WHERE id = $1 AND deleted_at IS NULL RETURNING consecutive_failures`,
 		bot.ID, "Live order rejected: "+message,
 	).Scan(&failures)
 	if err != nil {
@@ -535,6 +535,17 @@ func (r *Runtime) applyLiveOrder(ctx context.Context, bot *Bot, orderID int64, p
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	var activeBotID int64
+	if err := tx.QueryRow(ctx,
+		`SELECT id FROM bots WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+		bot.ID,
+	).Scan(&activeBotID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
 
 	closed := remote.Status == exchange.StatusFilled || remote.Status == exchange.StatusCanceled || remote.Status == exchange.StatusRejected
 	if _, err := tx.Exec(ctx,
@@ -818,7 +829,7 @@ func (r *Runtime) syncAllLiveOrders(ctx context.Context, force bool) {
 	// Paused bots can still have resting orders, and a stopped bot may have
 	// been interrupted mid-cancel. Reconcile anything live with open work.
 	rows, err := r.pool.Query(ctx, `SELECT b.id FROM bots b
-		WHERE b.mode = 'live' AND (
+		WHERE b.deleted_at IS NULL AND b.mode = 'live' AND (
 			b.status IN ('starting','running','paused')
 			OR EXISTS (SELECT 1 FROM orders o WHERE o.bot_id = b.id AND o.status IN ('pending','open','partially_filled'))
 		) ORDER BY b.id`)

@@ -109,7 +109,7 @@ class BacktestRun extends Model
     /** @return BelongsTo<Bot, $this> */
     public function bot(): BelongsTo
     {
-        return $this->belongsTo(Bot::class);
+        return $this->belongsTo(Bot::class)->withTrashed();
     }
 
     /** @return HasMany<BacktestFill, $this> */

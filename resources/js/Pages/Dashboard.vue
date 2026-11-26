@@ -216,9 +216,10 @@ onBeforeUnmount(() => {
                             <tr v-for="entry in recentActivity" :key="entry.id">
                                 <td class="px-6 py-3 whitespace-nowrap text-sm text-slate-300">{{ entry.created_at ? new Date(entry.created_at).toLocaleString() : '' }}</td>
                                 <td class="px-6 py-3 whitespace-nowrap text-sm text-slate-100">
-                                    <Link v-if="entry.bot_id" :href="route('bots.show', entry.bot_id)" class="text-blue-300 hover:text-blue-200">
+                                    <Link v-if="entry.bot_id && !entry.archived" :href="route('bots.show', entry.bot_id)" class="text-blue-300 hover:text-blue-200">
                                         {{ entry.bot }}
                                     </Link>
+                                    <span v-else-if="entry.bot_id">{{ entry.bot }}</span>
                                     <span v-else>Account</span>
                                 </td>
                                 <td class="px-6 py-3 whitespace-nowrap text-sm text-slate-300">{{ entry.type }}</td>

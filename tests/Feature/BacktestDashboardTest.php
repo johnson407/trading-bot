@@ -273,7 +273,7 @@ it('keeps a run readable after its bot is deleted and cascades fills on run dele
     $run = BacktestRun::factory()->for($user)->forBot($bot)->create();
     $fill = BacktestFill::factory()->for($run, 'run')->create();
 
-    $bot->delete();
+    $bot->forceDelete();
 
     expect($run->refresh()->bot_id)->toBeNull()
         ->and(BacktestRun::query()->whereKey($run->id)->exists())->toBeTrue();
@@ -283,6 +283,20 @@ it('keeps a run readable after its bot is deleted and cascades fills on run dele
     $run->delete();
 
     expect(BacktestFill::query()->whereKey($fill->id)->exists())->toBeFalse();
+});
+
+it('keeps a run associated with an archived bot', function () {
+    $user = User::factory()->create();
+    $bot = ownedBot($user);
+    $run = BacktestRun::factory()->for($user)->forBot($bot)->create();
+
+    $bot->delete();
+
+    expect($run->refresh()->bot_id)->toBe($bot->id)
+        ->and($run->bot?->is($bot))->toBeTrue()
+        ->and($run->bot?->name)->toBe($bot->name);
+
+    $this->actingAs($user)->get(route('backtests.show', $run))->assertOk();
 });
 
 it('renders the create page with owned bot choices and defaults', function () {

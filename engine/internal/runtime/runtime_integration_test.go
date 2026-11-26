@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -565,4 +566,241 @@ func TestRuntimeGapFillsPlaceOppositeSells(t *testing.T) {
 	assertBotState(t, pool, botID, "running", "running")
 	assertCount(t, pool, `SELECT COUNT(*) FROM orders WHERE bot_id=$1 AND status='open' AND side='buy'`, 0, botID)
 	assertCount(t, pool, `SELECT COUNT(*) FROM orders WHERE bot_id=$1 AND status='open'`, 6, botID)
+}
+
+func TestArchivedBotIgnoresControlCommands(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	suffix := time.Now().UnixNano()
+	var userID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO users (name, email, password, created_at, updated_at)
+		 VALUES ('Archived control', $1, 'x', now(), now()) RETURNING id`,
+		fmt.Sprintf("archived-control-%d@example.test", suffix)).Scan(&userID); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID) })
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+	cases := []struct {
+		name    string
+		status  string
+		desired string
+		command string
+	}{
+		{name: "stale start", status: "stopped", desired: "stopped", command: protocol.CommandBotStart},
+		{name: "stale pause", status: "stopped", desired: "stopped", command: protocol.CommandBotPause},
+		{name: "stale stop", status: "running", desired: "running", command: protocol.CommandBotStop},
+	}
+
+	for _, tc := range cases {
+		var botID int64
+		if err := pool.QueryRow(ctx,
+			`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
+			 capital_allocation, quote_inventory, tick_interval_seconds, settings, deleted_at, created_at, updated_at)
+			 VALUES ($1, $2, 'binance', 'BTC/USDT', 'simple-grid', 'paper', $3, $4,
+			 '1000', '1000', 1, '{}'::jsonb, now(), now(), now())
+			 RETURNING id`, userID, tc.name, tc.status, tc.desired).Scan(&botID); err != nil {
+			t.Fatalf("insert %s bot: %v", tc.name, err)
+		}
+
+		if err := trading.Process(ctx, command(tc.command, userID, botID, nil)); err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		assertBotState(t, pool, botID, tc.status, tc.desired)
+		assertCount(t, pool, `SELECT COUNT(*) FROM activity_logs WHERE bot_id=$1`, 0, botID)
+	}
+}
+
+func TestReconcilerIgnoresArchivedBots(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	suffix := time.Now().UnixNano()
+	var userID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO users (name, email, password, created_at, updated_at)
+		 VALUES ('Archived reconcile', $1, 'x', now(), now()) RETURNING id`,
+		fmt.Sprintf("archived-reconcile-%d@example.test", suffix)).Scan(&userID); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID) })
+
+	var botID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
+		 kill_switch_requested_at, capital_allocation, quote_inventory, tick_interval_seconds, settings,
+		 last_successful_tick_at, deleted_at, created_at, updated_at)
+		 VALUES ($1, 'Archived reconcile bot', 'binance', 'BTC/USDT', 'simple-grid', 'paper', 'running', 'paused',
+		 now(), '1000', '1000', 1, '{}'::jsonb, now() - interval '1 hour', now(), now(), now())
+		 RETURNING id`, userID).Scan(&botID); err != nil {
+		t.Fatalf("insert bot: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO orders (bot_id, client_order_id, mode, side, type, price, quantity, filled_quantity, status, requested_at, opened_at, created_at, updated_at)
+		 VALUES ($1, 'archived-order', 'paper', 'buy', 'limit', '90', '0.1', 0, 'open', now(), now(), now(), now())`, botID); err != nil {
+		t.Fatalf("insert order: %v", err)
+	}
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	assertBotState(t, pool, botID, "running", "paused")
+	assertCount(t, pool, `SELECT COUNT(*) FROM orders WHERE bot_id=$1 AND status='open'`, 1, botID)
+	var marker bool
+	if err := pool.QueryRow(ctx, `SELECT kill_switch_requested_at IS NOT NULL FROM bots WHERE id=$1`, botID).Scan(&marker); err != nil {
+		t.Fatalf("read marker: %v", err)
+	}
+	if !marker {
+		t.Fatal("archived bot's kill-switch marker was cleared")
+	}
+	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1`, 0, botID)
+}
+
+func TestSourceExcludesArchivedBots(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	suffix := time.Now().UnixNano()
+	var userID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO users (name, email, password, created_at, updated_at)
+		 VALUES ('Archived source', $1, 'x', now(), now()) RETURNING id`,
+		fmt.Sprintf("archived-source-%d@example.test", suffix)).Scan(&userID); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID) })
+
+	insert := func(name string, archived bool) int64 {
+		var botID int64
+		deletedAt := "NULL"
+		if archived {
+			deletedAt = "now()"
+		}
+		query := fmt.Sprintf(
+			`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
+			 capital_allocation, quote_inventory, tick_interval_seconds, settings, deleted_at, created_at, updated_at)
+			 VALUES ($1, $2, 'binance', 'BTC/USDT', 'simple-grid', 'paper', 'running', 'running',
+			 '1000', '1000', 1, '{}'::jsonb, %s, now(), now())
+			 RETURNING id`, deletedAt)
+		if err := pool.QueryRow(ctx, query, userID, name).Scan(&botID); err != nil {
+			t.Fatalf("insert %s: %v", name, err)
+		}
+		return botID
+	}
+
+	archivedID := insert("Archived source bot", true)
+	activeID := insert("Active source bot", false)
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+	bots, err := trading.Source(ctx)
+	if err != nil {
+		t.Fatalf("source: %v", err)
+	}
+
+	foundActive := false
+	for _, bot := range bots {
+		if bot.ID == archivedID {
+			t.Fatalf("archived bot %d was returned by Source", archivedID)
+		}
+		if bot.ID == activeID {
+			foundActive = true
+		}
+	}
+	if !foundActive {
+		t.Fatalf("active bot %d was not returned by Source", activeID)
+	}
+}
+
+func TestAccountDailyLossIncludesArchivedBalances(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	suffix := time.Now().UnixNano()
+	var userID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO users (name, email, password, created_at, updated_at)
+		 VALUES ('Archived loss', $1, 'x', now(), now()) RETURNING id`,
+		fmt.Sprintf("archived-loss-%d@example.test", suffix)).Scan(&userID); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID) })
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO risk_limits (scope, user_id, daily_loss_limit, day_start, day_start_realized_pnl, created_at, updated_at)
+		 VALUES ('user', $1, '100', now(), '0', now(), now())`, userID); err != nil {
+		t.Fatalf("insert risk limit: %v", err)
+	}
+
+	var archivedID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
+		 capital_allocation, quote_inventory, realized_pnl, tick_interval_seconds, settings, deleted_at, created_at, updated_at)
+		 VALUES ($1, 'Archived loss bot', 'binance', 'BTC/USDT', 'simple-grid', 'paper', 'stopped', 'stopped',
+		 '1000', '1000', '-200', 1, '{}'::jsonb, now(), now(), now())
+		 RETURNING id`, userID).Scan(&archivedID); err != nil {
+		t.Fatalf("insert archived bot: %v", err)
+	}
+	var activeID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
+		 capital_allocation, quote_inventory, tick_interval_seconds, settings, created_at, updated_at)
+		 VALUES ($1, 'Active loss bot', 'binance', 'BTC/USDT', 'simple-grid', 'paper', 'running', 'running',
+		 '1000', '1000', 1, '{}'::jsonb, now(), now())
+		 RETURNING id`, userID).Scan(&activeID); err != nil {
+		t.Fatalf("insert active bot: %v", err)
+	}
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+	if err := trading.TickBot(ctx, activeID); err != nil {
+		t.Fatalf("tick active bot: %v", err)
+	}
+
+	var status string
+	var lastError *string
+	if err := pool.QueryRow(ctx, `SELECT status, last_error FROM bots WHERE id=$1`, activeID).Scan(&status, &lastError); err != nil {
+		t.Fatalf("read active bot: %v", err)
+	}
+	if status != "paused" {
+		t.Fatalf("active bot status = %s, want paused from the account loss including archived balances", status)
+	}
+	if lastError == nil || !strings.Contains(*lastError, "Account daily loss limit reached") {
+		t.Fatalf("active bot last_error = %v, want account daily loss message", lastError)
+	}
+	assertBotState(t, pool, archivedID, "stopped", "stopped")
 }

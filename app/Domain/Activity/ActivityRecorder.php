@@ -23,6 +23,8 @@ class ActivityRecorder
         'bot.started',
         'bot.paused',
         'bot.stopped',
+        'bot.archived',
+        'bot.restored',
         'kill_switch.activated',
         'order.local_canceled',
         'order.local_cancel_failed',

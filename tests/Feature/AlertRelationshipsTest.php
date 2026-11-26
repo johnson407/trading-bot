@@ -16,13 +16,29 @@ it('relates alerts to their owner and bot and preserves them when the bot is del
         ->and($user->unreadAlerts->first()->is($alert))->toBeTrue()
         ->and($bot->alerts->first()->is($alert))->toBeTrue();
 
-    $bot->delete();
+    $bot->forceDelete();
 
     $fresh = $alert->fresh();
 
     expect($fresh)->not->toBeNull()
         ->and($fresh->bot_id)->toBeNull()
         ->and($fresh->bot)->toBeNull()
+        ->and($fresh->message)->toBe($alert->message);
+});
+
+it('keeps alerts associated with an archived bot', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create();
+    $alert = Alert::factory()->for($user)->for($bot)->create();
+
+    $bot->delete();
+
+    $fresh = $alert->fresh();
+
+    expect($fresh)->not->toBeNull()
+        ->and($fresh->bot_id)->toBe($bot->id)
+        ->and($fresh->bot?->is($bot))->toBeTrue()
+        ->and($fresh->bot?->name)->toBe($bot->name)
         ->and($fresh->message)->toBe($alert->message);
 });
 

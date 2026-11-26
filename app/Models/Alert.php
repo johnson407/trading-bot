@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -20,10 +21,11 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property int|null $source_id
  * @property string $dedupe_key
  * @property int $dedupe_bucket
- * @property \Illuminate\Support\Carbon|null $read_at
- * @property \Illuminate\Support\Carbon $created_at
- * @property-read \App\Models\Bot|null $bot
- * @property-read \App\Models\User $user
+ * @property Carbon|null $read_at
+ * @property Carbon $created_at
+ * @property-read Bot|null $bot
+ * @property-read User $user
+ *
  * @method static \Database\Factories\AlertFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Alert newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Alert newQuery()
@@ -43,6 +45,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Alert whereTitle($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Alert whereType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Alert whereUserId($value)
+ *
  * @mixin \Eloquent
  */
 class Alert extends Model
@@ -86,7 +89,7 @@ class Alert extends Model
     /** @return BelongsTo<Bot, $this> */
     public function bot(): BelongsTo
     {
-        return $this->belongsTo(Bot::class);
+        return $this->belongsTo(Bot::class)->withTrashed();
     }
 
     /** @return MorphTo<Model, $this> */

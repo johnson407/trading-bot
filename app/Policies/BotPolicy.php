@@ -24,6 +24,11 @@ class BotPolicy
         return $this->owns($user, $bot);
     }
 
+    public function restore(User $user, Bot $bot): bool
+    {
+        return $this->owns($user, $bot);
+    }
+
     public function control(User $user, Bot $bot): bool
     {
         return $this->owns($user, $bot);

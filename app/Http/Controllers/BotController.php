@@ -30,8 +30,10 @@ use App\Models\Bot;
 use App\Models\Order;
 use App\Models\RiskEvent;
 use App\Services\Engine\CommandPublisher;
+use App\Services\Engine\EngineHeartbeat;
 use App\Services\Engine\GridPlanClient;
 use App\Services\Exchange\MarketDataResolver;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -48,7 +50,14 @@ class BotController extends Controller
 
     public function index(Request $request, InventoryLedger $ledger): Response
     {
-        $bots = $request->user()->bots()
+        $archived = $request->boolean('archived');
+        $query = $request->user()->bots();
+
+        if ($archived) {
+            $query->onlyTrashed();
+        }
+
+        $bots = $query
             ->with('activeGrid')
             ->withCount(['orders as open_orders_count' => fn ($query) => $query->whereIn('status', ['pending', 'open', 'partially_filled'])])
             ->latest()
@@ -63,6 +72,7 @@ class BotController extends Controller
 
         return Inertia::render('Bots/Index', [
             'bots' => BotSummaryResource::collection($bots)->resolve(),
+            'archived' => $archived,
         ]);
     }
 
@@ -153,8 +163,79 @@ class BotController extends Controller
         return redirect()->route('bots.index')->with('status', "Bot {$bot->name} created.");
     }
 
-    public function show(Bot $bot, InventoryLedger $ledger, RiskLimitService $riskLimits): Response
+    public function destroy(
+        Request $request,
+        Bot $bot,
+        ActivityRecorder $activity,
+        EngineHeartbeat $heartbeat,
+    ): RedirectResponse {
+        $this->authorize('delete', $bot);
+
+        $archived = DB::transaction(function () use ($request, $bot, $activity, $heartbeat): bool {
+            /** @var Bot $locked */
+            $locked = Bot::query()->lockForUpdate()->findOrFail($bot->id);
+
+            if ($locked->status !== BotStatus::Stopped || $locked->desired_status !== BotStatus::Stopped) {
+                return false;
+            }
+
+            $hasOpenOrders = $locked->orders()
+                ->whereIn('status', [
+                    OrderStatus::Pending->value,
+                    OrderStatus::Open->value,
+                    OrderStatus::PartiallyFilled->value,
+                ])
+                ->exists();
+
+            if ($hasOpenOrders) {
+                return false;
+            }
+
+            if ($locked->isLive() && ! $heartbeat->available()) {
+                return false;
+            }
+
+            $locked->delete();
+
+            $activity->recordUser('bot.archived', "Bot {$locked->name} archived", $locked, $request->user());
+
+            return true;
+        });
+
+        if (! $archived) {
+            return back()->withErrors([
+                'action' => 'Stop the bot, cancel any open orders, and make sure the engine is available before archiving it.',
+            ]);
+        }
+
+        return redirect()->route('bots.index')->with('status', "Bot {$bot->name} archived.");
+    }
+
+    public function restore(Request $request, Bot $bot, ActivityRecorder $activity): RedirectResponse
     {
+        $this->authorize('restore', $bot);
+
+        abort_unless($bot->trashed(), 404);
+
+        DB::transaction(function () use ($request, $bot, $activity): void {
+            $restored = Bot::onlyTrashed()
+                ->whereKey($bot->getKey())
+                ->update(['deleted_at' => null]);
+
+            abort_if($restored === 0, 404);
+
+            $activity->recordUser('bot.restored', "Bot {$bot->name} restored", $bot, $request->user());
+        });
+
+        return redirect()->route('bots.index')->with('status', "Bot {$bot->name} restored.");
+    }
+
+    public function show(
+        Bot $bot,
+        InventoryLedger $ledger,
+        RiskLimitService $riskLimits,
+        EngineHeartbeat $heartbeat,
+    ): Response {
         $this->authorize('view', $bot);
 
         $bot->load([
@@ -225,6 +306,10 @@ class BotController extends Controller
                 'max_open_orders' => $limit->max_open_orders,
                 'daily_loss_limit' => $limit->daily_loss_limit,
             ])->values(),
+            'canArchive' => $bot->status === BotStatus::Stopped
+                && $bot->desired_status === BotStatus::Stopped
+                && $bot->orders->isEmpty()
+                && (! $bot->isLive() || $heartbeat->available()),
         ]);
     }
 
@@ -329,7 +414,9 @@ class BotController extends Controller
             try {
                 $commands->publish('bot.config', $request->user()->id, $bot->id, ['strategy_reset' => true]);
             } catch (Throwable $exception) {
-                $bot->forceFill(['strategy_reset_pending' => true])->save();
+                Bot::query()
+                    ->whereKey($bot->id)
+                    ->update(['strategy_reset_pending' => true]);
 
                 Log::warning('bot.config command publish failed', [
                     'bot_id' => $bot->id,
@@ -355,6 +442,8 @@ class BotController extends Controller
             return back()->with('status', 'Bot started.');
         } catch (LiveConfirmationRequiredException $exception) {
             return back()->withErrors(['confirmation' => $exception->getMessage()]);
+        } catch (ModelNotFoundException) {
+            abort(404);
         } catch (Throwable $exception) {
             return back()->withErrors(['action' => $exception->getMessage()]);
         }
@@ -401,6 +490,8 @@ class BotController extends Controller
             $pauseBot->handle($bot);
 
             return back()->with('status', 'Bot paused.');
+        } catch (ModelNotFoundException) {
+            abort(404);
         } catch (Throwable $exception) {
             return back()->withErrors(['action' => $exception->getMessage()]);
         }
@@ -414,6 +505,8 @@ class BotController extends Controller
             $stopBot->handle($bot);
 
             return back()->with('status', 'Bot stopped.');
+        } catch (ModelNotFoundException) {
+            abort(404);
         } catch (Throwable $exception) {
             return back()->withErrors(['action' => $exception->getMessage()]);
         }

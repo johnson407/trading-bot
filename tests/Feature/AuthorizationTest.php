@@ -22,8 +22,11 @@ it('allows only the owner to view and control a bot', function () {
         ->and(Gate::forUser($owner)->allows('update', $bot))->toBeTrue()
         ->and(Gate::forUser($owner)->allows('control', $bot))->toBeTrue()
         ->and(Gate::forUser($owner)->allows('delete', $bot))->toBeTrue()
+        ->and(Gate::forUser($owner)->allows('restore', $bot))->toBeTrue()
         ->and(Gate::forUser($other)->allows('view', $bot))->toBeFalse()
         ->and(Gate::forUser($other)->allows('control', $bot))->toBeFalse()
+        ->and(Gate::forUser($other)->allows('delete', $bot))->toBeFalse()
+        ->and(Gate::forUser($other)->allows('restore', $bot))->toBeFalse()
         ->and(Gate::allows('view', $bot))->toBeFalse();
 });
 

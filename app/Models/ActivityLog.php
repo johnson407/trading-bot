@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -14,9 +15,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $severity
  * @property string $message
  * @property array<array-key, mixed>|null $context
- * @property \Illuminate\Support\Carbon $created_at
- * @property-read \App\Models\Bot|null $bot
- * @property-read \App\Models\User $user
+ * @property Carbon $created_at
+ * @property-read Bot|null $bot
+ * @property-read User $user
+ *
  * @method static \Database\Factories\ActivityLogFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ActivityLog newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ActivityLog newQuery()
@@ -29,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ActivityLog whereSeverity($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ActivityLog whereType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ActivityLog whereUserId($value)
+ *
  * @mixin \Eloquent
  */
 class ActivityLog extends Model
@@ -64,6 +67,6 @@ class ActivityLog extends Model
     /** @return BelongsTo<Bot, $this> */
     public function bot(): BelongsTo
     {
-        return $this->belongsTo(Bot::class);
+        return $this->belongsTo(Bot::class)->withTrashed();
     }
 }

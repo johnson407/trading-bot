@@ -57,8 +57,10 @@ record the same incident concurrently. The `exchange.failure_threshold` pair
 (activity plus risk event) collapses to one alert for the same reason.
 
 Each alert keeps a polymorphic `source_type`/`source_id` pointing at the risk
-event or activity log that produced it. Deleting a bot sets the alert's `bot_id`
-to null; the alert itself is retained.
+event or activity log that produced it. Archiving a bot keeps the alert's
+`bot_id` and the association, so the inbox can still show the bot name as plain
+text. Permanently deleting a bot sets the alert's `bot_id` to null; the alert
+itself is retained.
 
 ## Delivery channels
 
@@ -98,9 +100,9 @@ verified user.
 
 - Alerts are owner-scoped and shown newest first, 50 per page.
 - Each row shows severity, title, message, bot link when present, timestamp, and
-  read state.
-- An optional `bot_id` filter narrows the list to one owned bot. Another user's bot
-  id returns 404.
+  read state. An archived bot's name is shown as plain text instead of a link.
+- An optional `bot_id` filter narrows the list to one active owned bot. Another
+  user's bot id, or an archived bot id, returns 404.
 - `POST /alerts/{alert}/read` marks one alert read.
 - `POST /alerts/read-all` marks all visible unread alerts read, honoring the active
   bot filter.
@@ -135,6 +137,7 @@ records are audit data and are never pruned by this command.
 | Flow | Test |
 | --- | --- |
 | Model, casts, relations | `AlertModelTest`, `AlertRelationshipsTest` |
+| Archive retention | `BotArchiveTest` |
 | Catalog and defaults | `AlertConfigTest` |
 | Creation and dedupe | `AlertRecorderTest` |
 | Secret redaction | `AlertSanitizerTest` |

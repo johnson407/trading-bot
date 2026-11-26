@@ -21,10 +21,10 @@ class DashboardController extends Controller
         $user = $request->user();
 
         /** @var Collection<int, Bot> $bots */
-        $bots = Bot::query()->where('user_id', $user->id)->get();
+        $bots = Bot::withTrashed()->where('user_id', $user->id)->get();
 
         $counts = [
-            'total' => $bots->count(),
+            'total' => 0,
             'running' => 0,
             'paused' => 0,
             'idle' => 0,
@@ -35,8 +35,12 @@ class DashboardController extends Controller
         $unrealized = Decimal::zero();
 
         foreach ($bots as $bot) {
-            $status = $bot->status->value;
-            $counts[$status] = ($counts[$status] ?? 0) + 1;
+            if (! $bot->trashed()) {
+                $status = $bot->status->value;
+                $counts['total']++;
+                $counts[$status] = ($counts[$status] ?? 0) + 1;
+            }
+
             $realized = $realized->add($bot->realized_pnl);
 
             $mark = MarkPrice::for($bot);
@@ -48,7 +52,7 @@ class DashboardController extends Controller
 
         $activity = ActivityLog::query()
             ->where('user_id', $user->id)
-            ->with('bot:id,name')
+            ->with('bot:id,name,deleted_at')
             ->orderByDesc('id')
             ->limit(10)
             ->get()
@@ -59,6 +63,7 @@ class DashboardController extends Controller
                 'message' => $log->message,
                 'bot' => $log->bot?->name,
                 'bot_id' => $log->bot_id,
+                'archived' => $log->bot?->trashed() ?? false,
                 'created_at' => $log->created_at?->toIso8601String(),
             ])
             ->all();

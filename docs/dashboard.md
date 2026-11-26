@@ -15,6 +15,9 @@ redirects, owner access, and cross-user denial.
 
 Shows bot counts by state, aggregate realized and unrealized P&L, the account
 equity history, and the ten most recent activity rows for the signed-in owner.
+Counts cover active (non-archived) bots, while aggregate realized and unrealized
+P&L include archived bots so their residual balances remain visible. Recent
+activity for an archived bot shows its name as plain text rather than a link.
 It also shows a warning when the Go engine heartbeat is missing or expired. The
 warning is informational only: it never pauses bots, cancels orders, or activates
 the kill-switch, and it refreshes with the same five-second partial reload.
@@ -32,14 +35,18 @@ Feature test: `tests/Feature/DashboardTest.php`.
 
 ## Bot list — `GET /bots` (`bots.index`)
 
-Shows the signed-in user's bots with name, symbol, exchange, mode, status,
-open-order count, realized P&L, unrealized P&L, and last tick. The page polls every
-five seconds with `router.reload({ only: ['bots'] })`, preserving scroll and
-component state. Bots belonging to other users never appear. The header places a
-danger-styled **Kill switch** button beside **Create bot**; it opens the
-confirmation page.
+Shows the signed-in user's active bots with name, symbol, exchange, mode, status,
+open-order count, realized P&L, unrealized P&L, and last tick. The **Archived**
+link opens the same page with `?archived=1`, listing only archived bots with a
+per-row **Restore** action. Archived names are plain text rather than links, and
+the archived view hides **Create bot** and the **Kill switch**. The page polls
+every five seconds with `router.reload({ only: ['bots'] })`, preserving scroll,
+component state, and the current query string. Bots belonging to other users never
+appear. On the active view the header places a danger-styled **Kill switch**
+button beside **Create bot**; it opens the confirmation page.
 
-Feature test: `tests/Feature/BotListTest.php`.
+Feature tests: `tests/Feature/BotListTest.php`,
+`tests/Feature/BotArchiveTest.php`.
 
 ## Create bot — `GET /bots/create` (`bots.create`) and `POST /bots` (`bots.store`)
 
@@ -91,8 +98,8 @@ the plan side, the actual open-order side when it differs, price, and state,
 open orders, recent fills, and risk limits. The mark price for
 unrealized P&L is the bot's stored mark (latest tick), otherwise the average entry
 price — the same source the bot list and dashboard use. The page polls every five seconds for
-`bot, grid, openOrders, recentFills, inventory, pnl`; a new fill appears on the
-next poll.
+`bot, grid, openOrders, recentFills, inventory, pnl, canArchive`; a new fill
+appears on the next poll.
 
 Open orders have a **Cancel** action (`bots.orders.cancel`). It publishes
 `order.cancel` to the engine and leaves the order row unchanged until the engine
@@ -139,6 +146,28 @@ an `action` error and leave the prior state unchanged. Cross-user control is
 denied.
 
 Feature test: `tests/Feature/BotControlTest.php`.
+
+## Archive and restore — `DELETE /bots/{bot}` (`bots.destroy`) and `POST /bots/{bot}/restore` (`bots.restore`)
+
+The detail page shows an **Archive** button only when the bot can be archived:
+both its status and desired status are stopped, it has no pending, open, or
+partially-filled orders, and, for a live bot, the engine heartbeat is fresh. A
+newly created bot starts idle, so it must be stopped before it can be archived. The
+button asks for confirmation and warns that residual inventory is not sold.
+Archiving is a soft delete: the bot disappears from the active list, backtest and
+sweep selectors, the alert bot filter, dashboard counts, and kill-switch
+selection. Its orders, fills, grids, strategy configuration, inventory ledger,
+risk events, activity, alerts, backtests, and sweeps are retained, and historical
+views still show the bot name. An archived bot is inert: detail, edit, activity,
+control, order-cancel, and exit-guard routes return 404, and the engine does not
+tick it.
+
+The archived view restores a bot in place; it returns to the active list still
+stopped, with no automatic start or state change. Only the owner may archive or
+restore a bot, and only an archived bot can be restored. A rejected archive is
+reported as an `action` error and leaves the bot unchanged.
+
+Feature test: `tests/Feature/BotArchiveTest.php`.
 
 ## Edit — `GET /bots/{bot}/edit` and `PATCH /bots/{bot}`
 
@@ -210,8 +239,9 @@ Feature test: `tests/Feature/ExchangeCredentialUiTest.php`.
 
 Shows the signed-in user's operational alerts newest first, 50 per page. Each row
 includes severity, title, message, bot link when present, timestamp, and read
-state. An optional bot filter narrows the list to one owned bot; another user's bot
-id is rejected with 404.
+state. An alert for an archived bot shows the bot name as plain text. An optional
+bot filter narrows the list to one active owned bot; another user's bot id, or an
+archived bot id, is rejected with 404.
 
 - `POST /alerts/{alert}/read` marks one owned alert read.
 - `POST /alerts/read-all` marks all visible unread alerts read and honors the active
@@ -270,6 +300,7 @@ protection; a failed action never leaves a partial state change visible.
 | Bot detail | `bots.show` | `BotDetailTest` |
 | Protective exits | `bots.exit-guard.update` | `BotExitGuardTest` |
 | Start/pause/stop | `bots.start`, `bots.pause`, `bots.stop` | `BotControlTest` |
+| Archive/restore | `bots.destroy`, `bots.restore` | `BotArchiveTest` |
 | Activity | `bots.activity` | `ActivityLogTest` |
 | Kill switch | `kill-switch.create`, `kill-switch.store` | `KillSwitchUiTest` |
 | Credentials | `exchange-credentials.*` | `ExchangeCredentialUiTest` |

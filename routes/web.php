@@ -43,6 +43,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('bots/{bot}/start', [BotController::class, 'start'])->name('bots.start')->middleware('throttle:bot-control');
     Route::post('bots/{bot}/pause', [BotController::class, 'pause'])->name('bots.pause')->middleware('throttle:bot-control');
     Route::post('bots/{bot}/stop', [BotController::class, 'stop'])->name('bots.stop')->middleware('throttle:bot-control');
+    Route::delete('bots/{bot}', [BotController::class, 'destroy'])->name('bots.destroy')->middleware('throttle:bot-control');
+    Route::post('bots/{bot}/restore', [BotController::class, 'restore'])->name('bots.restore')->withTrashed()->middleware('throttle:bot-control');
     Route::post('bots/{bot}/orders/{order}/cancel', [BotController::class, 'cancelOrder'])->name('bots.orders.cancel')->middleware('throttle:bot-control');
     Route::get('bots/{bot}/activity', [BotController::class, 'activity'])->name('bots.activity');
     Route::get('bots/{bot}/edit', [BotController::class, 'edit'])->name('bots.edit')->middleware('throttle:bot-control');

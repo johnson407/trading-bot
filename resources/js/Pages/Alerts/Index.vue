@@ -126,11 +126,13 @@ function markAllRead() {
                                         <span v-if="alert.bot">
                                             Bot:
                                             <Link
+                                                v-if="!alert.bot.archived"
                                                 :href="route('bots.show', alert.bot.id)"
                                                 class="text-slate-200 underline"
                                             >
                                                 {{ alert.bot.name }}
                                             </Link>
+                                            <span v-else class="text-slate-200">{{ alert.bot.name }}</span>
                                         </span>
                                         <span v-else>No bot</span>
                                         <span>{{ timestamp(alert.created_at) }}</span>
