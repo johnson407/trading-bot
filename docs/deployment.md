@@ -73,6 +73,23 @@ variables in `.env` when the host has more or less capacity. Docker log rotation
 bounds each service near 30 MiB, so keep several GiB free for images and data.
 Check `df -h /share/Docker` and `docker stats` after the first deployment.
 
+### Upgrading an existing deployment
+
+Production Compose requires `ENGINE_INTERNAL_TOKEN`. Before deploying a
+`latest` image to an existing NAS whose `.env` predates the token, add it and
+keep the file at mode `600`:
+
+```sh
+printf 'ENGINE_INTERNAL_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env
+chmod 600 .env
+```
+
+The `app` and `engine` services read the same value. If the token is missing,
+Compose interpolation fails before the containers start and the deployer
+records an application-tier failure and holds the image. Set the token first;
+then run the normal poll or deployment command. Rotate by replacing the value
+and recreating both services together.
+
 ## NAS layout
 
 Keep configuration, state, and logs together in a persistent directory. The
@@ -347,6 +364,15 @@ and compression, so each service's Docker log is bounded near 30 MiB. The
 `docker stats` and `df -h /share/Docker`; a service that repeatedly reaches its
 limit needs a larger override, and a disk near capacity needs image or log
 cleanup before the next deployment.
+
+Log retention depends on tick rate. Five bots ticking every second emit about
+432,000 completion lines per day; at roughly 250-400 bytes per line that is
+100-170 MB per day before compression. The 30 MiB-per-service rotation
+therefore keeps only a few hours at that rate. Five bots at the default
+60-second interval emit about 7,200 lines per day, roughly 2-3 MB, which the
+same rotation retains for weeks. Ten one-second bots double the high-rate
+figures. Operators who need longer history should ship logs to external
+storage or raise `max-size`/`max-file` together with the host disk budget.
 
 | Symptom | Action |
 | --- | --- |

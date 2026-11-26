@@ -1,9 +1,11 @@
 package runtime_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -104,7 +106,9 @@ func TestRuntimeControlAndTickIntegration(t *testing.T) {
 	}
 
 	market := &fixedMarket{price: "100"}
-	trading := runtime.New(pool, market, nil)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	trading := runtime.New(pool, market, logger)
 
 	if err := trading.Process(ctx, command(protocol.CommandBotStart, userID, botID, nil)); err != nil {
 		t.Fatalf("start: %v", err)
@@ -124,6 +128,15 @@ func TestRuntimeControlAndTickIntegration(t *testing.T) {
 	assertCount(t, pool, `SELECT COUNT(*) FROM grids WHERE bot_id=$1 AND status='active'`, 1, botID)
 	assertCount(t, pool, `SELECT COUNT(*) FROM orders WHERE bot_id=$1 AND status IN ('pending','open','partially_filled')`, 2, botID)
 	assertCount(t, pool, `SELECT COUNT(*) FROM activity_logs WHERE bot_id=$1`, 0, botID)
+	if got := len(tickCompletionLines(logs.String())); got != 1 {
+		t.Fatalf("first tick completion records = %d, want 1\n%s", got, logs.String())
+	}
+	firstCompletion := tickCompletionLines(logs.String())[0]
+	for _, want := range []string{"outcome=completed", "orders_placed=2", "grids_created=1", fmt.Sprintf("correlation_id=tick-%d-", botID), "duration_ms="} {
+		if !strings.Contains(firstCompletion, want) {
+			t.Fatalf("first tick completion missing %q: %s", want, firstCompletion)
+		}
+	}
 
 	market.price = "80"
 	// PostgreSQL timestamps have second precision; wait so the first tick's
@@ -131,6 +144,12 @@ func TestRuntimeControlAndTickIntegration(t *testing.T) {
 	time.Sleep(1100 * time.Millisecond)
 	if err := trading.TickBot(ctx, botID); err != nil {
 		t.Fatalf("fill tick: %v", err)
+	}
+	if got := len(tickCompletionLines(logs.String())); got != 2 {
+		t.Fatalf("completion records after fill tick = %d, want 2\n%s", got, logs.String())
+	}
+	if !strings.Contains(logs.String(), "paper_fills=2") {
+		t.Fatalf("fill tick completion missing paper_fills=2\n%s", logs.String())
 	}
 	var fillCount int
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM fills WHERE bot_id=$1`, botID).Scan(&fillCount); err != nil {
@@ -149,6 +168,18 @@ func TestRuntimeControlAndTickIntegration(t *testing.T) {
 		var settings []byte
 		_ = pool.QueryRow(ctx, `SELECT settings FROM bots WHERE id=$1`, botID).Scan(&settings)
 		t.Fatalf("fills = %d; orders=%v settings=%s", fillCount, detail, settings)
+	}
+
+	var fillCorrelation string
+	if err := pool.QueryRow(ctx,
+		`SELECT context->>'correlation_id' FROM activity_logs
+		 WHERE bot_id=$1 AND type='order.filled' ORDER BY id DESC LIMIT 1`,
+		botID,
+	).Scan(&fillCorrelation); err != nil {
+		t.Fatalf("read fill activity correlation: %v", err)
+	}
+	if !strings.HasPrefix(fillCorrelation, fmt.Sprintf("tick-%d-", botID)) {
+		t.Fatalf("fill activity correlation = %q, want tick-%d-*", fillCorrelation, botID)
 	}
 
 	var orderID int64
@@ -1063,4 +1094,14 @@ func insertStaleRunningBot(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	}
 
 	return userID, botID
+}
+
+func tickCompletionLines(log string) []string {
+	var lines []string
+	for _, line := range strings.Split(log, "\n") {
+		if strings.Contains(line, "bot tick completed") {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }

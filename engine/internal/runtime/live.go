@@ -898,10 +898,10 @@ func (r *Runtime) liveBalanceAllowsStart(ctx context.Context, bot *Bot) error {
 	return nil
 }
 
-func (r *Runtime) cancelLiveOrder(ctx context.Context, bot *Bot, order openOrder) error {
+func (r *Runtime) cancelLiveOrder(ctx context.Context, bot *Bot, order openOrder) (bool, error) {
 	client, err := r.cancelClient(ctx, bot)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	remote, err := client.Cancel(ctx, bot.Symbol, order.ExchangeOrderID, order.ClientOrderID)
@@ -909,25 +909,33 @@ func (r *Runtime) cancelLiveOrder(ctx context.Context, bot *Bot, order openOrder
 		// The cancel response is the final exchange snapshot. Apply it before
 		// the caller marks the remainder canceled, so a fill that raced the
 		// cancel is never discarded.
-		return r.applyLiveOrder(ctx, bot, order.ID, order.FilledQuantity, remote)
+		if err := r.applyLiveOrder(ctx, bot, order.ID, order.FilledQuantity, remote); err != nil {
+			return false, err
+		}
+
+		return remote.Status == exchange.StatusCanceled || remote.Status == exchange.StatusRejected, nil
 	}
 	if !isNotFound(err) {
-		return err
+		return false, err
 	}
 
 	// The venue may have already filled or canceled the order, or the cancel
 	// landed while the response was lost. Look it up before declaring victory.
 	if order.ClientOrderID == "" {
-		return nil
+		return false, nil
 	}
 
 	remote, lookupErr := client.OrderByClientID(ctx, bot.Symbol, order.ClientOrderID)
 	if lookupErr == nil {
-		return r.applyLiveOrder(ctx, bot, order.ID, order.FilledQuantity, remote)
+		if err := r.applyLiveOrder(ctx, bot, order.ID, order.FilledQuantity, remote); err != nil {
+			return false, err
+		}
+
+		return remote.Status == exchange.StatusCanceled || remote.Status == exchange.StatusRejected, nil
 	}
 	if isNotFound(lookupErr) {
-		return nil
+		return true, nil
 	}
 
-	return lookupErr
+	return false, lookupErr
 }

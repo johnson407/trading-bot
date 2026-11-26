@@ -323,7 +323,7 @@ func (r *Runtime) cancelOrder(ctx context.Context, command protocol.Envelope) er
 			if err != nil {
 				return err
 			}
-			if err := r.cancelLiveOrder(ctx, bot, openOrder{
+			if _, err := r.cancelLiveOrder(ctx, bot, openOrder{
 				ID:              orderID,
 				ClientOrderID:   clientOrderID,
 				ExchangeOrderID: exchangeOrderID,

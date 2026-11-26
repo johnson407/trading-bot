@@ -81,11 +81,16 @@ func withTickCorrelation(ctx context.Context, fields map[string]any) map[string]
 	if fields == nil {
 		fields = make(map[string]any, 1)
 	}
-	if _, exists := fields["correlation_id"]; !exists {
-		fields["correlation_id"] = correlationID
+	if _, exists := fields["correlation_id"]; exists {
+		return fields
 	}
+	correlated := make(map[string]any, len(fields)+1)
+	for key, value := range fields {
+		correlated[key] = value
+	}
+	correlated["correlation_id"] = correlationID
 
-	return fields
+	return correlated
 }
 
 func (s *tickStats) markPaused() {
@@ -441,7 +446,6 @@ func (r *Runtime) tickFailure(ctx context.Context, bot *Bot, cause error) error 
 		r.pause(ctx, bot, "Bot paused after 3 consecutive tick failures: "+message, "exchange.failure_threshold", "exchange.failure_threshold", "critical")
 		return nil
 	}
-	r.logger.Warn("bot tick failed", "bot_id", bot.ID, "error_type", fmt.Sprintf("%T", cause))
 	return nil
 }
 
@@ -675,7 +679,7 @@ func (r *Runtime) pauseOtherBots(ctx context.Context, userID, currentBotID int64
 		if err != nil || other.Status != "running" {
 			continue
 		}
-		r.pause(ctx, other, message, "bot.daily_loss_paused", "risk.daily_loss", "warning")
+		r.pause(withTickStats(ctx, nil), other, message, "bot.daily_loss_paused", "risk.daily_loss", "warning")
 	}
 }
 
@@ -714,15 +718,20 @@ func (r *Runtime) cancelOpenOrders(ctx context.Context, userID, botID int64, rea
 
 	var failures []error
 	for _, order := range orders {
+		canceledCount := 0
 		if bot != nil && bot.live() {
-			if err := r.cancelLiveOrder(ctx, bot, order); err != nil {
+			canceled, err := r.cancelLiveOrder(ctx, bot, order)
+			if err != nil {
 				failures = append(failures, fmt.Errorf("cancel live order %d: %w", order.ID, err))
 				r.riskEvent(ctx, userID, botID, "risk.cancel_failed", "critical", "A live order could not be canceled.", map[string]any{"order_id": order.ID, "client_order_id": order.ClientOrderID})
 				continue
 			}
+			if canceled {
+				canceledCount = 1
+			}
 		}
 
-		_, err := r.pool.Exec(ctx,
+		tag, err := r.pool.Exec(ctx,
 			`UPDATE orders SET status = 'canceled', closed_at = now(), updated_at = now()
 			 WHERE id = $1 AND status IN ('pending','open','partially_filled')`,
 			order.ID,
@@ -731,6 +740,12 @@ func (r *Runtime) cancelOpenOrders(ctx context.Context, userID, botID int64, rea
 			failures = append(failures, fmt.Errorf("cancel order %d: %w", order.ID, err))
 			r.riskEvent(ctx, userID, botID, "risk.cancel_failed", "warning", "An open order could not be canceled.", map[string]any{"order_id": order.ID})
 			continue
+		}
+		if tag.RowsAffected() > 0 {
+			canceledCount = 1
+		}
+		if stats := tickStatsFrom(ctx); stats != nil {
+			stats.ordersCanceled += canceledCount
 		}
 		if order.GridLevelID != nil {
 			_, _ = r.pool.Exec(ctx, `UPDATE grid_levels SET state = 'canceled', updated_at = now() WHERE id = $1 AND state IN ('idle','open')`, *order.GridLevelID)
@@ -969,8 +984,12 @@ func (r *Runtime) syncGrid(ctx context.Context, bot *Bot, levels []strategy.Grid
 				return nil, false, err
 			}
 			for _, order := range open {
-				if err := r.cancelLiveOrder(ctx, bot, order); err != nil {
+				canceled, err := r.cancelLiveOrder(ctx, bot, order)
+				if err != nil {
 					return nil, false, err
+				}
+				if canceled {
+					stats.ordersCanceled++
 				}
 			}
 		}
@@ -1062,15 +1081,23 @@ func (r *Runtime) applyCancels(ctx context.Context, bot *Bot, impl strategy.Stra
 		if err != nil {
 			continue
 		}
+		canceledCount := 0
 		if bot.live() {
 			liveOrder := openOrder{ID: orderID, ClientOrderID: clientID, ExchangeOrderID: exchangeOrderID, FilledQuantity: mustDecimal(filled)}
-			if err := r.cancelLiveOrder(ctx, bot, liveOrder); err != nil {
+			canceled, err := r.cancelLiveOrder(ctx, bot, liveOrder)
+			if err != nil {
 				return err
+			}
+			if canceled {
+				canceledCount = 1
 			}
 		}
 		tag, _ := r.pool.Exec(ctx, `UPDATE orders SET status = 'canceled', closed_at = now(), updated_at = now() WHERE id = $1 AND status IN ('pending','open','partially_filled')`, orderID)
 		if tag.RowsAffected() > 0 {
-			stats.ordersCanceled += int(tag.RowsAffected())
+			canceledCount = 1
+		}
+		if canceledCount > 0 {
+			stats.ordersCanceled += canceledCount
 			r.activity(ctx, bot.UserID, bot.ID, "order.canceled", "info", "Order canceled by strategy.", map[string]any{
 				"client_order_id": clientID,
 				"reason":          "strategy",
