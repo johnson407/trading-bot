@@ -64,6 +64,15 @@ Port `8000` is free; port `443` is already used by QTS. The Docker socket is
 to `docker-compose`. The architecture must be `amd64`; the CI images are built
 for `linux/amd64`.
 
+Budget about 3 GiB of memory for the Compose limits (roughly 2.7 GiB of
+service limits plus host headroom) and at least 1 GiB of free disk beyond the
+images, database, and Redis data. The service defaults are 512 MiB each for
+`app`, `engine`, `horizon`, and `postgres`, 256 MiB each for `scheduler` and
+`redis`, and 128 MiB for `nginx`; override them with the `*_MEM_LIMIT`
+variables in `.env` when the host has more or less capacity. Docker log rotation
+bounds each service near 30 MiB, so keep several GiB free for images and data.
+Check `df -h /share/Docker` and `docker stats` after the first deployment.
+
 ## NAS layout
 
 Keep configuration, state, and logs together in a persistent directory. The
@@ -130,7 +139,15 @@ Nginx so public uploads work.
    SESSION_DRIVER=database
 
    TRADING_LIVE_ENABLED=false
+
+   ENGINE_INTERNAL_TOKEN=<openssl rand -hex 32>
    ```
+
+   Use the same `ENGINE_INTERNAL_TOKEN` value for the `app` and `engine`
+   services. In production the app and engine refuse to start when the listener
+   is reachable beyond loopback and the token is empty. To rotate it, replace
+   the value in `.env` and restart both services together; Laravel sends it as
+   `Authorization: Bearer <token>` on plan requests.
 
    Generate a key locally with `php artisan key:generate --show`, or with:
 
@@ -319,6 +336,17 @@ docker compose -f docker-compose.prod.yml logs --tail=200 nginx
 docker compose -f docker-compose.prod.yml logs --tail=200 horizon
 docker compose -f docker-compose.prod.yml logs --tail=200 scheduler
 ```
+
+Every service uses the `json-file` driver with `max-size: 10m`, `max-file: 3`,
+and compression, so each service's Docker log is bounded near 30 MiB. The
+`mem_limit` defaults are 512 MiB for `app`, `engine`, `horizon`, and `postgres`,
+256 MiB for `scheduler` and `redis`, and 128 MiB for `nginx`. Override them with
+`APP_MEM_LIMIT`, `ENGINE_MEM_LIMIT`, `HORIZON_MEM_LIMIT`,
+`POSTGRES_MEM_LIMIT`, `SCHEDULER_MEM_LIMIT`, `REDIS_MEM_LIMIT`, and
+`NGINX_MEM_LIMIT` in `.env`, then recreate the affected service. Watch
+`docker stats` and `df -h /share/Docker`; a service that repeatedly reaches its
+limit needs a larger override, and a disk near capacity needs image or log
+cleanup before the next deployment.
 
 | Symptom | Action |
 | --- | --- |

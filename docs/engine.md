@@ -278,10 +278,13 @@ call it; if the engine is unreachable, preview and save fail closed and persist
 nothing.
 
 Compose does not publish the engine port. Laravel reaches it at
-`ENGINE_PLAN_URL=http://engine:8080`. If an operator ever exposes the port
-beyond the internal network, set `ENGINE_INTERNAL_TOKEN` in both services; the
-endpoint then requires `Authorization: Bearer <token>`. `plan-server` is a
-DB/Redis-free subcommand used by the Laravel contract tests:
+`ENGINE_PLAN_URL=http://engine:8080`. In production the engine refuses to start
+when `APP_ENV=production`, the listener is reachable beyond loopback, and
+`ENGINE_INTERNAL_TOKEN` is empty; the plan endpoint then requires
+`Authorization: Bearer <token>`. Local development keeps only the warning so
+the default `:8080` listener remains usable. Set the same token in the `app`
+and `engine` services, and rotate it by updating both services together.
+`plan-server` is a DB/Redis-free subcommand used by the Laravel contract tests:
 `/engine plan-server`.
 
 ## PHP golden engine fixtures (phase 4 capture)

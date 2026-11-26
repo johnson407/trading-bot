@@ -36,7 +36,7 @@ directly from the repository root and do not vendor a second copy.
 | --- | --- |
 | `GET /healthz` | Readiness. `200` only when PostgreSQL and Redis answer a ping and `engine:heartbeat` is fresh; `503` otherwise. Response lists dependency names and `ok` / `unavailable` only, never the underlying error. |
 | `GET /livez` | Liveness. Always `200` while the process is up; it never touches a dependency, so a database outage cannot restart the engine. |
-| `POST /v1/plan/evaluate` | Internal setup-plan evaluation used by Laravel preview and create/edit validation. Never persists a bot and never makes a private exchange call. Bound to the internal Compose network; set `ENGINE_INTERNAL_TOKEN` if the port is ever published beyond it. |
+| `POST /v1/plan/evaluate` | Internal setup-plan evaluation used by Laravel preview and create/edit validation. Never persists a bot and never makes a private exchange call. Bound to the internal Compose network. Production refuses to start when the listener is beyond loopback and `ENGINE_INTERNAL_TOKEN` is empty. |
 
 On start the process:
 
@@ -259,6 +259,7 @@ All values come from the environment, mirroring the `app` service:
 | --- | --- | --- |
 | `ENGINE_LISTEN_ADDR` | `:8080` | `host:port` served by the engine and probed by the healthcheck |
 | `APP_ENV` | `local` | Logged only |
+| `ENGINE_INTERNAL_TOKEN` | empty | Required when `APP_ENV=production` and `ENGINE_LISTEN_ADDR` is beyond loopback. Laravel sends it as `Authorization: Bearer <token>`; use the same value in the app and engine services and rotate both together. |
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `5432` | Compose sets `postgres` / `5432` |
 | `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` | `trading_bot` / `trading_bot` / empty | Same values as Laravel |
 | `DB_SSLMODE` | `disable` | Local Compose Postgres has no TLS |

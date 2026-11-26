@@ -152,6 +152,9 @@ func Load(getenv func(string) string) (Config, error) {
 	if _, _, err := net.SplitHostPort(cfg.Addr); err != nil {
 		return Config{}, fmt.Errorf("ENGINE_LISTEN_ADDR %q is not a host:port address: %w", cfg.Addr, err)
 	}
+	if strings.EqualFold(cfg.AppEnv, "production") && !listenerIsLoopback(cfg.Addr) && cfg.InternalToken == "" {
+		return Config{}, fmt.Errorf("ENGINE_INTERNAL_TOKEN is required when APP_ENV=production and ENGINE_LISTEN_ADDR %q is reachable beyond loopback", cfg.Addr)
+	}
 
 	if cfg.LiveTrading, err = parseBool("TRADING_LIVE_ENABLED", getenv("TRADING_LIVE_ENABLED")); err != nil {
 		return Config{}, err
@@ -379,4 +382,17 @@ func splitSymbols(value string) []string {
 	}
 
 	return symbols
+}
+
+func listenerIsLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+
+	return ip != nil && ip.IsLoopback()
 }

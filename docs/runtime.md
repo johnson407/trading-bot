@@ -155,8 +155,27 @@ backtests. The `backtests` supervisor was removed in phase 7; do not add it back
 
 ## Logs and observability
 
+- Every started tick emits exactly one `bot tick completed` record. Its fields
+  are `bot_id`, `correlation_id`, `outcome`, `duration_ms`,
+  `orders_placed`, `orders_canceled`, `paper_fills`, `live_fills`,
+  `grids_created`, `grids_matched`, `grids_replaced`, `levels_created`,
+  `levels_matched`, and `levels_replaced`. A failed tick also carries
+  `failure_type`.
+- `outcome` is one of `completed`, `paused`, `failed`, or `panicked`. A tick
+  that pauses a bot reports `paused`; a panic is logged before the panic is
+  re-raised.
+- `correlation_id` has the form `tick-<bot id>-<start UnixNano>`. Order,
+  cancellation, fill, and reconciliation records produced by that tick include
+  the same identifier, so one tick can be traced end to end.
 - Engine logs include tick, order, fill, risk, reconciliation, and backtest
-  events; Laravel redacts secrets in its own logs.
+  events; Laravel redacts secrets in its own logs. Tick completion records never
+  contain API keys, secrets, signatures, or the application key.
+- To inspect tick completions, search the engine log stream:
+  `docker compose -f docker-compose.prod.yml logs engine | grep 'bot tick completed'`.
+  Docker's `json-file` driver stores the slog line in the record's `.log` field;
+  for the raw file, use
+  `LOG=$(docker inspect --format '{{.LogPath}}' "$(docker compose -f docker-compose.prod.yml ps -q engine)")`
+  and `jq -r 'select(.log | contains("bot tick completed")) | .log' "$LOG"`.
 - Activity log: user acknowledgements (`bot.started`, `bot.paused`, `bot.stopped`,
   `kill_switch.activated`, etc.) are written by Laravel; engine events such as
   `bot.stale`, `order.filled`, and `orders.synced` are written by the engine.

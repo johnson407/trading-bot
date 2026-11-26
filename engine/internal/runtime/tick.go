@@ -26,7 +26,155 @@ func (r *Runtime) TickBot(ctx context.Context, botID int64) error {
 	})
 }
 
-func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
+type tickStatsKey struct{}
+
+type tickStats struct {
+	botID         int64
+	correlationID string
+	startedAt     time.Time
+	outcome       string
+	failureType   string
+
+	ordersPlaced   int
+	ordersCanceled int
+	paperFills     int
+	liveFills      int
+	gridsCreated   int
+	gridsMatched   int
+	gridsReplaced  int
+	levelsCreated  int
+	levelsMatched  int
+	levelsReplaced int
+}
+
+func newTickStats(botID int64, start time.Time) *tickStats {
+	return &tickStats{
+		botID:         botID,
+		correlationID: fmt.Sprintf("tick-%d-%d", botID, start.UnixNano()),
+		startedAt:     start,
+	}
+}
+
+func withTickStats(ctx context.Context, stats *tickStats) context.Context {
+	return context.WithValue(ctx, tickStatsKey{}, stats)
+}
+
+func tickStatsFrom(ctx context.Context) *tickStats {
+	stats, _ := ctx.Value(tickStatsKey{}).(*tickStats)
+
+	return stats
+}
+
+func tickCorrelation(ctx context.Context) string {
+	if stats := tickStatsFrom(ctx); stats != nil {
+		return stats.correlationID
+	}
+
+	return ""
+}
+
+func withTickCorrelation(ctx context.Context, fields map[string]any) map[string]any {
+	correlationID := tickCorrelation(ctx)
+	if correlationID == "" {
+		return fields
+	}
+	if fields == nil {
+		fields = make(map[string]any, 1)
+	}
+	if _, exists := fields["correlation_id"]; !exists {
+		fields["correlation_id"] = correlationID
+	}
+
+	return fields
+}
+
+func (s *tickStats) markPaused() {
+	if s == nil || s.outcome == "failed" || s.outcome == "panicked" {
+		return
+	}
+	s.outcome = "paused"
+}
+
+func (s *tickStats) markFailed(cause error) {
+	if s == nil || s.outcome == "panicked" {
+		return
+	}
+	s.outcome = "failed"
+	if cause != nil {
+		s.failureType = fmt.Sprintf("%T", cause)
+	}
+}
+
+func (s *tickStats) addGridCreated(levels int) {
+	if s == nil {
+		return
+	}
+	s.gridsCreated++
+	s.levelsCreated += levels
+}
+
+func (s *tickStats) addGridMatched(levels int) {
+	if s == nil {
+		return
+	}
+	s.gridsMatched++
+	s.levelsMatched += levels
+}
+
+func (s *tickStats) addGridReplaced(levels int) {
+	if s == nil {
+		return
+	}
+	s.gridsReplaced++
+	s.levelsReplaced += levels
+}
+
+func (s *tickStats) log(r *Runtime) {
+	if s == nil {
+		return
+	}
+	if s.outcome == "" {
+		s.outcome = "completed"
+	}
+	args := []any{
+		"bot_id", s.botID,
+		"correlation_id", s.correlationID,
+		"outcome", s.outcome,
+		"duration_ms", r.now().Sub(s.startedAt).Milliseconds(),
+		"orders_placed", s.ordersPlaced,
+		"orders_canceled", s.ordersCanceled,
+		"paper_fills", s.paperFills,
+		"live_fills", s.liveFills,
+		"grids_created", s.gridsCreated,
+		"grids_matched", s.gridsMatched,
+		"grids_replaced", s.gridsReplaced,
+		"levels_created", s.levelsCreated,
+		"levels_matched", s.levelsMatched,
+		"levels_replaced", s.levelsReplaced,
+	}
+	if s.failureType != "" {
+		args = append(args, "failure_type", s.failureType)
+	}
+	r.logger.Info("bot tick completed", args...)
+}
+
+func (s *tickStats) finish(r *Runtime, recovered any, retErr error) {
+	if recovered != nil {
+		s.outcome = "panicked"
+		s.log(r)
+		panic(recovered)
+	}
+	if s.outcome == "" {
+		if retErr != nil {
+			s.markFailed(retErr)
+		} else {
+			s.outcome = "completed"
+		}
+	}
+	s.log(r)
+}
+
+func (r *Runtime) tickBot(ctx context.Context, botID int64) (retErr error) {
 	bot, err := r.loadBot(ctx, botID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -49,6 +197,10 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 	if tag.RowsAffected() == 0 {
 		return nil
 	}
+
+	stats := newTickStats(bot.ID, tickStart)
+	ctx = withTickStats(ctx, stats)
+	defer func() { stats.finish(r, recover(), retErr) }()
 
 	if bot.live() && !r.liveTrading {
 		r.pause(ctx, bot, liveDisabledMessage, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
@@ -147,7 +299,7 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 	if err != nil {
 		return err
 	}
-	gridAfter, replaced, err := r.syncGrid(ctx, bot, decision.Levels, active)
+	gridAfter, replaced, err := r.syncGrid(ctx, bot, decision.Levels, active, stats)
 	if err != nil {
 		return err
 	}
@@ -166,13 +318,13 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 		if len(second.Orders) > 0 {
 			decision.Orders = second.Orders
 		}
-		gridAfter, _, err = r.syncGrid(ctx, bot, second.Levels, gridAfter)
+		gridAfter, _, err = r.syncGrid(ctx, bot, second.Levels, gridAfter, stats)
 		if err != nil {
 			return err
 		}
 	}
 
-	if err := r.applyCancels(ctx, bot, impl, &decision.State, decision.CancelClientOrderIDs); err != nil {
+	if err := r.applyCancels(ctx, bot, impl, &decision.State, decision.CancelClientOrderIDs, stats); err != nil {
 		return err
 	}
 
@@ -186,9 +338,11 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 	}
 
 	if gridAfter != nil {
-		if _, err := r.placeOrders(ctx, bot, gridAfter, decision.Orders); err != nil {
+		placed, err := r.placeOrders(ctx, bot, gridAfter, decision.Orders)
+		if err != nil {
 			return r.tickFailure(ctx, bot, err)
 		}
+		stats.ordersPlaced += placed
 	}
 
 	var fills []appliedFill
@@ -200,6 +354,7 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 		if err != nil {
 			return r.tickFailure(ctx, bot, err)
 		}
+		stats.paperFills += len(fills)
 	}
 
 	for _, fill := range fills {
@@ -222,13 +377,15 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) error {
 			return r.tickFailure(ctx, refreshed, err)
 		}
 		decision.State = fillDecision.State
-		if gridState, _, err := r.syncGrid(ctx, refreshed, fillDecision.Levels, gridAfter); err != nil {
+		if gridState, _, err := r.syncGrid(ctx, refreshed, fillDecision.Levels, gridAfter, stats); err != nil {
 			return err
 		} else if gridState != nil {
 			gridAfter = gridState
-			if _, err := r.placeOrders(ctx, refreshed, gridState, fillDecision.Orders); err != nil {
+			placed, err := r.placeOrders(ctx, refreshed, gridState, fillDecision.Orders)
+			if err != nil {
 				return err
 			}
+			stats.ordersPlaced += placed
 		}
 	}
 
@@ -261,6 +418,8 @@ func (r *Runtime) decide(ctx context.Context, impl strategy.Strategy, input stra
 }
 
 func (r *Runtime) tickFailure(ctx context.Context, bot *Bot, cause error) error {
+	tickStatsFrom(ctx).markFailed(cause)
+
 	message := cause.Error()
 	runes := []rune(message)
 	if len(runes) > 500 {
@@ -521,6 +680,8 @@ func (r *Runtime) pauseOtherBots(ctx context.Context, userID, currentBotID int64
 }
 
 func (r *Runtime) pause(ctx context.Context, bot *Bot, message, activityType, riskType, severity string) {
+	tickStatsFrom(ctx).markPaused()
+
 	_, _ = r.pool.Exec(ctx,
 		`UPDATE bots SET status = 'paused', last_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
 		bot.ID, message,
@@ -764,7 +925,7 @@ func (r *Runtime) persistStrategy(ctx context.Context, botID int64, state strate
 	return nil
 }
 
-func (r *Runtime) syncGrid(ctx context.Context, bot *Bot, levels []strategy.GridLevelPlan, active *gridState) (*gridState, bool, error) {
+func (r *Runtime) syncGrid(ctx context.Context, bot *Bot, levels []strategy.GridLevelPlan, active *gridState, stats *tickStats) (*gridState, bool, error) {
 	if len(levels) == 0 {
 		return active, false, nil
 	}
@@ -778,6 +939,8 @@ func (r *Runtime) syncGrid(ctx context.Context, bot *Bot, levels []strategy.Grid
 			}
 		}
 		if match {
+			stats.addGridMatched(len(levels))
+
 			return active, false, nil
 		}
 	}
@@ -812,13 +975,15 @@ func (r *Runtime) syncGrid(ctx context.Context, bot *Bot, levels []strategy.Grid
 			}
 		}
 
-		if _, err := tx.Exec(ctx,
+		canceled, err := tx.Exec(ctx,
 			`UPDATE orders SET status = 'canceled', closed_at = now(), updated_at = now()
 			 WHERE bot_id = $1 AND status IN ('pending','open','partially_filled')`,
 			bot.ID,
-		); err != nil {
+		)
+		if err != nil {
 			return nil, false, err
 		}
+		stats.ordersCanceled += int(canceled.RowsAffected())
 		if _, err := tx.Exec(ctx,
 			`UPDATE grid_levels SET state = 'canceled', updated_at = now()
 			 WHERE grid_id = $1 AND state IN ('idle','open')`,
@@ -864,6 +1029,11 @@ func (r *Runtime) syncGrid(ctx context.Context, bot *Bot, levels []strategy.Grid
 		return nil, false, err
 	}
 
+	stats.addGridCreated(len(levels))
+	if active != nil {
+		stats.addGridReplaced(len(active.Levels))
+	}
+
 	return created, active != nil, nil
 }
 
@@ -874,7 +1044,7 @@ func (b *Bot) SpacingType() strategy.SpacingType {
 	return strategy.SpacingArithmetic
 }
 
-func (r *Runtime) applyCancels(ctx context.Context, bot *Bot, impl strategy.Strategy, state *strategy.State, clientIDs []string) error {
+func (r *Runtime) applyCancels(ctx context.Context, bot *Bot, impl strategy.Strategy, state *strategy.State, clientIDs []string, stats *tickStats) error {
 	if len(clientIDs) == 0 {
 		return nil
 	}
@@ -898,7 +1068,14 @@ func (r *Runtime) applyCancels(ctx context.Context, bot *Bot, impl strategy.Stra
 				return err
 			}
 		}
-		_, _ = r.pool.Exec(ctx, `UPDATE orders SET status = 'canceled', closed_at = now(), updated_at = now() WHERE id = $1 AND status IN ('pending','open','partially_filled')`, orderID)
+		tag, _ := r.pool.Exec(ctx, `UPDATE orders SET status = 'canceled', closed_at = now(), updated_at = now() WHERE id = $1 AND status IN ('pending','open','partially_filled')`, orderID)
+		if tag.RowsAffected() > 0 {
+			stats.ordersCanceled += int(tag.RowsAffected())
+			r.activity(ctx, bot.UserID, bot.ID, "order.canceled", "info", "Order canceled by strategy.", map[string]any{
+				"client_order_id": clientID,
+				"reason":          "strategy",
+			})
+		}
 		if levelID > 0 {
 			_, _ = r.pool.Exec(ctx, `UPDATE grid_levels SET state = 'canceled', updated_at = now() WHERE id = $1 AND state IN ('idle','open')`, levelID)
 		}

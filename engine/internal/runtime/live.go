@@ -600,6 +600,9 @@ func (r *Runtime) applyLiveOrder(ctx context.Context, bot *Bot, orderID int64, p
 
 		if !errors.Is(err, pgx.ErrNoRows) {
 			appliedFill = true
+			if stats := tickStatsFrom(ctx); stats != nil {
+				stats.liveFills++
+			}
 
 			// Only a fee denominated in the quote asset reduces quote
 			// inventory. A BNB/other-asset fee is recorded on the fill but not
