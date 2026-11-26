@@ -64,6 +64,32 @@ Port `8000` is free; port `443` is already used by QTS. The Docker socket is
 to `docker-compose`. The architecture must be `amd64`; the CI images are built
 for `linux/amd64`.
 
+Budget about 3 GiB of memory for the Compose limits (roughly 2.7 GiB of
+service limits plus host headroom) and at least 1 GiB of free disk beyond the
+images, database, and Redis data. The service defaults are 512 MiB each for
+`app`, `engine`, `horizon`, and `postgres`, 256 MiB each for `scheduler` and
+`redis`, and 128 MiB for `nginx`; override them with the `*_MEM_LIMIT`
+variables in `.env` when the host has more or less capacity. Docker log rotation
+bounds each service near 30 MiB, so keep several GiB free for images and data.
+Check `df -h /share/Docker` and `docker stats` after the first deployment.
+
+### Upgrading an existing deployment
+
+Production Compose requires `ENGINE_INTERNAL_TOKEN`. Before deploying a
+`latest` image to an existing NAS whose `.env` predates the token, add it and
+keep the file at mode `600`:
+
+```sh
+printf 'ENGINE_INTERNAL_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env
+chmod 600 .env
+```
+
+The `app` and `engine` services read the same value. If the token is missing,
+Compose interpolation fails before the containers start and the deployer
+records an application-tier failure and holds the image. Set the token first;
+then run the normal poll or deployment command. Rotate by replacing the value
+and recreating both services together.
+
 ## NAS layout
 
 Keep configuration, state, and logs together in a persistent directory. The
@@ -130,7 +156,15 @@ Nginx so public uploads work.
    SESSION_DRIVER=database
 
    TRADING_LIVE_ENABLED=false
+
+   ENGINE_INTERNAL_TOKEN=<openssl rand -hex 32>
    ```
+
+   Use the same `ENGINE_INTERNAL_TOKEN` value for the `app` and `engine`
+   services. In production the app and engine refuse to start when the listener
+   is reachable beyond loopback and the token is empty. To rotate it, replace
+   the value in `.env` and restart both services together; Laravel sends it as
+   `Authorization: Bearer <token>` on plan requests.
 
    Generate a key locally with `php artisan key:generate --show`, or with:
 
@@ -319,6 +353,26 @@ docker compose -f docker-compose.prod.yml logs --tail=200 nginx
 docker compose -f docker-compose.prod.yml logs --tail=200 horizon
 docker compose -f docker-compose.prod.yml logs --tail=200 scheduler
 ```
+
+Every service uses the `json-file` driver with `max-size: 10m`, `max-file: 3`,
+and compression, so each service's Docker log is bounded near 30 MiB. The
+`mem_limit` defaults are 512 MiB for `app`, `engine`, `horizon`, and `postgres`,
+256 MiB for `scheduler` and `redis`, and 128 MiB for `nginx`. Override them with
+`APP_MEM_LIMIT`, `ENGINE_MEM_LIMIT`, `HORIZON_MEM_LIMIT`,
+`POSTGRES_MEM_LIMIT`, `SCHEDULER_MEM_LIMIT`, `REDIS_MEM_LIMIT`, and
+`NGINX_MEM_LIMIT` in `.env`, then recreate the affected service. Watch
+`docker stats` and `df -h /share/Docker`; a service that repeatedly reaches its
+limit needs a larger override, and a disk near capacity needs image or log
+cleanup before the next deployment.
+
+Log retention depends on tick rate. Five bots ticking every second emit about
+432,000 completion lines per day; at roughly 250-400 bytes per line that is
+100-170 MB per day before compression. The 30 MiB-per-service rotation
+therefore keeps only a few hours at that rate. Five bots at the default
+60-second interval emit about 7,200 lines per day, roughly 2-3 MB, which the
+same rotation retains for weeks. Ten one-second bots double the high-rate
+figures. Operators who need longer history should ship logs to external
+storage or raise `max-size`/`max-file` together with the host disk budget.
 
 | Symptom | Action |
 | --- | --- |

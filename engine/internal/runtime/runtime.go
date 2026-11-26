@@ -323,7 +323,7 @@ func (r *Runtime) cancelOrder(ctx context.Context, command protocol.Envelope) er
 			if err != nil {
 				return err
 			}
-			if err := r.cancelLiveOrder(ctx, bot, openOrder{
+			if _, err := r.cancelLiveOrder(ctx, bot, openOrder{
 				ID:              orderID,
 				ClientOrderID:   clientOrderID,
 				ExchangeOrderID: exchangeOrderID,
@@ -884,7 +884,7 @@ func (r *Runtime) Source(ctx context.Context) ([]tick.Bot, error) {
 }
 
 func (r *Runtime) activity(ctx context.Context, userID, botID int64, typ, severity, message string, context map[string]any) {
-	encoded, _ := json.Marshal(context)
+	encoded, _ := json.Marshal(withTickCorrelation(ctx, context))
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO activity_logs (user_id, bot_id, type, severity, message, context, created_at)
 		 VALUES ($1, NULLIF($2, 0), $3, $4, $5, $6::jsonb, now())`,
@@ -896,7 +896,7 @@ func (r *Runtime) activity(ctx context.Context, userID, botID int64, typ, severi
 }
 
 func (r *Runtime) riskEvent(ctx context.Context, userID, botID int64, typ, severity, message string, context map[string]any) error {
-	encoded, err := json.Marshal(context)
+	encoded, err := json.Marshal(withTickCorrelation(ctx, context))
 	if err != nil {
 		r.logger.Error("encode risk event context failed", "type", typ, "error_type", fmt.Sprintf("%T", err))
 		return err

@@ -268,6 +268,32 @@ The feed is **idle unless** `ENGINE_MARKET_DATA_WS_URL` and
 Binance URLs and `TRADING_TICK_INTERVAL`; no symbol list is required. Without
 the endpoints, ticks still use one public REST snapshot per evaluation.
 
+## Tick telemetry
+
+Each started tick emits exactly one structured `bot tick completed` record to
+the engine log. It carries `bot_id`, `correlation_id`, `outcome`, `duration_ms`,
+and counters: `orders_placed`, `orders_canceled`, `paper_fills`, `live_fills`,
+`grids_created`, `grids_matched`, `grids_replaced`, `levels_created`,
+`levels_matched`, and `levels_replaced`. A failed tick also carries
+`failure_type`, the Go error type.
+
+Outcomes are `completed`, `paused`, `failed`, and `panicked`. A paused tick
+triggered a pause path such as a protective exit, daily-loss limit, or closed
+live gate. A failed tick records the error in `last_error`; a panic is logged
+before the panic is re-raised.
+
+The correlation ID is `tick-<bot id>-<start UnixNano>`. Activity and risk
+records written by the tick carry the same ID in their context, so a fill,
+cancellation, or placement warning can be tied back to the tick that produced
+it.
+
+Docker wraps the text log line in JSON. Inspect recent completions with:
+
+```bash
+docker compose -f docker-compose.prod.yml logs --tail=200 engine \
+  | jq -r 'select(.log | contains("bot tick completed")) | .log'
+```
+
 ## Setup plan evaluation
 
 `POST /v1/plan/evaluate` runs the same Go strategy code used by ticks against a
@@ -278,10 +304,13 @@ call it; if the engine is unreachable, preview and save fail closed and persist
 nothing.
 
 Compose does not publish the engine port. Laravel reaches it at
-`ENGINE_PLAN_URL=http://engine:8080`. If an operator ever exposes the port
-beyond the internal network, set `ENGINE_INTERNAL_TOKEN` in both services; the
-endpoint then requires `Authorization: Bearer <token>`. `plan-server` is a
-DB/Redis-free subcommand used by the Laravel contract tests:
+`ENGINE_PLAN_URL=http://engine:8080`. In production the engine refuses to start
+when `APP_ENV=production`, the listener is reachable beyond loopback, and
+`ENGINE_INTERNAL_TOKEN` is empty; the plan endpoint then requires
+`Authorization: Bearer <token>`. Local development keeps only the warning so
+the default `:8080` listener remains usable. Set the same token in the `app`
+and `engine` services, and rotate it by updating both services together.
+`plan-server` is a DB/Redis-free subcommand used by the Laravel contract tests:
 `/engine plan-server`.
 
 ## PHP golden engine fixtures (phase 4 capture)

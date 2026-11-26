@@ -1,12 +1,22 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+    compress: "true"
+
 services:
   app:
     image: ghcr.io/johnson407/trading-bot:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    mem_limit: ${APP_MEM_LIMIT:-512m}
+    logging: *default-logging
     working_dir: /var/www/html
     env_file: .env
     environment:
       RUN_MIGRATIONS: "true"
       ENGINE_PLAN_URL: http://engine:8080
+      ENGINE_INTERNAL_TOKEN: ${ENGINE_INTERNAL_TOKEN:?ENGINE_INTERNAL_TOKEN is required}
     volumes:
       - app-storage:/var/www/html/storage
     depends_on:
@@ -24,6 +34,8 @@ services:
   nginx:
     image: ghcr.io/johnson407/trading-bot-nginx:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    mem_limit: ${NGINX_MEM_LIMIT:-128m}
+    logging: *default-logging
     ports:
       - "${APP_PORT:-8000}:80"
     volumes:
@@ -40,6 +52,8 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
+    logging: *default-logging
     environment:
       POSTGRES_DB: ${DB_DATABASE:-trading_bot}
       POSTGRES_USER: ${DB_USERNAME:-trading_bot}
@@ -55,6 +69,8 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    mem_limit: ${REDIS_MEM_LIMIT:-256m}
+    logging: *default-logging
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
@@ -67,10 +83,13 @@ services:
   engine:
     image: ghcr.io/johnson407/trading-bot-engine:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    mem_limit: ${ENGINE_MEM_LIMIT:-512m}
+    logging: *default-logging
     stop_grace_period: 25s
     env_file: .env
     environment:
       APP_ENV: production
+      ENGINE_INTERNAL_TOKEN: ${ENGINE_INTERNAL_TOKEN:?ENGINE_INTERNAL_TOKEN is required}
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -101,6 +120,8 @@ services:
   horizon:
     image: ghcr.io/johnson407/trading-bot:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    mem_limit: ${HORIZON_MEM_LIMIT:-512m}
+    logging: *default-logging
     working_dir: /var/www/html
     command: ["php", "artisan", "horizon"]
     env_file: .env
@@ -121,6 +142,8 @@ services:
   scheduler:
     image: ghcr.io/johnson407/trading-bot:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    mem_limit: ${SCHEDULER_MEM_LIMIT:-256m}
+    logging: *default-logging
     working_dir: /var/www/html
     command: ["php", "artisan", "schedule:work"]
     env_file: .env

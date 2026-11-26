@@ -5,7 +5,7 @@ GO_IMAGE ?= golang:$(GO_VERSION)-alpine
 # Mount the repository root, not only engine/: the golden parity tests read the
 # committed fixtures under tests/golden/engine.
 REPO_ROOT := $(abspath $(CURDIR)/..)
-DOCKER_RUN = docker run --rm -v "$(REPO_ROOT):/src" -w /src/engine -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod $(GO_IMAGE)
+DOCKER_RUN = docker run --rm -v "$(REPO_ROOT):/src" -w /src/engine -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod -e RUNTIME_TEST_DSN $(GO_IMAGE)
 
 .PHONY: test fmt vet build tidy
 
