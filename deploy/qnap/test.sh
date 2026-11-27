@@ -42,6 +42,10 @@ assert_file_absent() {
     [ ! -e "$1" ]
 }
 
+assert_file_not_contains() {
+    [ ! -f "$1" ] || ! grep -Fq -- "$2" "$1"
+}
+
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/docker" <<'STUB'
 #!/bin/sh
@@ -57,6 +61,13 @@ case "$cmd" in
         sub=${1:-}
         shift || true
         case "$sub" in
+            config)
+                if [ "${STUB_CONFIG_FAIL:-0}" = "1" ]; then
+                    echo "invalid compose configuration" >&2
+                    exit 1
+                fi
+                exit 0
+                ;;
             version)
                 exit 0
                 ;;
@@ -171,7 +182,7 @@ STUB
 chmod +x "$TMP/bin/docker"
 
 reset_env() {
-    unset STUB_UNHEALTHY STUB_PREVIOUS STUB_APP_ID STUB_NGINX_ID STUB_ENGINE_ID STUB_PULL_FAIL STUB_NO_REVISION STUB_REVISION DRY_RUN 2>/dev/null || true
+    unset STUB_UNHEALTHY STUB_PREVIOUS STUB_APP_ID STUB_NGINX_ID STUB_ENGINE_ID STUB_PULL_FAIL STUB_NO_REVISION STUB_REVISION STUB_MISSING_TOKEN STUB_CONFIG_FAIL DRY_RUN 2>/dev/null || true
 }
 
 new_case() {
@@ -194,6 +205,11 @@ run_deploy() {
         export COMPOSE_FILE="$CASE/docker-compose.prod.yml"
         export HEALTH_TIMEOUT=0
         export ROLLBACK_TIMEOUT=0
+        if [ "${STUB_MISSING_TOKEN:-0}" = "1" ]; then
+            unset ENGINE_INTERNAL_TOKEN
+        else
+            export ENGINE_INTERNAL_TOKEN=test-token
+        fi
         "$CASE/deploy.sh" "$@"
     )
 }
@@ -298,6 +314,24 @@ export STUB_UNHEALTHY="app"
 if run_deploy; then rc=0; else rc=$?; fi
 check "first failure has no rollback image" assert_file_contains "$CASE/deploy.log" "no previous application images are available"
 check "first failure still holds the image" test -s "$CASE/.hold"
+
+# Missing the engine token aborts before pulling or activating.
+new_case
+export STUB_MISSING_TOKEN=1
+if run_deploy; then rc=0; else rc=$?; fi
+check "missing token exits non-zero" test "$rc" -ne 0
+check "missing token is reported" assert_file_contains "$CASE/deploy.log" "ENGINE_INTERNAL_TOKEN is required"
+check "missing token does not pull" assert_file_not_contains "$CASE/docker.log" "docker pull"
+check "missing token does not activate" assert_file_not_contains "$CASE/docker.log" "up -d"
+
+# Invalid compose configuration aborts before pulling or activating.
+new_case
+export STUB_CONFIG_FAIL=1
+if run_deploy; then rc=0; else rc=$?; fi
+check "invalid compose exits non-zero" test "$rc" -ne 0
+check "invalid compose is reported" assert_file_contains "$CASE/deploy.log" "deployment configuration is invalid"
+check "invalid compose does not pull" assert_file_not_contains "$CASE/docker.log" "docker pull"
+check "invalid compose does not activate" assert_file_not_contains "$CASE/docker.log" "up -d"
 
 # Dry run does not change state.
 new_case

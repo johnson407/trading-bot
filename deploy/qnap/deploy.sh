@@ -179,6 +179,38 @@ validate_tag() {
     esac
 }
 
+require_internal_token() {
+    if [ -n "${ENGINE_INTERNAL_TOKEN:-}" ]; then
+        return 0
+    fi
+
+    env_file="$SCRIPT_DIR/.env"
+    if [ -f "$env_file" ]; then
+        token=$(sed -n 's/^[[:space:]]*ENGINE_INTERNAL_TOKEN[[:space:]]*=[[:space:]]*//p' "$env_file" | tail -n 1 | tr -d '\r')
+        if [ -n "$token" ]; then
+            return 0
+        fi
+    fi
+
+    log "deployment configuration is invalid: ENGINE_INTERNAL_TOKEN is required in .env"
+    return 1
+}
+
+validate_compose_config() {
+    error_file="$STATE_DIR/.deploy-config.error"
+    if compose config >/dev/null 2>"$error_file"; then
+        rm -f "$error_file"
+        return 0
+    fi
+
+    log "deployment configuration is invalid; no containers were changed"
+    while IFS= read -r line; do
+        [ -n "$line" ] && log "config: $line"
+    done < "$error_file"
+    rm -f "$error_file"
+    return 1
+}
+
 container_image_id() {
     cid=$(compose ps -q "$1" 2>/dev/null | head -n 1 || true)
     [ -n "$cid" ] || return 0
@@ -457,6 +489,11 @@ main() {
             log "desired image $TAG is already running and healthy; nothing to do"
             exit 0
         fi
+    fi
+
+    if [ "$DRY_RUN" != "1" ]; then
+        require_internal_token || exit 1
+        validate_compose_config || exit 1
     fi
 
     if ! pull_images; then

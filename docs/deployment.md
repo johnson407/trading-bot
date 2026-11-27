@@ -84,10 +84,17 @@ printf 'ENGINE_INTERNAL_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env
 chmod 600 .env
 ```
 
-The `app` and `engine` services read the same value. If the token is missing,
-Compose interpolation fails before the containers start and the deployer
-records an application-tier failure and holds the image. Set the token first;
-then run the normal poll or deployment command. Rotate by replacing the value
+The `app` and `engine` services read the same value. `deploy.sh` validates that
+the token is present in `.env` or the environment and runs the Compose config
+check before pulling images. A missing token or invalid configuration aborts
+that poll without changing containers or recording a hold, so a bad deployment
+cannot become a held image. Verify the NAS configuration first:
+
+```sh
+docker compose -f docker-compose.prod.yml config --quiet
+```
+
+Then run the normal poll or deployment command. Rotate by replacing the value
 and recreating both services together.
 
 ## NAS layout
