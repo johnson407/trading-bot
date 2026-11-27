@@ -261,6 +261,9 @@ func TestAutoResumeRunsOncePerProcess(t *testing.T) {
 		t.Fatalf("second reconcile: %v", err)
 	}
 	assertAutoResumeState(t, ctx, pool, third, "paused", pauseCausePtr(pauseCauseStaleTick.String()))
+	// First-tick grace must keep the earlier resumed bot running even though
+	// its last successful tick predates this process.
+	assertAutoResumeState(t, ctx, pool, first, "running", nil)
 
 	if _, err := pool.Exec(ctx,
 		`UPDATE bots SET status='paused', pause_reason='stale_tick', pause_reason_recorded_at=now(), updated_at=now()

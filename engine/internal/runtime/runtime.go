@@ -1011,7 +1011,7 @@ func (r *Runtime) activity(ctx context.Context, userID, botID int64, typ, severi
 		userID, botID, typ, severity, message, string(encoded),
 	)
 	if err != nil {
-		r.logger.Error("record activity failed", "type", typ, "error_type", fmt.Sprintf("%T", err))
+		r.logger.Error("record activity failed", "type", typ, "bot_id", botID, "error_type", fmt.Sprintf("%T", err))
 	}
 }
 

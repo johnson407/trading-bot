@@ -684,8 +684,6 @@ func (r *Runtime) pauseOtherBots(ctx context.Context, userID, currentBotID int64
 }
 
 func (r *Runtime) pause(ctx context.Context, bot *Bot, cause pauseCause, message, activityType, riskType, severity string) error {
-	tickStatsFrom(ctx).markPaused()
-
 	cause = requirePauseCause(cause)
 	if _, err := r.pool.Exec(ctx,
 		`UPDATE bots
@@ -698,6 +696,7 @@ func (r *Runtime) pause(ctx context.Context, bot *Bot, cause pauseCause, message
 
 		return fmt.Errorf("pause bot %d: %w", bot.ID, err)
 	}
+	tickStatsFrom(ctx).markPaused()
 	if _, err := r.cancelOpenOrders(ctx, bot.UserID, bot.ID, activityType); err != nil {
 		_, _ = r.pool.Exec(ctx, `UPDATE bots SET cancel_retry_requested = true, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
 		r.logger.Error("pause could not cancel orders", "bot_id", bot.ID, "error_type", fmt.Sprintf("%T", err))

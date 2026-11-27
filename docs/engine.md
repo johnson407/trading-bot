@@ -235,7 +235,7 @@ that drain before forcing termination.
 | Column | Writer | Rule |
 | --- | --- | --- |
 | `bots.desired_status` | Laravel | User intent: set on start, pause, stop, and kill-switch; `idle` on create. Added by a Laravel migration and backfilled from the old `status`. |
-| `bots.status` | Go engine | Runtime state. The engine applies `desired_status` and must not set running over a pause, stop, or kill-switch. |
+| `bots.status` | Go engine | Runtime state. The engine applies `desired_status` and must not set running over a pause, stop, or kill-switch, except the single startup stale-tick paper resume described above. |
 | `bots.last_error` | Go engine | Runtime failure text. Laravel does not write it after the ownership migration. |
 | `bots.pause_reason` | Go engine | Fixed cause of the latest pause: `stale_tick`, `risk_limit`, `protective_exit`, `daily_loss`, `kill_switch`, `reconciliation_conflict`, `tick_failure`, `live_gate`, `strategy_stop`, `unsupported_exchange`, or `user`. Written in the same update as `status` and `last_error`; cleared on user start, stop, and successful auto-resume. Null for legacy rows. |
 | `bots.pause_reason_recorded_at` | Go engine | Time the cause was recorded. Must equal `updated_at` for startup auto-resume; any later write without refreshing it makes the cause stale and ineligible. |
