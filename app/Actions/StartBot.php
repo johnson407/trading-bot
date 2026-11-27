@@ -59,6 +59,13 @@ class StartBot
                 $bot,
                 context: ['mode' => $bot->mode->value, 'symbol' => $bot->symbol],
             );
+        } elseif ($bot->status === BotStatus::Paused) {
+            $this->activity->recordUser(
+                'bot.started',
+                'Bot resumed',
+                $bot,
+                context: ['mode' => $bot->mode->value, 'symbol' => $bot->symbol, 'resumed' => true],
+            );
         }
 
         return $bot->refresh();

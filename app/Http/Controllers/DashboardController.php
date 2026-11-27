@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Domain\Analytics\EquityHistory;
+use App\Domain\Bot\BotHealth;
 use App\Domain\Portfolio\InventoryLedger;
 use App\Domain\Portfolio\MarkPrice;
 use App\Domain\Support\Decimal;
@@ -16,7 +17,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, InventoryLedger $ledger, EquityHistory $history, EngineHeartbeat $heartbeat): Response
+    public function __invoke(Request $request, InventoryLedger $ledger, EquityHistory $history, EngineHeartbeat $heartbeat, BotHealth $botHealth): Response
     {
         $user = $request->user();
 
@@ -73,6 +74,7 @@ class DashboardController extends Controller
         $requestedRange = $request->query('range');
         $requestedRange = is_numeric($requestedRange) ? (int) $requestedRange : null;
         $rangeDays = in_array($requestedRange, $ranges, true) ? $requestedRange : $defaultRange;
+        $engine = $heartbeat->status();
 
         return Inertia::render('Dashboard', [
             'summary' => [
@@ -82,7 +84,8 @@ class DashboardController extends Controller
             ],
             'recentActivity' => $activity,
             'equityHistory' => fn () => $history->forUser($user, $rangeDays),
-            'engine' => $heartbeat->status(),
+            'botHealth' => $botHealth->forBots($bots, $engine),
+            'engine' => $engine,
         ]);
     }
 }

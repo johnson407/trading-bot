@@ -2,8 +2,8 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import EquityChart from '@/Components/EquityChart.vue';
 import { formatMoney, formatSignedMoney } from '@/Support/money.js';
-import { Head, Link, router } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted } from 'vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
     summary: {
@@ -18,14 +18,74 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    botHealth: {
+        type: Array,
+        required: true,
+    },
     engine: {
         type: Object,
         required: true,
     },
 });
 
+const page = usePage();
+const resuming = ref([]);
+const unconfirmed = ref([]);
+
 const percent = (value) => `${Number(value ?? 0).toFixed(2)}%`;
 const signedPercent = (value) => `${Number(value ?? 0) > 0 ? '+' : ''}${Number(value ?? 0).toFixed(2)}%`;
+const timestamp = (value) => (value ? new Date(value).toLocaleString() : 'Never');
+const issueLabel = (issue) =>
+    ({
+        paused_by_engine: 'Paused by engine',
+        stale: 'Stale',
+        error: 'Error',
+    })[issue] ?? issue;
+const issueClass = (issue) =>
+    issue === 'paused_by_engine'
+        ? 'border-amber-500/40 bg-amber-950/40 text-amber-100'
+        : 'border-red-500/40 bg-red-950/40 text-red-100';
+
+const isResuming = (id) => resuming.value.includes(id);
+const isUnconfirmed = (id) => unconfirmed.value.includes(id);
+
+const resume = (bot) => {
+    if (isResuming(bot.id)) {
+        return;
+    }
+
+    unconfirmed.value = unconfirmed.value.filter((id) => id !== bot.id);
+    resuming.value = [...resuming.value, bot.id];
+
+    router.post(route('bots.start', bot.id), {}, {
+        preserveScroll: true,
+        onError: () => {
+            resuming.value = resuming.value.filter((id) => id !== bot.id);
+        },
+    });
+};
+
+watch(
+    () => props.botHealth,
+    (rows) => {
+        const pausedIds = new Set(
+            rows
+                .filter((bot) => bot.status === 'paused' && bot.desired_status === 'running')
+                .map((bot) => bot.id),
+        );
+
+        unconfirmed.value = unconfirmed.value.filter((id) => pausedIds.has(id));
+
+        if (resuming.value.length === 0) {
+            return;
+        }
+
+        const stillPaused = resuming.value.filter((id) => pausedIds.has(id));
+        unconfirmed.value = [...new Set([...unconfirmed.value, ...stillPaused])];
+        resuming.value = [];
+    },
+    { deep: true },
+);
 
 const equityLabels = computed(() =>
     props.equityHistory.points.map((point) => new Date(point.at).toLocaleString()),
@@ -55,7 +115,7 @@ let equityPoller = null;
 onMounted(() => {
     poller = setInterval(() => {
         router.reload({
-            only: ['summary', 'recentActivity', 'engine'],
+            only: ['summary', 'recentActivity', 'botHealth', 'engine'],
             preserveScroll: true,
             preserveState: true,
         });
@@ -96,6 +156,79 @@ onBeforeUnmount(() => {
                     Bots will not be paused automatically. Check the engine container and Redis before relying on bot control.
                     <span v-if="engine.last_seen_at" class="text-amber-200"> Last seen {{ new Date(engine.last_seen_at).toLocaleString() }}.</span>
                 </div>
+                <div v-if="page.props.errors?.action || page.props.errors?.confirmation" class="rounded-lg border border-red-500/40 bg-red-950/40 p-4 text-sm text-red-100">
+                    <p v-if="page.props.errors?.action">{{ page.props.errors.action }}</p>
+                    <p v-if="page.props.errors?.confirmation">{{ page.props.errors.confirmation }}</p>
+                </div>
+
+                <div v-if="botHealth.length > 0" class="bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg">
+                    <div class="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-slate-700">
+                        <div>
+                            <h3 class="text-lg font-medium text-slate-100">Needs attention</h3>
+                            <p class="mt-1 text-sm text-slate-400">Bots paused by the engine, stale, or in error.</p>
+                        </div>
+                        <Link :href="route('bots.index')" class="text-sm text-blue-300 hover:text-blue-200">View all bots</Link>
+                    </div>
+
+                    <ul class="divide-y divide-slate-700">
+                        <li v-for="bot in botHealth" :key="bot.id" class="p-6">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <Link :href="route('bots.show', bot.id)" class="text-base font-medium text-blue-300 hover:text-blue-200">
+                                        {{ bot.name }}
+                                    </Link>
+                                    <span class="ml-2 text-xs uppercase tracking-wide text-slate-400">{{ bot.mode }}</span>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <span
+                                        v-for="issue in bot.issues"
+                                        :key="issue"
+                                        class="rounded-full border px-2.5 py-0.5 text-xs font-medium"
+                                        :class="issueClass(issue)"
+                                    >
+                                        {{ issueLabel(issue) }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <p class="mt-2 text-sm text-slate-300">{{ bot.reason }}</p>
+
+                            <dl class="mt-3 grid gap-2 text-sm text-slate-400 sm:grid-cols-2">
+                                <div>
+                                    <dt class="text-xs uppercase tracking-wide text-slate-500">Last tick</dt>
+                                    <dd>{{ timestamp(bot.last_tick_at) }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-xs uppercase tracking-wide text-slate-500">Last successful tick</dt>
+                                    <dd>{{ timestamp(bot.last_successful_tick_at) }}</dd>
+                                </div>
+                            </dl>
+
+                            <div v-if="bot.can_resume" class="mt-4 flex flex-wrap items-center gap-3">
+                                <button
+                                    v-if="bot.mode === 'paper'"
+                                    type="button"
+                                    class="rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                    :disabled="isResuming(bot.id)"
+                                    @click="resume(bot)"
+                                >
+                                    {{ isResuming(bot.id) ? 'Resuming...' : 'Resume' }}
+                                </button>
+                                <Link
+                                    v-else
+                                    :href="route('bots.show', bot.id)"
+                                    class="rounded border border-emerald-500/50 px-3 py-1.5 text-sm font-medium text-emerald-200 hover:border-emerald-400"
+                                >
+                                    Resume with live confirmation
+                                </Link>
+                                <p v-if="isUnconfirmed(bot.id)" class="text-sm text-amber-200">
+                                    Resume requested; the engine has not confirmed yet.
+                                </p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <div class="bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
                         <div class="text-sm text-slate-300">Bots</div>

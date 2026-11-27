@@ -770,7 +770,8 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 		}
 		_, err := r.pool.Exec(ctx,
 			`UPDATE bots
-			    SET status = 'running', last_error = NULL,
+			    SET status = 'running', last_tick_at = NULL, last_successful_tick_at = now(),
+			        consecutive_failures = 0, last_error = NULL,
 			        pause_reason = NULL, pause_reason_recorded_at = NULL, updated_at = now()
 			  WHERE id = $1 AND deleted_at IS NULL`,
 			bot.ID,

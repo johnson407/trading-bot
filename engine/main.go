@@ -186,15 +186,28 @@ func run() error {
 	)
 
 	heartbeatWriter := heartbeat.NewWriter(redisHeartbeatSetter{client: redisClient})
+	engineStartedAt := time.Now().UTC()
 
 	// Write once before serving so readiness does not race the first refresh.
-	if err := heartbeatWriter.Write(engineContext, tradingRuntime.RunningCount(engineContext)); err != nil {
+	if err := heartbeatWriter.Write(engineContext, buildHeartbeatSnapshot(
+		engineStartedAt,
+		cfg.LiveTrading,
+		cfg.MarketData.Configured(),
+		tradingRuntime.RunningCount(engineContext),
+		marketFeed.Status(),
+	)); err != nil {
 		logger.Warn("initial heartbeat write failed", "error_type", fmt.Sprintf("%T", err))
 	}
 
 	startWorker(func() {
-		heartbeatWriter.Run(engineContext, heartbeat.RefreshInterval, func() int {
-			return tradingRuntime.RunningCount(engineContext)
+		heartbeatWriter.Run(engineContext, heartbeat.RefreshInterval, func() heartbeat.Snapshot {
+			return buildHeartbeatSnapshot(
+				engineStartedAt,
+				cfg.LiveTrading,
+				cfg.MarketData.Configured(),
+				tradingRuntime.RunningCount(engineContext),
+				marketFeed.Status(),
+			)
 		})
 	})
 
@@ -410,6 +423,31 @@ func runHealthcheck() error {
 	client := &http.Client{Timeout: 4 * time.Second}
 
 	return healthcheck.Run(ctx, probeURL, client)
+}
+
+// buildHeartbeatSnapshot maps the engine's current state into the secret-free
+// heartbeat payload. The feed's configured state comes from config, not from
+// the feed mode: a configured feed with no symbols is idle, not off.
+func buildHeartbeatSnapshot(startedAt time.Time, liveTrading, marketDataConfigured bool, runningBots int, status marketdata.Status) heartbeat.Snapshot {
+	var lastMessageAt *time.Time
+	if !status.LastMessageAt.IsZero() {
+		lastMessage := status.LastMessageAt.UTC()
+		lastMessageAt = &lastMessage
+	}
+
+	return heartbeat.Snapshot{
+		RunningBots: runningBots,
+		LiveTrading: liveTrading,
+		StartedAt:   startedAt.UTC(),
+		MarketData: heartbeat.MarketData{
+			Configured:    marketDataConfigured,
+			Mode:          string(status.Mode),
+			Degraded:      status.Degraded,
+			Reason:        status.Reason,
+			Symbols:       len(status.Symbols),
+			LastMessageAt: lastMessageAt,
+		},
+	}
 }
 
 // redisHeartbeatSetter adapts go-redis to heartbeat.Setter.

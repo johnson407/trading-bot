@@ -2,6 +2,10 @@
 
 Laravel 12 + Inertia/Vue grid-trading bot. Paper trading is the default; live trading is opt-in and safety-gated. Money handling, risk checks, and live-order paths are high-risk changes.
 
+## Worktrees
+
+- Do feature and change work in a dedicated git worktree, not directly on `main`. Keep the OpenSpec change, code, tests, and docs together in that worktree, and merge only after review and verification.
+
 ## Run and verify
 
 Local development uses `docker-compose.yml`, and the commands below run PHP/Node inside the `app` service. Start the stack once:

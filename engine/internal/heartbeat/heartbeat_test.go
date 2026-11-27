@@ -26,14 +26,20 @@ func (r *recordedSet) Set(_ context.Context, key string, value []byte, ttl time.
 	return nil
 }
 
-func TestWritePlaceholderUsesDesignKeyAndTTL(t *testing.T) {
+func TestWriteUsesDesignKeyAndTTL(t *testing.T) {
 	t.Parallel()
 
 	setter := &recordedSet{}
 	stub := heartbeat.NewWriter(setter)
+	startedAt := time.Date(2026, 11, 26, 11, 0, 0, 0, time.UTC)
 
-	if err := stub.WritePlaceholder(context.Background(), 0); err != nil {
-		t.Fatalf("WritePlaceholder() error = %v", err)
+	if err := stub.Write(context.Background(), heartbeat.Snapshot{
+		StartedAt: startedAt,
+		MarketData: heartbeat.MarketData{
+			Mode: "idle",
+		},
+	}); err != nil {
+		t.Fatalf("Write() error = %v", err)
 	}
 
 	if setter.key != "engine:heartbeat" {
@@ -53,6 +59,24 @@ func TestWritePlaceholderUsesDesignKeyAndTTL(t *testing.T) {
 		t.Errorf("payload = %+v, want revision 1 and zero running bots", payload)
 	}
 
+	if payload.StartedAt != startedAt.Format(time.RFC3339) {
+		t.Errorf("started_at = %q, want %q", payload.StartedAt, startedAt.Format(time.RFC3339))
+	}
+
+	if payload.LiveTrading {
+		t.Error("live_trading = true, want false")
+	}
+
+	if payload.MarketData.Configured || payload.MarketData.Degraded {
+		t.Errorf("market_data = %+v, want configured and degraded false", payload.MarketData)
+	}
+
+	for _, expected := range []string{`"live_trading":false`, `"configured":false`, `"degraded":false`} {
+		if !strings.Contains(string(setter.value), expected) {
+			t.Errorf("payload missing %s: %s", expected, setter.value)
+		}
+	}
+
 	timestamp, err := time.Parse(time.RFC3339, payload.TS)
 	if err != nil {
 		t.Fatalf("payload ts %q is not RFC 3339: %v", payload.TS, err)
@@ -69,18 +93,18 @@ func TestWritePlaceholderUsesDesignKeyAndTTL(t *testing.T) {
 	}
 }
 
-func TestWritePlaceholderIncrementsRevision(t *testing.T) {
+func TestWriteIncrementsRevision(t *testing.T) {
 	t.Parallel()
 
 	setter := &recordedSet{}
 	stub := heartbeat.NewWriter(setter)
 
-	if err := stub.WritePlaceholder(context.Background(), 0); err != nil {
-		t.Fatalf("first WritePlaceholder() error = %v", err)
+	if err := stub.Write(context.Background(), heartbeat.Snapshot{}); err != nil {
+		t.Fatalf("first Write() error = %v", err)
 	}
 
-	if err := stub.WritePlaceholder(context.Background(), 3); err != nil {
-		t.Fatalf("second WritePlaceholder() error = %v", err)
+	if err := stub.Write(context.Background(), heartbeat.Snapshot{RunningBots: 3}); err != nil {
+		t.Fatalf("second Write() error = %v", err)
 	}
 
 	var payload heartbeat.Payload
