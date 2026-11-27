@@ -16,6 +16,7 @@ class BotSummaryResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'source_backtest_run_id' => $this->source_backtest_run_id,
             'name' => $this->name,
             'exchange' => $this->exchange,
             'symbol' => $this->symbol,

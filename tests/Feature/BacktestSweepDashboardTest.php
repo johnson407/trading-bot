@@ -287,6 +287,36 @@ it('shows sweep runs, derived progress, and a compare url for completed runs', f
         ->assertNotFound();
 });
 
+it('marks only usable completed sweep runs as create bot sources', function () {
+    $owner = User::factory()->create();
+    $bot = sweepDashboardBot($owner);
+    $sweep = BacktestSweep::factory()->for($owner)->forBot($bot)->create(['total_runs' => 2]);
+
+    $completed = BacktestRun::factory()->for($owner)->forBot($bot)->completedSource()->create([
+        'sweep_id' => $sweep->id,
+        'created_at' => now()->subMinute(),
+    ]);
+
+    $failed = BacktestRun::factory()->for($owner)->forBot($bot)->completedSource()->create([
+        'sweep_id' => $sweep->id,
+        'status' => 'failed',
+        'created_at' => now(),
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('backtest-sweeps.show', $sweep))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Backtests/Sweeps/Show')
+            ->has('runs', 2)
+            ->where('runs.0.id', $failed->id)
+            ->where('runs.0.can_create_bot', false)
+            ->where('runs.1.id', $completed->id)
+            ->where('runs.1.can_create_bot', true)
+            ->etc()
+        );
+});
+
 it('omits the compare url until two runs complete', function () {
     $user = User::factory()->create();
     $bot = sweepDashboardBot($user);
@@ -364,6 +394,9 @@ it('renders sweep detail outcomes, polling props, run links, and compare action'
         'compareUrl',
         "only: ['sweep', 'runs', 'compareUrl', 'active']",
         "route('backtests.show'",
+        "route('bots.create'",
+        'Create paper bot',
+        'source_backtest_run_id',
         'Compare completed',
     ] as $label) {
         expect($page)->toContain($label);

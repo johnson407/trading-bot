@@ -30,37 +30,7 @@ class BacktestRunFactory extends Factory
             'end_at' => $end,
             'capital_allocation' => '1000',
             'fee_rate' => '0.001',
-            'config_snapshot' => [
-                'bot' => [
-                    'id' => null,
-                    'name' => 'Test backtest',
-                    'exchange' => 'binance',
-                    'symbol' => 'BTC/USDT',
-                    'strategy_key' => 'simple-grid',
-                    'capital_allocation' => '1000',
-                    'fee_rate' => '0.001',
-                ],
-                'strategy' => [
-                    'key' => 'simple-grid',
-                    'configuration' => [
-                        'center_price' => '100',
-                        'spacing_type' => 'arithmetic',
-                        'spacing_value' => '1',
-                        'order_quantity' => '1',
-                        'levels_per_side' => 2,
-                    ],
-                ],
-                'risk' => [
-                    'max_position_notional' => '1000',
-                    'max_open_orders' => 20,
-                    'daily_loss_limit' => '100',
-                ],
-                'period' => [
-                    'timeframe' => '15m',
-                    'start_at' => $start->toIso8601String(),
-                    'end_at' => $end->toIso8601String(),
-                ],
-            ],
+            'config_snapshot' => $this->snapshot($start, $end),
             'status' => BacktestStatus::Pending,
             'end_reason' => null,
             'candles_processed' => 0,
@@ -70,6 +40,50 @@ class BacktestRunFactory extends Factory
             'error' => null,
             'started_at' => null,
             'finished_at' => null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshot(\DateTimeInterface $start, \DateTimeInterface $end): array
+    {
+        return [
+            'bot' => [
+                'id' => null,
+                'name' => 'Test backtest',
+                'exchange' => 'binance',
+                'symbol' => 'BTC/USDT',
+                'strategy_key' => 'simple-grid',
+                'capital_allocation' => '1000',
+                'fee_rate' => '0.001',
+            ],
+            'strategy' => [
+                'key' => 'simple-grid',
+                'configuration' => [
+                    'center_price' => '100',
+                    'spacing_type' => 'arithmetic',
+                    'spacing_value' => '1',
+                    'order_quantity' => '1',
+                    'levels_per_side' => 2,
+                ],
+            ],
+            'risk' => [
+                'max_position_notional' => '1000',
+                'max_open_orders' => 20,
+                'daily_loss_limit' => '100',
+            ],
+            'exit' => [
+                'stop_loss_percent' => null,
+                'take_profit_percent' => null,
+                'range_low' => null,
+                'range_high' => null,
+            ],
+            'period' => [
+                'timeframe' => '15m',
+                'start_at' => $start->format(\DateTimeInterface::ATOM),
+                'end_at' => $end->format(\DateTimeInterface::ATOM),
+            ],
         ];
     }
 
@@ -97,5 +111,49 @@ class BacktestRunFactory extends Factory
             'equity_curve' => [],
             'finished_at' => now('UTC'),
         ]);
+    }
+
+    public function withExitRules(): static
+    {
+        return $this->state(function (array $attributes): array {
+            $start = $attributes['start_at'] ?? now('UTC')->subDays(30)->startOfDay();
+            $end = $attributes['end_at'] ?? now('UTC')->startOfDay();
+
+            return [
+                'config_snapshot' => array_replace_recursive(
+                    $this->snapshot($start, $end),
+                    [
+                        'exit' => [
+                            'stop_loss_percent' => '4',
+                            'take_profit_percent' => '9',
+                            'range_low' => '80000',
+                            'range_high' => '120000',
+                        ],
+                    ],
+                ),
+            ];
+        });
+    }
+
+    public function completedSource(): static
+    {
+        return $this->completed()
+            ->withExitRules()
+            ->state(fn () => [
+                'metrics' => [
+                    'final_equity' => '1050',
+                    'net_pnl' => '50',
+                    'return_percent' => '5',
+                    'fees' => '2.5',
+                    'fill_count' => 12,
+                    'max_drawdown' => '15',
+                    'max_drawdown_percent' => '1.5',
+                    'candles_processed' => 100,
+                ],
+                'equity_curve' => [
+                    ['at' => now('UTC')->subDays(2)->toIso8601String(), 'equity' => '1000'],
+                    ['at' => now('UTC')->subDay()->toIso8601String(), 'equity' => '1050'],
+                ],
+            ]);
     }
 }

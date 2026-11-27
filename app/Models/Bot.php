@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property int $user_id
+ * @property int|null $source_backtest_run_id
  * @property int|null $exchange_credential_id
  * @property string $name
  * @property string $exchange
@@ -118,6 +119,7 @@ class Bot extends Model
 
     protected $fillable = [
         'user_id',
+        'source_backtest_run_id',
         'exchange_credential_id',
         'name',
         'exchange',
@@ -138,6 +140,7 @@ class Bot extends Model
     protected function casts(): array
     {
         return [
+            'source_backtest_run_id' => 'integer',
             'mode' => BotMode::class,
             'status' => BotStatus::class,
             'desired_status' => BotStatus::class,
@@ -250,6 +253,12 @@ class Bot extends Model
     public function backtestRuns(): HasMany
     {
         return $this->hasMany(BacktestRun::class);
+    }
+
+    /** @return BelongsTo<BacktestRun, $this> */
+    public function sourceBacktest(): BelongsTo
+    {
+        return $this->belongsTo(BacktestRun::class, 'source_backtest_run_id');
     }
 
     /** @return HasMany<Alert, $this> */

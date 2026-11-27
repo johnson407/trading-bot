@@ -168,6 +168,7 @@ function endReasonLabel(value) {
                                     <th class="px-5 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-300">Return</th>
                                     <th class="px-5 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-300">Max drawdown</th>
                                     <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-300">End reason</th>
+                                    <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-300">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-700">
@@ -190,9 +191,18 @@ function endReasonLabel(value) {
                                         {{ run.metrics ? number(run.metrics.max_drawdown_percent) + '%' : '—' }}
                                     </td>
                                     <td class="px-5 py-3 text-sm text-slate-300">{{ endReasonLabel(run.end_reason) }}</td>
+                                    <td class="px-5 py-3 text-sm">
+                                        <Link
+                                            v-if="run.can_create_bot"
+                                            :href="route('bots.create', { source_backtest_run_id: run.id })"
+                                            class="font-medium text-emerald-300 underline"
+                                        >
+                                            Create paper bot
+                                        </Link>
+                                    </td>
                                 </tr>
                                 <tr v-if="runs.length === 0">
-                                    <td colspan="8" class="px-5 py-8 text-center text-sm text-slate-400">No runs in this sweep.</td>
+                                    <td colspan="9" class="px-5 py-8 text-center text-sm text-slate-400">No runs in this sweep.</td>
                                 </tr>
                             </tbody>
                         </table>
