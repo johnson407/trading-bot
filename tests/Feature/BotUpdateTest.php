@@ -309,6 +309,33 @@ it('rejects dynamic grid spacing hysteresis outside 0 to 90 on update', function
         ->assertSessionHasErrors('spacing_hysteresis_percent');
 });
 
+it('rejects malformed dynamic grid spacing hysteresis values on update', function (string $value) {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create([
+        'status' => 'idle',
+        'strategy_key' => 'dynamic-grid',
+    ]);
+
+    StrategyConfig::factory()->for($bot)->create([
+        'strategy_key' => 'dynamic-grid',
+        'configuration' => [
+            'center_price' => '100',
+            'levels_per_side' => 2,
+            'min_spacing' => '1',
+            'max_spacing' => '10',
+            'order_quantity' => '1',
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload([
+            'min_spacing' => '1',
+            'max_spacing' => '10',
+            'spacing_hysteresis_percent' => $value,
+        ]))
+        ->assertSessionHasErrors('spacing_hysteresis_percent');
+})->with(['.5', '20.', '1e1']);
+
 it('rejects missing strategy fields with validation errors instead of a server error', function (string $strategy, string $field, array $configuration) {
     $user = User::factory()->create();
     $bot = Bot::factory()->for($user)->create([

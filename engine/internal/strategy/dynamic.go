@@ -130,11 +130,17 @@ func (d *DynamicGrid) OnTick(input Input) (Decision, error) {
 			}
 
 			state := input.State.Merge(map[string]any{
+				"spacing_value":        current.String(),
 				"last_recalculated_at": formatDateTimeAtom(timestampOf(input.Market)),
 				"recalculation_count":  asInt(input.State.Get("recalculation_count", 0)) + 1,
 			})
 
-			return Decision{State: state, Levels: levels}, nil
+			orders, err := d.orderIntents(input.WithState(state), levels)
+			if err != nil {
+				return Decision{}, err
+			}
+
+			return Decision{State: state, Levels: levels, Orders: orders}, nil
 		}
 	}
 

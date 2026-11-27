@@ -1606,7 +1606,8 @@
                         "volatility_multiplier": "1",
                         "initial_spacing": "1",
                         "recalculation_interval_seconds": 0,
-                        "spacing_hysteresis_percent": "0"                    }
+                        "spacing_hysteresis_percent": "0"
+                    }
                 },
                 "risk": {
                     "max_position_notional": "100000",

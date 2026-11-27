@@ -64,6 +64,7 @@ func TestDynamicGridHysteresisRetainsOrAdoptsSpacing(t *testing.T) {
 		wantSkip    bool
 	}{
 		{name: "below default threshold retains current", candidate: "11.9", hysteresis: "", wantSpacing: "10", wantSkip: true},
+		{name: "at default threshold adopts", candidate: "12", hysteresis: "", wantSpacing: "12"},
 		{name: "at threshold adopts", candidate: "12", hysteresis: "20", wantSpacing: "12"},
 		{name: "above threshold adopts", candidate: "12.1", hysteresis: "20", wantSpacing: "12.1"},
 		{name: "fractional below threshold retains current", candidate: "11.5", hysteresis: "15.1", wantSpacing: "10", wantSkip: true},
@@ -109,8 +110,14 @@ func TestDynamicGridHysteresisRetainsOrAdoptsSpacing(t *testing.T) {
 			}
 
 			if test.wantSkip {
-				if len(decision.Orders) != 0 {
-					t.Fatalf("skip emitted orders: %+v", decision.Orders)
+				if len(decision.Orders) != 3 {
+					t.Fatalf("skip emitted %d orders, want 3 missing-level orders: %+v", len(decision.Orders), decision.Orders)
+				}
+
+				for _, order := range decision.Orders {
+					if order.Price.Equals(decimal.MustParse("110")) {
+						t.Fatalf("skip duplicated the order already open at 110: %+v", decision.Orders)
+					}
 				}
 
 				if len(decision.CancelClientOrderIDs) != 0 {
@@ -118,6 +125,47 @@ func TestDynamicGridHysteresisRetainsOrAdoptsSpacing(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDynamicGridHysteresisSkipRestoresEmptyLadder(t *testing.T) {
+	input := hysteresisTestInput(hysteresisTestState("10"), "11.9", "")
+	input.Bot.OpenOrders = nil
+
+	decision, err := NewDynamicGrid().OnTick(input)
+	if err != nil {
+		t.Fatalf("OnTick returned error: %v", err)
+	}
+
+	if got := decision.State.Get("spacing_value", nil); got != "10" {
+		t.Fatalf("spacing_value = %v, want 10", got)
+	}
+
+	if len(decision.Orders) != 4 {
+		t.Fatalf("skip emitted %d orders, want the full four-level ladder: %+v", len(decision.Orders), decision.Orders)
+	}
+
+	if len(decision.CancelClientOrderIDs) != 0 {
+		t.Fatalf("skip emitted cancels: %+v", decision.CancelClientOrderIDs)
+	}
+}
+
+func TestDynamicGridHysteresisClampsCandidateBeforeComparing(t *testing.T) {
+	input := hysteresisTestInput(hysteresisTestState("10"), "10", "20")
+	input.Config.Values["min_spacing"] = "5"
+	input.Config.Values["max_spacing"] = "20"
+	input.Config.Values["initial_spacing"] = "5"
+	raw := time.Date(2026, time.January, 1, 0, 1, 5, 0, time.UTC)
+	input.Market.Timestamp = &raw
+	input.Market.RecentPrices = []decimal.Decimal{decimal.MustParse("100"), decimal.MustParse("150")}
+
+	decision, err := NewDynamicGrid().OnTick(input)
+	if err != nil {
+		t.Fatalf("OnTick returned error: %v", err)
+	}
+
+	if got := decision.State.Get("spacing_value", nil); got != "20" {
+		t.Fatalf("spacing_value = %v, want clamped candidate 20", got)
 	}
 }
 

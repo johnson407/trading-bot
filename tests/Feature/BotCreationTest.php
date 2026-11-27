@@ -174,6 +174,22 @@ it('rejects dynamic grid spacing hysteresis outside 0 to 90', function () {
         ->assertSessionHasErrors('spacing_hysteresis_percent');
 });
 
+it('rejects malformed dynamic grid spacing hysteresis values', function (string $value) {
+    $user = User::factory()->create();
+    $payload = botPayload([
+        'strategy_key' => 'dynamic-grid',
+        'min_spacing' => '50',
+        'max_spacing' => '500',
+        'spacing_hysteresis_percent' => $value,
+    ]);
+
+    unset($payload['spacing_type'], $payload['spacing_value']);
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), $payload)
+        ->assertSessionHasErrors('spacing_hysteresis_percent');
+})->with(['.5', '20.', '1e1']);
+
 it('stores the configured default tick interval for a new bot', function () {
     $user = User::factory()->create();
 
