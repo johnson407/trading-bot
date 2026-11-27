@@ -22,6 +22,25 @@ It also shows a warning when the Go engine heartbeat is missing or expired. The
 warning is informational only: it never pauses bots, cancels orders, or activates
 the kill-switch, and it refreshes with the same five-second partial reload.
 
+A **Needs attention** panel lists only non-archived bots that need operator action:
+bots paused by the engine, bots missing a successful tick, and bots with an error.
+Each row shows issue badges, the last tick and last successful tick, and the
+engine's reason. The panel is hidden when no bot needs attention. Stale detection
+requires a fresh heartbeat, a known engine start time, at least one full stale
+threshold of engine uptime, and a running bot whose desired status is also running;
+the threshold is `max(180 seconds, bot interval + 30 seconds)`. This keeps an
+engine restart from briefly flagging every running bot as stale.
+
+For an engine-paused paper bot the row offers a one-click **Resume** via
+`bots.start`. For a live bot the row links to the bot detail page instead, so the
+existing exact `<bot name> on <exchange>` confirmation and live gate are never
+bypassed. A resume records a `bot.started` activity with `resumed: true`. The
+button shows **Resuming...** until the next five-second poll or the redirect
+completes; if the bot is still paused, the row reports that the engine has not
+confirmed and allows a retry. Failed resumes render the control action's `action`
+or `confirmation` error above the panel, so the error remains visible even if the
+row changes state. Stale and error rows have no resume action.
+
 The equity section accepts `?range=7`, `?range=30`, or `?range=90`; an omitted or
 unknown range falls back to the configured 30-day default. It renders the selected
 range's account equity curve with period return, peak equity, and maximum
@@ -32,6 +51,36 @@ their five-second partial reload. See [analytics.md](analytics.md) for capture
 cadence, formulas, and retention.
 
 Feature test: `tests/Feature/DashboardTest.php`.
+
+## Global engine status bar
+
+Every authenticated page shows a compact status bar under the primary navigation.
+It fetches `/health/engine` immediately and every ten seconds, parsing the JSON
+body even on a 503. A module-level cache limits the tab to one request per ten
+seconds across Inertia navigation, and an in-flight request is reused rather than
+duplicated. The heartbeat includes `started_at`, `live_trading`, and
+`market_data` (`configured`, `mode`, `degraded`, `reason`, `symbols`,
+`last_message_at`); see [engine.md](engine.md) for the wire format.
+
+The bar reports three independent states:
+
+- **Engine:** **Engine up** means the heartbeat is fresh, not that every readiness
+  check passed. **Engine down** shows the last-seen time, or **never**, and states
+  that this is a warning only: bots are not paused, orders are not canceled, and
+  the kill switch is not activated.
+- **Feed:** **Feed live** for a healthy WebSocket feed, **REST fallback** when the
+  feed is degraded or using REST, **Feed idle** when configured without symbols,
+  **Feed off** when market data is not configured, and **Feed unknown** when the
+  engine did not report the status.
+- **Live:** **LIVE ON** in red when the engine reports the live gate open,
+  **Live orders blocked** when it is closed, and **Live unknown** when the field
+  is absent.
+
+When the heartbeat is unavailable, the feed and live states are **unknown**
+rather than stale claims from the last successful poll. The bar is a compact
+global indicator; the dashboard's prominent heartbeat warning remains. It uses a
+`role="status"` live region that announces only engine/feed/live state
+transitions, not every poll.
 
 ## Bot list — `GET /bots` (`bots.index`)
 
@@ -131,7 +180,9 @@ Feature test: `tests/Feature/BotExitGuardTest.php`.
 ## Controls — `POST /bots/{bot}/start|pause|stop`
 
 - **Start** (`bots.start`) moves idle/paused/stopped/error bots to running and
-  clears the last error.
+  clears the last error. Resuming an engine-paused bot whose desired status is
+  already running records a separate `bot.started` activity with `resumed: true`;
+  a second start while an idle bot is still idle does not duplicate the event.
 - **Pause** (`bots.pause`) pauses a running bot while preserving open orders.
 - **Stop** (`bots.stop`) pauses/cancels every open order and marks the bot stopped.
 
@@ -294,6 +345,8 @@ protection; a failed action never leaves a partial state change visible.
 | Flow | Route | Test |
 | --- | --- | --- |
 | Dashboard | `dashboard` | `DashboardTest` |
+| Bot health triage | `dashboard` | `BotHealthTest` |
+| Engine-paused resume | `bots.start` | `BotActionsTest` |
 | Settings hub | `settings.index` | `SettingsUiTest` |
 | Bot list | `bots.index` | `BotListTest` |
 | Create bot | `bots.create`, `bots.store` | `BotCreationTest` |

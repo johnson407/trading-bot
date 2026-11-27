@@ -40,8 +40,9 @@ directly from the repository root and do not vendor a second copy.
 
 On start the process:
 
-1. writes `engine:heartbeat` (JSON `ts`, `revision`, `running_bots`) and
-   refreshes it every five seconds with a ten-second TTL;
+1. writes `engine:heartbeat` (JSON `ts`, `revision`, `running_bots`,
+   `started_at`, `live_trading`, and a `market_data` snapshot) and refreshes it
+   every five seconds with a ten-second TTL;
 2. ensures the `engine.commands` and `engine.backtests` consumer groups,
    auto-claims pending entries idle for at least 30 seconds, and consumes each
    stream with at-least-once delivery;

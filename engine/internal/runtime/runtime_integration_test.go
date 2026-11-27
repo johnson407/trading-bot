@@ -931,6 +931,45 @@ func TestRestartGraceStillPausesAfterThreshold(t *testing.T) {
 	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.stale_tick'`, 1, botID)
 }
 
+func TestApplyDesiredRefreshesStaleGraceForLateStartingBot(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	_, botID := insertLateStartingBot(t, ctx, pool)
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	assertBotState(t, pool, botID, "running", "running")
+
+	var lastSuccessful time.Time
+	var lastTick *time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT last_successful_tick_at, last_tick_at FROM bots WHERE id = $1`, botID,
+	).Scan(&lastSuccessful, &lastTick); err != nil {
+		t.Fatalf("load bot timestamps: %v", err)
+	}
+
+	if lastTick != nil {
+		t.Errorf("last_tick_at = %v, want NULL after starting", lastTick)
+	}
+
+	if time.Since(lastSuccessful) > 10*time.Second {
+		t.Errorf("last_successful_tick_at = %s, want refreshed near now", lastSuccessful)
+	}
+}
+
 func TestRunSchedulerDrainsInFlightTick(t *testing.T) {
 	dsn := os.Getenv("RUNTIME_TEST_DSN")
 	if dsn == "" {
@@ -1068,6 +1107,32 @@ func TestPositionLimitEventsAggregateAndThrottle(t *testing.T) {
 		t.Fatalf("second tick: %v", err)
 	}
 	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.position_limit'`, 1, botID)
+}
+
+func insertLateStartingBot(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (int64, int64) {
+	t.Helper()
+
+	suffix := time.Now().UnixNano()
+	var userID, botID int64
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO users (name, email, password, created_at, updated_at)
+		 VALUES ('Late start', $1, 'x', now(), now()) RETURNING id`,
+		fmt.Sprintf("late-start-%d@example.test", suffix)).Scan(&userID); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID) })
+
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
+		 capital_allocation, quote_inventory, tick_interval_seconds, settings,
+		 last_tick_at, last_successful_tick_at, created_at, updated_at)
+		 VALUES ($1, 'Late start bot', 'binance', 'BTC/USDT', 'simple-grid', 'paper', 'stopped', 'running',
+		 '1000', '1000', 1, '{}'::jsonb, now() - interval '1 hour', now() - interval '1 hour', now(), now())
+		 RETURNING id`, userID).Scan(&botID); err != nil {
+		t.Fatalf("insert bot: %v", err)
+	}
+
+	return userID, botID
 }
 
 func insertStaleRunningBot(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (int64, int64) {

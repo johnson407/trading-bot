@@ -19,7 +19,9 @@ use Inertia\Inertia;
 Route::get('/health/engine', function (EngineHeartbeat $heartbeat) {
     $status = $heartbeat->status();
 
-    return response()->json($status, $status['available'] ? 200 : 503);
+    return response()
+        ->json($status, $status['available'] ? 200 : 503)
+        ->header('Cache-Control', 'no-store');
 })->name('health.engine');
 
 Route::get('/', function (Request $request) {
