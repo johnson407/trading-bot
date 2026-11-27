@@ -969,6 +969,25 @@ func (r *Runtime) syncGrid(ctx context.Context, bot *Bot, levels []strategy.Grid
 		}
 	}
 
+	// Cancel live orders before taking the bot row lock. applyLiveOrder opens
+	// its own transaction and locks the same bot row, so cancelling inside this
+	// transaction would deadlock until the tick timeout.
+	if active != nil && bot.live() {
+		open, err := r.openOrders(ctx, bot.ID)
+		if err != nil {
+			return nil, false, err
+		}
+		for _, order := range open {
+			canceled, err := r.cancelLiveOrder(ctx, bot, order)
+			if err != nil {
+				return nil, false, err
+			}
+			if canceled {
+				stats.ordersCanceled++
+			}
+		}
+	}
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, false, err
@@ -987,22 +1006,6 @@ func (r *Runtime) syncGrid(ctx context.Context, bot *Bot, levels []strategy.Grid
 	}
 
 	if active != nil {
-		if bot.live() {
-			open, err := r.openOrders(ctx, bot.ID)
-			if err != nil {
-				return nil, false, err
-			}
-			for _, order := range open {
-				canceled, err := r.cancelLiveOrder(ctx, bot, order)
-				if err != nil {
-					return nil, false, err
-				}
-				if canceled {
-					stats.ordersCanceled++
-				}
-			}
-		}
-
 		canceled, err := tx.Exec(ctx,
 			`UPDATE orders SET status = 'canceled', closed_at = now(), updated_at = now()
 			 WHERE bot_id = $1 AND status IN ('pending','open','partially_filled')`,
