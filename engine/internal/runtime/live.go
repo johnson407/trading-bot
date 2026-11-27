@@ -461,7 +461,9 @@ func (r *Runtime) livePlacementFailure(ctx context.Context, bot *Bot, message st
 	}
 
 	if immediate || failures >= 3 {
-		r.pause(ctx, bot, "Bot paused after live order placement failures: "+message, "exchange.failure_threshold", "exchange.failure_threshold", "critical")
+		if err := r.pause(ctx, bot, pauseCauseTickFailure, "Bot paused after live order placement failures: "+message, "exchange.failure_threshold", "exchange.failure_threshold", "critical"); err != nil {
+			r.logger.Error("pause after live placement failures failed", "bot_id", bot.ID, "error_type", fmt.Sprintf("%T", err))
+		}
 	}
 }
 

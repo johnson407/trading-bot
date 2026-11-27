@@ -78,7 +78,7 @@ To add a strategy for preview, implement `App\Domain\Strategy\Contracts\Strategy
 ## Safety constraints
 
 - Never set `TRADING_LIVE_ENABLED=true` in local/test work, and never bypass the live gate, credential check, balance check, or the exact `<bot name> on <exchange>` confirmation.
-- Risk breaches and the kill switch pause bots and cancel orders; nothing resumes automatically.
+- Risk breaches and the kill switch pause bots and cancel orders; safety pauses never resume automatically. Only a paper Binance stale-tick pause may be auto-resumed once at engine startup.
 - Keep the queue/Horizon path intact: bot ticks and backtests are queued, not executed inline in HTTP requests.
 
 ## Environment and Docker
