@@ -4,12 +4,12 @@
 
 ### Requirement: Pause provenance
 
-The engine SHALL persist a pause cause and its recording time in the same update that writes `status` and `last_error`. The cause SHALL be one of a fixed set covering every engine pause. Start, stop, and successful auto-resume SHALL clear both fields. Laravel SHALL NOT write them. A cause SHALL be eligible only while its recorded time equals the bot's `updated_at`.
+The engine SHALL persist a pause cause and its recording time in the same update that writes `status`; when the pause also sets `last_error`, that is the same update. The cause SHALL be one of a fixed set covering every engine pause. Start, stop, and successful auto-resume SHALL clear both fields. Laravel SHALL NOT write them. A cause SHALL be eligible only while its recorded time equals the bot's `updated_at`.
 
 #### Scenario: Every engine pause records a cause
 
 - **WHEN** the engine pauses a bot for stale tick, risk, protective exit, daily loss, kill-switch, reconciliation conflict, repeated tick failure, live-gate failure, unsupported exchange, strategy stop, or user action
-- **THEN** the same update writes the matching cause and its recorded time with `status` and `last_error`
+- **THEN** the same update writes the matching cause and its recorded time with `status` and, when present, `last_error`
 
 #### Scenario: Start and stop clear provenance
 
