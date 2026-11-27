@@ -87,6 +87,7 @@ class PreviewBotRequest extends FormRequest
             'max_spacing' => ['nullable', 'required_if:strategy_key,dynamic-grid', 'regex:/^\d+(\.\d+)?$/', 'gt:0'],
             'volatility_multiplier' => ['nullable', 'numeric', 'gt:0'],
             'recalculation_interval_seconds' => ['nullable', 'integer', 'min:1'],
+            'spacing_hysteresis_percent' => ['nullable', 'numeric', 'min:0', 'max:90'],
         ];
     }
 
@@ -158,6 +159,7 @@ class PreviewBotRequest extends FormRequest
             'max_spacing',
             'volatility_multiplier',
             'recalculation_interval_seconds',
+            'spacing_hysteresis_percent',
         ] as $field) {
             if ($this->has($field)) {
                 $values[$field] = $this->input($field);

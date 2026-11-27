@@ -49,6 +49,7 @@ const form = useForm({
     max_spacing: '500',
     volatility_multiplier: '1',
     recalculation_interval_seconds: 60,
+    spacing_hysteresis_percent: '20',
     live_confirmation: '',
 });
 
@@ -158,6 +159,7 @@ watch(
         form.max_order_quantity,
         form.min_spacing,
         form.max_spacing,
+        form.spacing_hysteresis_percent,
     ],
     () => {
         if (!applyingValues.value) {
@@ -442,6 +444,11 @@ const submit = () => {
                                         <InputLabel for="recalculation_interval_seconds" value="Recalculation interval (seconds)" />
                                         <TextInput id="recalculation_interval_seconds" v-model="form.recalculation_interval_seconds" type="number" min="1" class="mt-1 block w-full" />
                                         <InputError class="mt-2" :message="form.errors.recalculation_interval_seconds" />
+                                    </div>
+                                    <div>
+                                        <InputLabel for="spacing_hysteresis_percent" value="Spacing hysteresis (%)" />
+                                        <TextInput id="spacing_hysteresis_percent" v-model="form.spacing_hysteresis_percent" type="number" min="0" max="90" step="0.1" class="mt-1 block w-full" />
+                                        <InputError class="mt-2" :message="form.errors.spacing_hysteresis_percent" />
                                     </div>
                                 </template>
                             </div>

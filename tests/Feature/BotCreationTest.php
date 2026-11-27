@@ -112,7 +112,66 @@ it('accepts a dynamic grid without the shared spacing fields', function () {
             'spacing_value' => '0',
             'min_spacing' => '50',
             'max_spacing' => '500',
+            'spacing_hysteresis_percent' => '20',
         ]);
+});
+
+it('stores an explicit dynamic grid spacing hysteresis', function () {
+    $user = User::factory()->create();
+    $payload = botPayload([
+        'strategy_key' => 'dynamic-grid',
+        'min_spacing' => '50',
+        'max_spacing' => '500',
+        'spacing_hysteresis_percent' => '12.5',
+    ]);
+
+    unset($payload['spacing_type'], $payload['spacing_value']);
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), $payload)
+        ->assertRedirect(route('bots.index'))
+        ->assertSessionHasNoErrors();
+
+    $bot = Bot::where('user_id', $user->id)->firstOrFail();
+
+    expect(StrategyConfig::where('bot_id', $bot->id)->firstOrFail()->configuration)
+        ->toMatchArray(['spacing_hysteresis_percent' => '12.5']);
+});
+
+it('accepts the inclusive dynamic grid spacing hysteresis bounds', function () {
+    $user = User::factory()->create();
+
+    foreach (['0', '90'] as $value) {
+        $payload = botPayload([
+            'strategy_key' => 'dynamic-grid',
+            'min_spacing' => '50',
+            'max_spacing' => '500',
+            'spacing_hysteresis_percent' => $value,
+        ]);
+
+        unset($payload['spacing_type'], $payload['spacing_value']);
+
+        $this->actingAs($user)
+            ->post(route('bots.store'), $payload)
+            ->assertRedirect(route('bots.index'))
+            ->assertSessionHasNoErrors();
+    }
+});
+
+it('rejects dynamic grid spacing hysteresis outside 0 to 90', function () {
+    $user = User::factory()->create();
+    $payload = botPayload([
+        'strategy_key' => 'dynamic-grid',
+        'min_spacing' => '50',
+        'max_spacing' => '500',
+        'spacing_hysteresis_percent' => '91',
+    ]);
+
+    unset($payload['spacing_type'], $payload['spacing_value']);
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), $payload)
+        ->assertSessionHasErrors('spacing_hysteresis_percent');
 });
 
 it('stores the configured default tick interval for a new bot', function () {

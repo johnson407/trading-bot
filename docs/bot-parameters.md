@@ -142,7 +142,7 @@ engine evaluation endpoint:
 
 | Field | Constraint | Behavior |
 | --- | --- | --- |
-| **trailing_distance** | decimal > 0, required | Absolute quote distance. When `abs(market - center) >= distance`, the bot recenters on the current price, cancels orders not at the new levels, keeps any that coincide, and re-places the ladder. |
+| **trailing_distance** | decimal > 0, required | Absolute quote distance. When `abs(market - center) >= distance`, the bot recenters on the current price; if the new levels differ, runtime cancels the existing ladder, stops the old grid, and places the new one. |
 
 It is a recentering trigger, not a stop-loss. Note it is an absolute price gap, not a percentage.
 
@@ -167,13 +167,18 @@ mandatory.
 | **max_spacing** | decimal > 0, required, >= min | Upper clamp. |
 | **volatility_multiplier** | > 0, default `1` | Scales measured volatility into spacing. |
 | **recalculation_interval_seconds** | >= 1, default `60` | How often spacing is recomputed. |
+| **spacing_hysteresis_percent** | 0-90, default `20` | Adopt a new spacing only when it differs from the current spacing by at least this percentage. `0` adopts every candidate. |
 
 Spacing formula (`DynamicGridStrategy::calculateSpacing`):
 
 ```
 volatility = (max - min) / midpoint        over recent prices (last 30 ticks)
-spacing    = clamp(center * volatility * multiplier, min_spacing, max_spacing)
+candidate  = clamp(center * volatility * multiplier, min_spacing, max_spacing)
 ```
+
+`spacing_hysteresis_percent` is a percentage, not a fraction: `20` means 20 percent, not `0.20`.
+The comparison is inclusive, so a candidate exactly at the threshold is adopted. A high value can
+hold spacing away from the configured clamps; values near the default are usually a better fit.
 
 Flow of one recalculation:
 
@@ -184,14 +189,32 @@ tick due? --no--> keep current grid
    v
 compute volatility from bots.settings.recent_prices (30 prices)
    v
-new spacing = clamp(...)
+candidate = clamp(...)
    v
-cancel open orders not at the new prices, keep matching ones, place missing ones
+candidate differs from current spacing by less than threshold?
+   | yes
+   +--> keep current spacing and ladder, wait another interval
+   |
+   no
+   v
+replace the ladder: cancel all open orders, stop the old grid, create the new levels and orders
 ```
+
+Skipping still advances the recalculation timestamp and count. `spacing_hysteresis_percent: 0`
+restores the pre-hysteresis behavior of adopting every candidate. Existing bots without the key
+use the default `20`; the first saved edit adds it.
 
 Important: dynamic grid never moves the center - unlike trailing, it only changes spacing around
 a fixed center. It always uses arithmetic spacing, so the create and edit forms hide the
 `spacing_type` and `spacing_value` fields for this strategy and do not require them.
+
+When the threshold is crossed, runtime replaces the entire ladder because the new prices differ.
+It does not retain individual orders that happen to fall on a matching new price.
+
+To measure the effect after deployment, compare the engine's `bot tick completed` records for
+the same dynamic bots over a comparable window. `grids_replaced` and `orders_canceled` should
+fall relative to `orders_placed` and `paper_fills`; if fills fall too, the threshold may be too
+high or the fixed center may be stale.
 
 ---
 

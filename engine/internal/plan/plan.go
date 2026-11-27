@@ -434,6 +434,8 @@ func fieldFor(reason string) string {
 		return "volatility_multiplier"
 	case strings.Contains(reason, "recalculation_interval"):
 		return "recalculation_interval_seconds"
+	case strings.Contains(reason, "spacing_hysteresis_percent"):
+		return "spacing_hysteresis_percent"
 	case strings.Contains(reason, "order_quantity"):
 		return "order_quantity"
 	case strings.Contains(reason, "spacing"),

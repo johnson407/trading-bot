@@ -54,6 +54,7 @@ class UpdateBotRequest extends FormRequest
             'max_spacing' => ['nullable', 'regex:/^\d+(\.\d+)?$/', 'gt:0'],
             'volatility_multiplier' => ['nullable', 'numeric', 'gt:0'],
             'recalculation_interval_seconds' => ['nullable', 'integer', 'min:1'],
+            'spacing_hysteresis_percent' => ['nullable', 'numeric', 'min:0', 'max:90'],
         ];
     }
 

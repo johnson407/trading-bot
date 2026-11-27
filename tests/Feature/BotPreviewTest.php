@@ -100,6 +100,36 @@ it('returns a preview error instead of a validation failure for invalid geometry
         ->assertJsonCount(0, 'plan.levels');
 });
 
+it('returns a dynamic grid plan when hysteresis is valid', function () {
+    $user = User::factory()->create();
+    fakeMarket();
+
+    $this->actingAs($user)
+        ->postJson(route('bots.preview'), previewPayload([
+            'strategy_key' => 'dynamic-grid',
+            'min_spacing' => '50',
+            'max_spacing' => '500',
+            'spacing_hysteresis_percent' => '12.5',
+        ]))
+        ->assertOk()
+        ->assertJsonPath('plan.errors', []);
+});
+
+it('rejects invalid dynamic grid spacing hysteresis before preview', function () {
+    $user = User::factory()->create();
+    fakeMarket();
+
+    $this->actingAs($user)
+        ->postJson(route('bots.preview'), previewPayload([
+            'strategy_key' => 'dynamic-grid',
+            'min_spacing' => '50',
+            'max_spacing' => '500',
+            'spacing_hysteresis_percent' => '91',
+        ]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('spacing_hysteresis_percent');
+});
+
 it('fails closed with a 503 when the plan engine is unreachable', function () {
     config(['engine.plan_url' => 'http://127.0.0.1:1']);
     $user = User::factory()->create();

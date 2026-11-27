@@ -76,7 +76,7 @@ place, an optional stop flag, events, and client order IDs to cancel.
 | `simple-grid` | Static arithmetic or geometric ladder | `center_price`, `levels_per_side` or `level_count`, `spacing_type`, `spacing_value`, `order_quantity` |
 | `trailing-grid` | Recenters when price moves beyond a distance | Simple grid keys plus `trailing_distance` |
 | `martingale-grid` | Increases order size after fills with hard caps | Simple grid keys plus `size_multiplier`, `max_order_quantity`, `max_increases` |
-| `dynamic-grid` | Sets spacing from recent volatility | `levels_per_side`, `order_quantity`, `min_spacing`, `max_spacing`, optional `volatility_multiplier`, `initial_spacing`, `recalculation_interval_seconds` |
+| `dynamic-grid` | Sets spacing from recent volatility | `levels_per_side`, `order_quantity`, `min_spacing`, `max_spacing`, optional `volatility_multiplier`, `initial_spacing`, `recalculation_interval_seconds`, `spacing_hysteresis_percent` |
 
 ## Adding a strategy
 
