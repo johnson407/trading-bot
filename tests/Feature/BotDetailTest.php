@@ -1,11 +1,13 @@
 <?php
 
+use App\Models\BacktestRun;
 use App\Models\Bot;
 use App\Models\Fill;
 use App\Models\Grid;
 use App\Models\GridLevel;
 use App\Models\Order;
 use App\Models\RiskLimit;
+use App\Models\StrategyConfig;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -105,4 +107,73 @@ it('exposes protective exit rules and an editable card', function () {
         ->and($show)->toContain('range_low')
         ->and($show)->toContain('range_high')
         ->and($show)->toContain('does not sell inventory');
+});
+
+it('shows a backtest comparison for a source-linked bot', function () {
+    $user = User::factory()->create();
+    $run = BacktestRun::factory()->for($user)->completedSource()->create();
+    $bot = Bot::factory()->for($user)->fromBacktest($run)->withExitRules()->create([
+        'realized_pnl' => '30',
+        'fees_paid' => '1',
+    ]);
+    StrategyConfig::factory()->for($bot)->create([
+        'strategy_key' => 'simple-grid',
+        'configuration' => $run->config_snapshot['strategy']['configuration'],
+    ]);
+    Fill::factory()->for($bot)->count(2)->create();
+
+    $this->actingAs($user)->get(route('bots.show', $bot))->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Bots/Show')
+            ->where('backtestComparison.source.id', $run->id)
+            ->where('backtestComparison.source.net_pnl', '50')
+            ->where('backtestComparison.source.return_percent', '5')
+            ->where('backtestComparison.paper.net_pnl', '30')
+            ->where('backtestComparison.paper.return_percent', '3')
+            ->where('backtestComparison.paper.fill_count', 2)
+            ->where('backtestComparison.deltas.net_pnl', '-20')
+            ->where('backtestComparison.deltas.return_percent_points', '-2')
+            ->where('backtestComparison.modified', false)
+            ->etc());
+
+    $show = file_get_contents(resource_path('js/Pages/Bots/Show.vue'));
+
+    expect($show)->toContain('backtestComparison')
+        ->and($show)->toContain('Backtest comparison')
+        ->and($show)->toContain('Modified since creation')
+        ->and($show)->toContain("route('backtests.show'")
+        ->and($show)->toContain('comparisonPercent');
+});
+
+it('omits the backtest comparison for an unlinked bot', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create();
+
+    $this->actingAs($user)->get(route('bots.show', $bot))->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('backtestComparison', null)
+            ->etc());
+});
+
+it('omits the backtest comparison after the source run is deleted', function () {
+    $user = User::factory()->create();
+    $run = BacktestRun::factory()->for($user)->completedSource()->create();
+    $bot = Bot::factory()->for($user)->fromBacktest($run)->create();
+    StrategyConfig::factory()->for($bot)->create();
+
+    $run->delete();
+    $bot->refresh();
+
+    $this->actingAs($user)->get(route('bots.show', $bot))->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('backtestComparison', null)
+            ->etc());
+});
+
+it('forbids another user from viewing a bot comparison', function () {
+    $owner = User::factory()->create();
+    $other = User::factory()->create();
+    $bot = Bot::factory()->for($owner)->create();
+
+    $this->actingAs($other)->get(route('bots.show', $bot))->assertForbidden();
 });

@@ -8,6 +8,8 @@ use App\Actions\PauseBot;
 use App\Actions\StartBot;
 use App\Actions\StopBot;
 use App\Domain\Activity\ActivityRecorder;
+use App\Domain\Backtest\BacktestComparison;
+use App\Domain\Backtest\Enums\BacktestStatus;
 use App\Domain\Bot\Enums\BotStatus;
 use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Domain\Grid\Exceptions\GridPlanUnavailableException;
@@ -26,9 +28,11 @@ use App\Http\Requests\StoreBotRequest;
 use App\Http\Requests\UpdateBotRequest;
 use App\Http\Resources\BotSummaryResource;
 use App\Models\ActivityLog;
+use App\Models\BacktestRun;
 use App\Models\Bot;
 use App\Models\Order;
 use App\Models\RiskEvent;
+use App\Services\Backtest\BacktestBotPrefill;
 use App\Services\Engine\CommandPublisher;
 use App\Services\Engine\EngineHeartbeat;
 use App\Services\Engine\GridPlanClient;
@@ -76,13 +80,61 @@ class BotController extends Controller
         ]);
     }
 
-    public function create(StrategyRegistry $strategies, PresetResolver $presets): Response
-    {
+    public function create(
+        Request $request,
+        StrategyRegistry $strategies,
+        PresetResolver $presets,
+        BacktestBotPrefill $prefill,
+    ): Response {
+        $sourceRun = null;
+        $initial = null;
+
+        if ($request->filled('source_backtest_run_id')) {
+            $run = BacktestRun::query()
+                ->where('user_id', $request->user()?->id)
+                ->findOrFail((int) $request->query('source_backtest_run_id'));
+
+            abort_unless($run->status === BacktestStatus::Completed, 404);
+            abort_unless($prefill->supports($run->config_snapshot), 404);
+
+            $snapshotBot = $run->config_snapshot['bot'] ?? null;
+            abort_unless(is_array($snapshotBot), 404);
+
+            $exchange = $snapshotBot['exchange'] ?? null;
+            abort_unless(
+                is_string($exchange)
+                    && in_array($exchange, (array) config('trading.exchanges', []), true),
+                404,
+            );
+
+            $symbol = $snapshotBot['symbol'] ?? null;
+            abort_unless(
+                is_string($symbol)
+                    && preg_match('/^[A-Z0-9]{2,12}\/[A-Z0-9]{2,12}$/', $symbol) === 1,
+                404,
+            );
+
+            $sourceRun = [
+                'id' => $run->id,
+                'name' => $run->name,
+                'exchange' => $run->exchange,
+                'symbol' => $run->symbol,
+                'strategy_key' => $run->strategy_key,
+                'timeframe' => $run->timeframe,
+                'start_at' => $run->start_at?->toIso8601String(),
+                'end_at' => $run->end_at?->toIso8601String(),
+            ];
+
+            $initial = $prefill->fromRun($run);
+        }
+
         return Inertia::render('Bots/Create', [
             'strategies' => array_map(fn (string $key) => ['key' => $key], $strategies->keys()),
             'exchanges' => array_values(config('trading.exchanges', ['binance'])),
             'presets' => $presets->all(),
             'feeRate' => (string) config('trading.paper.fee_rate', '0'),
+            'sourceRun' => $sourceRun,
+            'initial' => $initial,
         ]);
     }
 
@@ -151,12 +203,31 @@ class BotController extends Controller
         ];
     }
 
-    public function store(StoreBotRequest $request, CreateBot $createBot): RedirectResponse
-    {
+    public function store(
+        StoreBotRequest $request,
+        CreateBot $createBot,
+        BacktestBotPrefill $prefill,
+    ): RedirectResponse {
+        $data = $request->validated();
+
+        if (($data['source_backtest_run_id'] ?? null) !== null) {
+            $run = BacktestRun::query()
+                ->where('user_id', $request->user()->id)
+                ->findOrFail((int) $data['source_backtest_run_id']);
+
+            $derived = $prefill->fromRun($run);
+            unset($derived['name']);
+
+            $data = array_merge($data, $derived, [
+                'preset_key' => null,
+                'live_confirmation' => null,
+            ]);
+        }
+
         $bot = $createBot->handle($request->user(), [
-            ...$request->validated(),
-            'mode' => $request->input('mode', 'paper'),
-            'exchange' => (string) $request->validated('exchange'),
+            ...$data,
+            'mode' => $data['mode'] ?? 'paper',
+            'exchange' => (string) ($data['exchange'] ?? config('trading.default_exchange', 'binance')),
             'configuration' => $request->strategyConfiguration(),
         ]);
 
@@ -246,12 +317,16 @@ class BotController extends Controller
                 OrderStatus::PartiallyFilled->value,
             ])->latest(),
             'fills' => fn ($query) => $query->latest('filled_at')->limit(20),
+            'sourceBacktest',
+            'strategyConfig',
         ]);
+        $bot->loadCount('fills');
 
         $grid = $bot->activeGrid;
         $mark = MarkPrice::for($bot)?->toString()
             ?? ($grid === null ? null : $grid->center_price)
             ?? $bot->average_entry_price;
+        $unrealized = $ledger->unrealizedPnl($bot, Decimal::of($mark ?? '0'));
 
         return Inertia::render('Bots/Show', [
             'bot' => BotSummaryResource::make($bot)->resolve(),
@@ -297,9 +372,15 @@ class BotController extends Controller
             ],
             'pnl' => [
                 'realized' => $bot->realized_pnl,
-                'unrealized' => $ledger->unrealizedPnl($bot, Decimal::of($mark ?? '0'))->toString(),
+                'unrealized' => $unrealized->toString(),
                 'fees_paid' => $bot->fees_paid,
             ],
+            'backtestComparison' => $bot->sourceBacktest === null ? null : BacktestComparison::make(
+                $bot,
+                $bot->sourceBacktest,
+                $unrealized,
+                (int) $bot->fills_count,
+            )->toArray(),
             'riskLimits' => collect($riskLimits->limitsFor($bot))->map(fn ($limit) => [
                 'scope' => $limit->scope->value,
                 'max_position_notional' => $limit->max_position_notional,

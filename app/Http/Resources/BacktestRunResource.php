@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Http\Resources\Concerns\CanCreateBacktestBot;
 use App\Models\BacktestRun;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -9,11 +10,14 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /** @mixin BacktestRun */
 class BacktestRunResource extends JsonResource
 {
+    use CanCreateBacktestBot;
+
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
         return [
             'id' => $this->id,
+            'can_create_bot' => $this->canCreateBot($request),
             'bot_id' => $this->bot_id,
             'name' => $this->name,
             'exchange' => $this->exchange,

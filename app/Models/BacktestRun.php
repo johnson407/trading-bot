@@ -39,6 +39,7 @@ use LogicException;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Bot|null $bot
+ * @property-read Collection<int, Bot> $derivedBots
  * @property-read Collection<int, BacktestFill> $fills
  * @property-read BacktestSweep|null $sweep
  * @property-read User $user
@@ -110,6 +111,12 @@ class BacktestRun extends Model
     public function bot(): BelongsTo
     {
         return $this->belongsTo(Bot::class)->withTrashed();
+    }
+
+    /** @return HasMany<Bot, $this> */
+    public function derivedBots(): HasMany
+    {
+        return $this->hasMany(Bot::class, 'source_backtest_run_id');
     }
 
     /** @return HasMany<BacktestFill, $this> */

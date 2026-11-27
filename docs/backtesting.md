@@ -197,6 +197,24 @@ The list and detail pages poll every three seconds only while a run is pending o
 running; polling stops when the run finishes. Backtests run in the Go engine, not
 on Horizon.
 
+## Creating a paper bot from a run
+
+A completed run detail page shows **Create paper bot** when the run belongs to the
+viewer and its snapshot can build a bot. The same action appears on completed sweep
+run rows. The link opens the normal create page with
+`source_backtest_run_id=<run id>`.
+
+The server derives the exchange, symbol, strategy, capital, fee, strategy
+configuration, and protective exits from the run's immutable snapshot before
+validation and engine evaluation. The form forces advanced paper mode, shows the
+source run, locks the derived fields, and leaves only the name editable. The bot is
+created idle with the user's current risk limits and never starts automatically.
+Only completed, usable runs expose the action; pending, failed, unsupported, or
+another owner's runs return 404. Multiple bots may be created from the same run.
+The new bot links to the source run, and its detail page compares paper results
+with the backtest. Deleting the source run clears the link and removes the
+comparison while keeping the bot.
+
 ## Comparing runs
 
 The detail page offers comparison when at least one other completed run shares
@@ -266,10 +284,11 @@ percentage of runs that have finished. They poll every three seconds only while 
 sweep has pending or running runs.
 
 The detail page lists each combination's swept values, status, return, maximum
-drawdown, and end reason, and links to each run. When two to four runs have
-completed, it offers **Compare completed**, which hands those runs to the existing
-comparison page. A partially failed sweep stays inspectable; it does not retry the
-whole batch.
+drawdown, end reason, and an action, and links to each run. Completed rows whose
+snapshot can build a bot show **Create paper bot**, which opens the create page
+with that run as the source. When two to four runs have completed, it offers
+**Compare completed**, which hands those runs to the existing comparison page. A
+partially failed sweep stays inspectable; it does not retry the whole batch.
 
 ## Stated assumptions
 
@@ -316,7 +335,9 @@ docker compose exec -u www-data \
   tests/Feature/BacktestDashboardTest.php \
   tests/Feature/BacktestSweepTest.php \
   tests/Feature/BacktestSweepDashboardTest.php \
-  tests/Feature/StoreBacktestSweepRequestTest.php
+  tests/Feature/StoreBacktestSweepRequestTest.php \
+  tests/Feature/BacktestToBotTest.php \
+  tests/Feature/BacktestToBotUiTest.php
 ```
 
 The Go fixtures under `tests/golden/engine/backtest_replay.json` and
@@ -338,3 +359,5 @@ The Go fixtures under `tests/golden/engine/backtest_replay.json` and
 | Snapshot strategy overrides | `BacktestSnapshotBuilderTest` |
 | Sweep request validation and ownership | `StoreBacktestSweepRequestTest` |
 | Sweep pages and derived counts | `BacktestSweepDashboardTest` |
+| Source-linked paper bot creation | `BacktestToBotTest` |
+| Source-mode create page | `BacktestToBotUiTest` |

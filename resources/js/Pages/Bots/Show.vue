@@ -13,6 +13,7 @@ const props = defineProps({
     pnl: { type: Object, required: true },
     riskLimits: { type: Array, default: () => [] },
     canArchive: { type: Boolean, default: false },
+    backtestComparison: { type: Object, default: null },
 });
 
 let timer = null;
@@ -20,7 +21,16 @@ let timer = null;
 onMounted(() => {
     timer = setInterval(() => {
         router.reload({
-            only: ['bot', 'grid', 'openOrders', 'recentFills', 'inventory', 'pnl', 'canArchive'],
+            only: [
+                'bot',
+                'grid',
+                'openOrders',
+                'recentFills',
+                'inventory',
+                'pnl',
+                'canArchive',
+                ...(props.backtestComparison ? ['backtestComparison'] : []),
+            ],
             preserveScroll: true,
             preserveState: true,
         });
@@ -32,6 +42,15 @@ onUnmounted(() => {
 });
 
 const timestamp = (value) => (value ? new Date(value).toLocaleString() : '—');
+const comparisonMoney = (value) => (value === null || value === undefined || value === '' ? '—' : formatMoney(value));
+const comparisonSignedMoney = (value) => (value === null || value === undefined || value === '' ? '—' : formatSignedMoney(value));
+const comparisonPercent = (value) => (value === null || value === undefined || value === '' ? '—' : `${value}%`);
+const comparisonSignedPercent = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+
+    return `${String(value).startsWith('-') ? '' : '+'}${value} pp`;
+};
+const comparisonCount = (value) => (value === null || value === undefined || value === '' ? '—' : value);
 
 const ordersByGridLevel = computed(() => {
     const orders = {};
@@ -147,6 +166,76 @@ const levelState = (state) => ({
                         <p class="text-xs uppercase text-slate-300">Unrealized P&amp;L</p>
                         <p class="mt-1 text-lg font-semibold" :class="Number(pnl.unrealized) >= 0 ? 'text-emerald-300' : 'text-rose-300'">{{ formatSignedMoney(pnl.unrealized) }}</p>
                     </div>
+                </div>
+
+                <div v-if="backtestComparison" class="rounded-lg bg-slate-800 p-6 shadow">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h3 class="font-semibold text-slate-100">Backtest comparison</h3>
+                            <p class="mt-1 text-sm text-slate-300">
+                                <Link v-if="backtestComparison.source.id" :href="route('backtests.show', backtestComparison.source.id)" class="text-blue-300 underline">
+                                    {{ backtestComparison.source.name }}
+                                </Link>
+                                <span v-else>{{ backtestComparison.source.name }}</span>
+                                <span v-if="backtestComparison.source.symbol"> · {{ backtestComparison.source.symbol }}</span>
+                                <span v-if="backtestComparison.source.timeframe"> · {{ backtestComparison.source.timeframe }}</span>
+                            </p>
+                            <p class="mt-1 text-xs text-slate-400">
+                                {{ timestamp(backtestComparison.source.start_at) }} to {{ timestamp(backtestComparison.source.end_at) }}
+                                <span v-if="backtestComparison.source.status"> · {{ backtestComparison.source.status }}</span>
+                            </p>
+                        </div>
+                        <span v-if="backtestComparison.modified" class="rounded bg-amber-900 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200">
+                            Modified since creation
+                        </span>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div class="rounded border border-slate-700 p-4">
+                            <h4 class="text-sm font-semibold text-slate-100">Source backtest</h4>
+                            <p v-if="!backtestComparison.source.metrics_available" class="mt-1 text-xs text-amber-300">Metrics unavailable for this run.</p>
+                            <dl class="mt-3 space-y-2 text-sm">
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Capital</dt><dd class="font-mono">{{ comparisonMoney(backtestComparison.source.capital_allocation) }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Net P&amp;L</dt><dd class="font-mono">{{ comparisonSignedMoney(backtestComparison.source.net_pnl) }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Return</dt><dd class="font-mono">{{ comparisonPercent(backtestComparison.source.return_percent) }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Fees</dt><dd class="font-mono">{{ comparisonMoney(backtestComparison.source.fees) }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Fills</dt><dd class="font-mono">{{ comparisonCount(backtestComparison.source.fill_count) }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Max drawdown</dt><dd class="font-mono">{{ comparisonMoney(backtestComparison.source.max_drawdown) }} <span v-if="backtestComparison.source.max_drawdown_percent !== null" class="text-slate-400">({{ comparisonPercent(backtestComparison.source.max_drawdown_percent) }})</span></dd></div>
+                            </dl>
+                        </div>
+
+                        <div class="rounded border border-slate-700 p-4">
+                            <h4 class="text-sm font-semibold text-slate-100">Paper bot</h4>
+                            <dl class="mt-3 space-y-2 text-sm">
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Capital</dt><dd class="font-mono">{{ comparisonMoney(backtestComparison.paper.capital_allocation) }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Net P&amp;L</dt><dd class="font-mono">{{ comparisonSignedMoney(backtestComparison.paper.net_pnl) }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Return</dt><dd class="font-mono">{{ comparisonPercent(backtestComparison.paper.return_percent) }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Fees</dt><dd class="font-mono">{{ comparisonMoney(backtestComparison.paper.fees) }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-slate-300">Fills</dt><dd class="font-mono">{{ comparisonCount(backtestComparison.paper.fill_count) }}</dd></div>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+                        <div class="rounded bg-slate-900 p-3">
+                            <p class="text-xs uppercase text-slate-400">Net P&amp;L delta</p>
+                            <p class="mt-1 font-mono">{{ comparisonSignedMoney(backtestComparison.deltas.net_pnl) }}</p>
+                        </div>
+                        <div class="rounded bg-slate-900 p-3">
+                            <p class="text-xs uppercase text-slate-400">Return delta</p>
+                            <p class="mt-1 font-mono">{{ comparisonSignedPercent(backtestComparison.deltas.return_percent_points) }}</p>
+                        </div>
+                        <div class="rounded bg-slate-900 p-3">
+                            <p class="text-xs uppercase text-slate-400">Fees delta</p>
+                            <p class="mt-1 font-mono">{{ comparisonSignedMoney(backtestComparison.deltas.fees) }}</p>
+                        </div>
+                        <div class="rounded bg-slate-900 p-3">
+                            <p class="text-xs uppercase text-slate-400">Fills delta</p>
+                            <p class="mt-1 font-mono">{{ comparisonCount(backtestComparison.deltas.fill_count) }}</p>
+                        </div>
+                    </div>
+
+                    <p class="mt-4 text-xs text-slate-400">{{ backtestComparison.caveat }}</p>
                 </div>
 
                 <div class="rounded-lg bg-slate-800 p-6 shadow">

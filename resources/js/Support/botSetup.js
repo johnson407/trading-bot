@@ -20,6 +20,10 @@ export function mergeDerivedValues(form, values) {
 }
 
 export function previewPayload({ setupMode, form, presetKey }) {
+    if (form.source_backtest_run_id) {
+        return { source_backtest_run_id: form.source_backtest_run_id };
+    }
+
     const base = {
         exchange: form.exchange,
         symbol: form.symbol,
