@@ -137,8 +137,18 @@ form falls back to a manually entered center price.
 - Dynamic grids do not ask for spacing type or value; spacing comes from the
   volatility parameters.
 
+A completed backtest or sweep run can open this page with
+`source_backtest_run_id`. The server derives the exchange, symbol, strategy,
+capital, fee, strategy configuration, and protective exits from the run's
+immutable snapshot. The form forces advanced paper mode, shows a source banner,
+locks the source fields, and leaves only the name editable. The bot is created
+idle with the user's current risk limits and never starts automatically. The
+backtest run detail page and sweep run rows expose **Create paper bot** only when
+the run is completed, owned by the viewer, and its snapshot can build a bot.
+
 Feature tests: `tests/Feature/BotCreationTest.php`, `tests/Feature/BotPreviewTest.php`,
-`tests/Feature/MarketDataTest.php`.
+`tests/Feature/MarketDataTest.php`, `tests/Feature/BacktestToBotTest.php`,
+`tests/Feature/BacktestToBotUiTest.php`.
 
 ## Bot detail — `GET /bots/{bot}` (`bots.show`)
 
@@ -146,9 +156,23 @@ Shows mode/status, realized and unrealized P&L, inventory, a grid ladder with
 the plan side, the actual open-order side when it differs, price, and state,
 open orders, recent fills, and risk limits. The mark price for
 unrealized P&L is the bot's stored mark (latest tick), otherwise the average entry
-price — the same source the bot list and dashboard use. The page polls every five seconds for
-`bot, grid, openOrders, recentFills, inventory, pnl, canArchive`; a new fill
-appears on the next poll.
+price — the same source the bot list and dashboard use.
+
+When the bot was created from a backtest, a **Backtest comparison** card links to
+the source run and shows source and paper capital, net P&L, return percentages,
+fees, fills, source maximum drawdown, and paper-minus-backtest deltas. Return
+deltas are percentage points, not currency. A **Modified since creation** badge
+appears when capital, fee rate, strategy configuration, or protective exits differ
+from the source snapshot. Missing source metrics render as unavailable, zero
+capital yields no return, and a bot with no source run shows no card. If the
+source run is deleted, the link clears and the card disappears; the bot remains
+usable. The card includes a caveat that periods, close-only backtest fills, live
+paper data, current risk limits, and post-creation edits can differ.
+
+The page polls every five seconds for
+`bot, grid, openOrders, recentFills, inventory, pnl, canArchive`, plus
+`backtestComparison` when the bot has a source run; a new fill appears on the next
+poll.
 
 Open orders have a **Cancel** action (`bots.orders.cancel`). It publishes
 `order.cancel` to the engine and leaves the order row unchanged until the engine
@@ -318,11 +342,13 @@ Routes: `backtest-sweeps.index`, `backtest-sweeps.create`,
   combination count, and a warning when the count exceeds the configured cap. It
   posts to `backtest-sweeps.store`.
 - **Detail** shows the swept value lists, derived status and progress, and one row
-  per run with its center, spacing, levels, status, return, maximum drawdown, and
-  end reason. Each row links to the normal backtest detail page. While any run is
-  pending or running, the page polls the sweep, runs, compare URL, and active flag.
-  When two to four runs have completed, it shows **Compare completed**, which opens
-  the existing `backtests.compare` page.
+  per run with its center, spacing, levels, status, return, maximum drawdown, end
+  reason, and an action. Each row links to the normal backtest detail page.
+  Completed rows whose snapshot can build a bot also show **Create paper bot**,
+  which opens `bots.create` with that run as the source; failed or incomplete rows
+  do not. While any run is pending or running, the page polls the sweep, runs,
+  compare URL, and active flag. When two to four runs have completed, it shows
+  **Compare completed**, which opens the existing `backtests.compare` page.
 - All four routes are inside the authenticated, verified group and are
   owner-scoped. Another owner's sweep returns 404. Sweep runs are ordinary
   backtests, so another owner's run is denied with 403 by the normal backtest
@@ -350,7 +376,9 @@ protection; a failed action never leaves a partial state change visible.
 | Settings hub | `settings.index` | `SettingsUiTest` |
 | Bot list | `bots.index` | `BotListTest` |
 | Create bot | `bots.create`, `bots.store` | `BotCreationTest` |
+| Backtest to bot | `bots.create`, `bots.store` | `BacktestToBotTest`, `BacktestToBotUiTest` |
 | Bot detail | `bots.show` | `BotDetailTest` |
+| Backtest comparison | `bots.show`, `backtests.show` | `BotDetailTest`, `BacktestComparisonTest` |
 | Protective exits | `bots.exit-guard.update` | `BotExitGuardTest` |
 | Start/pause/stop | `bots.start`, `bots.pause`, `bots.stop` | `BotControlTest` |
 | Archive/restore | `bots.destroy`, `bots.restore` | `BotArchiveTest` |

@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Domain\Bot\Enums\BotMode;
 use App\Domain\Bot\Enums\BotStatus;
+use App\Models\BacktestRun;
 use App\Models\Bot;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -80,5 +81,32 @@ class BotFactory extends Factory
             'range_low' => null,
             'range_high' => null,
         ]);
+    }
+
+    public function fromBacktest(BacktestRun $run): static
+    {
+        return $this->state(fn () => [
+            'user_id' => $run->user_id,
+            'source_backtest_run_id' => $run->id,
+            'exchange' => $run->exchange,
+            'symbol' => $run->symbol,
+            'strategy_key' => $run->strategy_key,
+            'capital_allocation' => $run->capital_allocation,
+            'fee_rate' => $run->fee_rate,
+        ]);
+    }
+
+    public function withDeletedSource(): static
+    {
+        return $this->afterCreating(function (Bot $bot): void {
+            $run = BacktestRun::factory()
+                ->for($bot->user)
+                ->completedSource()
+                ->create();
+
+            $bot->forceFill(['source_backtest_run_id' => $run->id])->save();
+            $run->delete();
+            $bot->refresh();
+        });
     }
 }

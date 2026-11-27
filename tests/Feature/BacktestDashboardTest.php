@@ -427,3 +427,36 @@ it('compares compatible runs and rejects incompatible ones', function () {
         ->get(route('backtests.compare', ['ids' => [$first->id, $first->id]]))
         ->assertSessionHasErrors('ids.1');
 });
+
+it('shows create paper bot only for usable completed runs', function () {
+    $owner = User::factory()->create();
+    $usable = BacktestRun::factory()->for($owner)->completedSource()->create();
+    $pending = BacktestRun::factory()->for($owner)->create();
+    $failed = BacktestRun::factory()->for($owner)->completedSource()->create([
+        'status' => BacktestStatus::Failed,
+    ]);
+
+    $snapshot = $usable->config_snapshot;
+    $snapshot['strategy'] = ['key' => 'simple-grid'];
+
+    $unsupported = BacktestRun::factory()->for($owner)->completedSource()->create([
+        'config_snapshot' => $snapshot,
+    ]);
+
+    $other = BacktestRun::factory()->for(User::factory())->completedSource()->create();
+
+    foreach ([[$usable, true], [$pending, false], [$failed, false], [$unsupported, false]] as [$run, $expected]) {
+        $this->actingAs($owner)
+            ->get(route('backtests.show', $run))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backtests/Show')
+                ->where('run.can_create_bot', $expected)
+                ->etc()
+            );
+    }
+
+    $this->actingAs($owner)
+        ->get(route('backtests.show', $other))
+        ->assertForbidden();
+});

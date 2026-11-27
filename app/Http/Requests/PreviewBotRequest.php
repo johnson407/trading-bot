@@ -7,6 +7,7 @@ use App\Domain\Grid\ValueObjects\GridPlanRequest;
 use App\Domain\Risk\RiskLimitService;
 use App\Domain\Strategy\StrategyRegistry;
 use App\Http\Requests\Concerns\BuildsStrategyConfiguration;
+use App\Http\Requests\Concerns\PreparesSourceBacktestBot;
 use App\Models\Bot;
 use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Http\FormRequest;
@@ -16,6 +17,7 @@ use Throwable;
 class PreviewBotRequest extends FormRequest
 {
     use BuildsStrategyConfiguration;
+    use PreparesSourceBacktestBot;
 
     public function authorize(): bool
     {
@@ -28,6 +30,10 @@ class PreviewBotRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        if ($this->prepareSourceBacktestBot(preview: true)) {
+            return;
+        }
+
         $exchange = trim((string) ($this->input('exchange') ?? ''));
 
         if ($exchange === '') {
@@ -60,6 +66,7 @@ class PreviewBotRequest extends FormRequest
 
         return [
             'preset_key' => ['nullable', 'string', Rule::in(app(PresetResolver::class)->keys())],
+            'source_backtest_run_id' => ['nullable', 'integer', 'min:1'],
             'bot_id' => ['nullable', 'integer'],
             'exchange' => ['required', 'string', Rule::in(config('trading.exchanges', ['binance']))],
             'symbol' => ['required', 'string', 'regex:/^[A-Z0-9]{2,12}\/[A-Z0-9]{2,12}$/'],

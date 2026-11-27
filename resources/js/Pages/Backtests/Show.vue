@@ -103,6 +103,13 @@ function destroy() {
                     </p>
                 </div>
                 <div class="flex items-center gap-3">
+                    <Link
+                        v-if="run.can_create_bot"
+                        :href="route('bots.create', { source_backtest_run_id: run.id })"
+                        class="rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white"
+                    >
+                        Create paper bot
+                    </Link>
                     <Link v-if="compareIds.length > 1" :href="compareUrl" class="rounded-md border border-slate-600 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-200">Compare</Link>
                     <Link :href="route('backtests.index')" class="text-sm text-slate-300 underline">Back to backtests</Link>
                     <button type="button" class="text-sm text-red-300 underline" @click="destroy">Delete</button>

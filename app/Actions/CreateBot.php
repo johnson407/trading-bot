@@ -8,6 +8,7 @@ use App\Models\Bot;
 use App\Models\StrategyConfig;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class CreateBot
 {
@@ -22,12 +23,21 @@ class CreateBot
     public function handle(User $user, array $data): Bot
     {
         return DB::transaction(function () use ($user, $data) {
+            if (($data['source_backtest_run_id'] ?? null) !== null) {
+                if (($data['mode'] ?? 'paper') === 'live') {
+                    throw new InvalidArgumentException('Live trading is not available when creating a bot from a backtest.');
+                }
+
+                $data['mode'] = 'paper';
+            }
+
             $mode = (string) ($data['mode'] ?? 'paper');
             $exchange = (string) ($data['exchange'] ?? config('trading.default_exchange', 'binance'));
             $credential = $user->exchangeCredentials()->where('exchange', $exchange)->first();
 
             $bot = Bot::create([
                 'user_id' => $user->id,
+                'source_backtest_run_id' => $data['source_backtest_run_id'] ?? null,
                 'exchange_credential_id' => $credential?->id,
                 'name' => (string) $data['name'],
                 'exchange' => $exchange,
@@ -36,6 +46,10 @@ class CreateBot
                 'mode' => $mode,
                 'capital_allocation' => (string) $data['capital_allocation'],
                 'fee_rate' => (string) ($data['fee_rate'] ?? config('trading.paper.fee_rate', '0')),
+                'stop_loss_percent' => $this->nullableDecimal($data['stop_loss_percent'] ?? null),
+                'take_profit_percent' => $this->nullableDecimal($data['take_profit_percent'] ?? null),
+                'range_low' => $this->nullableDecimal($data['range_low'] ?? null),
+                'range_high' => $this->nullableDecimal($data['range_high'] ?? null),
                 'tick_interval_seconds' => max(1, (int) config('trading.tick.interval_seconds')),
                 'settings' => [],
             ]);
@@ -60,13 +74,25 @@ class CreateBot
             ]);
 
             $this->riskLimits->forUser($user);
-            $this->activity->recordUser('bot.created', "Bot {$bot->name} created", $bot, $user, [
+
+            $context = [
                 'mode' => $mode,
                 'strategy' => $bot->strategy_key,
                 'symbol' => $bot->symbol,
-            ]);
+            ];
+
+            if (($data['source_backtest_run_id'] ?? null) !== null) {
+                $context['source_backtest_run_id'] = (int) $data['source_backtest_run_id'];
+            }
+
+            $this->activity->recordUser('bot.created', "Bot {$bot->name} created", $bot, $user, $context);
 
             return $bot;
         });
+    }
+
+    private function nullableDecimal(mixed $value): ?string
+    {
+        return $value === null || $value === '' ? null : (string) $value;
     }
 }

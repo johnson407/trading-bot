@@ -8,7 +8,9 @@ use App\Domain\Grid\PresetResolver;
 use App\Domain\Grid\ValueObjects\GridPlanRequest;
 use App\Domain\Risk\RiskLimitService;
 use App\Domain\Strategy\StrategyRegistry;
+use App\Domain\Support\Decimal;
 use App\Http\Requests\Concerns\BuildsStrategyConfiguration;
+use App\Http\Requests\Concerns\PreparesSourceBacktestBot;
 use App\Services\Engine\GridPlanClient;
 use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Http\FormRequest;
@@ -18,6 +20,7 @@ use Illuminate\Validation\Validator;
 class StoreBotRequest extends FormRequest
 {
     use BuildsStrategyConfiguration;
+    use PreparesSourceBacktestBot;
 
     public function authorize(): bool
     {
@@ -30,6 +33,10 @@ class StoreBotRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        if ($this->prepareSourceBacktestBot()) {
+            return;
+        }
+
         // Quick setup trusts the selected preset, not the derived fields that
         // happen to be in the browser when the form is submitted. Deriving here
         // closes the race where a stale preview would otherwise be saved.
@@ -61,6 +68,7 @@ class StoreBotRequest extends FormRequest
 
         return [
             'name' => ['required', 'string', 'max:120'],
+            'source_backtest_run_id' => ['nullable', 'integer', 'min:1'],
             'preset_key' => ['nullable', 'string', Rule::in(app(PresetResolver::class)->keys())],
             'exchange' => ['required', 'string', Rule::in(config('trading.exchanges', ['binance']))],
             'symbol' => ['required', 'string', 'regex:/^[A-Z0-9]{2,12}\/[A-Z0-9]{2,12}$/'],
@@ -85,6 +93,10 @@ class StoreBotRequest extends FormRequest
             'recalculation_interval_seconds' => ['nullable', 'integer', 'min:1'],
             'spacing_hysteresis_percent' => ['nullable', 'numeric', 'regex:/^\d+(\.\d+)?$/', 'min:0', 'max:90'],
             'live_confirmation' => ['nullable', 'string'],
+            'stop_loss_percent' => ['nullable', 'regex:/^\d+(\.\d+)?$/', 'decimal:0,4', 'gt:0', 'lt:100'],
+            'take_profit_percent' => ['nullable', 'regex:/^\d+(\.\d+)?$/', 'decimal:0,4', 'gt:0', 'lt:100'],
+            'range_low' => ['nullable', 'regex:/^\d+(\.\d+)?$/', 'decimal:0,8', 'gt:0', 'max:99999999.99999999'],
+            'range_high' => ['nullable', 'regex:/^\d+(\.\d+)?$/', 'decimal:0,8', 'gt:0', 'max:99999999.99999999'],
         ];
     }
 
@@ -112,6 +124,14 @@ class StoreBotRequest extends FormRequest
                         "Type \"{$expected}\" to confirm live trading.",
                     );
                 }
+            }
+
+            if ($this->filled('range_low') && $this->filled('range_high')
+                && preg_match('/^\d+(\.\d+)?$/', (string) $this->input('range_low')) === 1
+                && preg_match('/^\d+(\.\d+)?$/', (string) $this->input('range_high')) === 1
+                && Decimal::of((string) $this->input('range_high'))
+                    ->lessThanOrEqual((string) $this->input('range_low'))) {
+                $validator->errors()->add('range_high', 'The range high must be greater than the range low.');
             }
 
             $this->validateStrategyFields($validator, $this->input('strategy_key'));
