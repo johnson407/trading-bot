@@ -1083,7 +1083,8 @@
                                 "max_spacing": "20",
                                 "volatility_multiplier": "1",
                                 "initial_spacing": "1",
-                                "recalculation_interval_seconds": 60
+                                "recalculation_interval_seconds": 60,
+                                "spacing_hysteresis_percent": "0"
                             }
                         },
                         "state": {
@@ -1153,7 +1154,8 @@
                                 "max_spacing": "20",
                                 "volatility_multiplier": "1",
                                 "initial_spacing": "1",
-                                "recalculation_interval_seconds": 60
+                                "recalculation_interval_seconds": 60,
+                                "spacing_hysteresis_percent": "0"
                             }
                         },
                         "state": {
@@ -1226,7 +1228,8 @@
                                 "max_spacing": "20",
                                 "volatility_multiplier": "1",
                                 "initial_spacing": "1",
-                                "recalculation_interval_seconds": 60
+                                "recalculation_interval_seconds": 60,
+                                "spacing_hysteresis_percent": "0"
                             }
                         },
                         "state": {
@@ -1322,7 +1325,8 @@
                                 "max_spacing": "20",
                                 "volatility_multiplier": "1",
                                 "initial_spacing": "1",
-                                "recalculation_interval_seconds": 60
+                                "recalculation_interval_seconds": 60,
+                                "spacing_hysteresis_percent": "0"
                             }
                         },
                         "state": {
@@ -1380,6 +1384,198 @@
                     }
                 },
                 {
+                    "label": "default_hysteresis_adopts_at_boundary",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [
+                                "94",
+                                "106"
+                            ],
+                            "timestamp": "2026-11-23T00:02:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "12",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:02:00+00:00",
+                                "recalculation_count": 1,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "88",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "112",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "buy",
+                                "price": "88",
+                                "quantity": "1",
+                                "grid_level_sequence": 1,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "112",
+                                "quantity": "1",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
+                    "label": "default_hysteresis_retains_below_boundary",
+                    "operation": "onTick",
+                    "input": {
+                        "market": {
+                            "symbol": "BTC/USDT",
+                            "price": "100",
+                            "bid": null,
+                            "ask": null,
+                            "recent_prices": [
+                                "94.05",
+                                "105.95"
+                            ],
+                            "timestamp": "2026-11-23T00:02:00+00:00"
+                        },
+                        "bot": {
+                            "bot_id": 1,
+                            "base_inventory": "0",
+                            "quote_inventory": "1000",
+                            "average_entry_price": "0",
+                            "realized_pnl": "0",
+                            "capital_allocation": "1000",
+                            "open_orders": []
+                        },
+                        "config": {
+                            "key": "dynamic-grid",
+                            "values": {
+                                "center_price": "100",
+                                "levels_per_side": 1,
+                                "order_quantity": "1",
+                                "min_spacing": "0.5",
+                                "max_spacing": "20",
+                                "volatility_multiplier": "1",
+                                "initial_spacing": "1",
+                                "recalculation_interval_seconds": 60
+                            }
+                        },
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:00:00+00:00",
+                                "recalculation_count": 0,
+                                "fill_count": 0
+                            }
+                        }
+                    },
+                    "decision": {
+                        "state": {
+                            "version": 1,
+                            "data": {
+                                "initialized": true,
+                                "center_price": "100",
+                                "spacing_value": "10",
+                                "levels_per_side": 1,
+                                "last_recalculated_at": "2026-11-23T00:02:00+00:00",
+                                "recalculation_count": 1,
+                                "fill_count": 0
+                            }
+                        },
+                        "levels": [
+                            {
+                                "sequence": 1,
+                                "price": "90",
+                                "side": "buy"
+                            },
+                            {
+                                "sequence": 2,
+                                "price": "110",
+                                "side": "sell"
+                            }
+                        ],
+                        "orders": [
+                            {
+                                "side": "buy",
+                                "price": "90",
+                                "quantity": "1",
+                                "grid_level_sequence": 1,
+                                "reason": "strategy.tick"
+                            },
+                            {
+                                "side": "sell",
+                                "price": "110",
+                                "quantity": "1",
+                                "grid_level_sequence": 2,
+                                "reason": "strategy.tick"
+                            }
+                        ],
+                        "stop": false,
+                        "events": [],
+                        "cancel_client_order_ids": []
+                    }
+                },
+                {
                     "label": "on_fill_buy_places_adjacent_sell",
                     "operation": "onFill",
                     "input": {
@@ -1413,7 +1609,8 @@
                                 "max_spacing": "20",
                                 "volatility_multiplier": "1",
                                 "initial_spacing": "1",
-                                "recalculation_interval_seconds": 60
+                                "recalculation_interval_seconds": 60,
+                                "spacing_hysteresis_percent": "0"
                             }
                         },
                         "state": {
@@ -1515,7 +1712,8 @@
                                 "max_spacing": "20",
                                 "volatility_multiplier": "1",
                                 "initial_spacing": "1",
-                                "recalculation_interval_seconds": 60
+                                "recalculation_interval_seconds": 60,
+                                "spacing_hysteresis_percent": "0"
                             }
                         },
                         "state": {
@@ -1575,7 +1773,8 @@
                                 "max_spacing": "20",
                                 "volatility_multiplier": "1",
                                 "initial_spacing": "1",
-                                "recalculation_interval_seconds": 60
+                                "recalculation_interval_seconds": 60,
+                                "spacing_hysteresis_percent": "0"
                             }
                         },
                         "state": {
@@ -1646,7 +1845,8 @@
                                 "max_spacing": "20",
                                 "volatility_multiplier": "1",
                                 "initial_spacing": "1",
-                                "recalculation_interval_seconds": 60
+                                "recalculation_interval_seconds": 60,
+                                "spacing_hysteresis_percent": "0"
                             }
                         },
                         "state": {
@@ -1693,7 +1893,8 @@
                                 "max_spacing": "0.1",
                                 "volatility_multiplier": "1",
                                 "initial_spacing": "1",
-                                "recalculation_interval_seconds": 60
+                                "recalculation_interval_seconds": 60,
+                                "spacing_hysteresis_percent": "0"
                             }
                         },
                         "state": {
@@ -1737,7 +1938,8 @@
                                 "max_spacing": "20",
                                 "volatility_multiplier": "1",
                                 "initial_spacing": "1",
-                                "recalculation_interval_seconds": 60
+                                "recalculation_interval_seconds": 60,
+                                "spacing_hysteresis_percent": "0"
                             }
                         },
                         "state": {

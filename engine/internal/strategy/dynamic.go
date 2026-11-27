@@ -21,6 +21,10 @@ func (d *DynamicGrid) Key() string {
 
 // Initialize mirrors DynamicGridStrategy::initialize.
 func (d *DynamicGrid) Initialize(input Input) (Decision, error) {
+	if _, err := d.spacingHysteresis(input); err != nil {
+		return Decision{}, err
+	}
+
 	if !input.State.IsNew() {
 		return idle(input.State), nil
 	}
@@ -60,6 +64,11 @@ func (d *DynamicGrid) Initialize(input Input) (Decision, error) {
 
 // OnTick mirrors DynamicGridStrategy::onTick.
 func (d *DynamicGrid) OnTick(input Input) (Decision, error) {
+	hysteresis, err := d.spacingHysteresis(input)
+	if err != nil {
+		return Decision{}, err
+	}
+
 	if input.State.IsNew() {
 		initialized, err := d.Initialize(input)
 		if err != nil {
@@ -103,6 +112,36 @@ func (d *DynamicGrid) OnTick(input Input) (Decision, error) {
 	spacing, err := d.calculateSpacing(input, center)
 	if err != nil {
 		return Decision{}, err
+	}
+
+	current, err := persistedSpacing(input.State)
+	if err != nil {
+		return Decision{}, err
+	}
+
+	if hysteresis.IsPositive() {
+		delta := spacing.Sub(current).Abs().Mul(decimal.FromInt(100))
+		threshold := hysteresis.Mul(current)
+
+		if delta.LessThan(threshold) {
+			levels, err := d.levelsFor(input, center, current)
+			if err != nil {
+				return Decision{}, err
+			}
+
+			state := input.State.Merge(map[string]any{
+				"spacing_value":        current.String(),
+				"last_recalculated_at": formatDateTimeAtom(timestampOf(input.Market)),
+				"recalculation_count":  asInt(input.State.Get("recalculation_count", 0)) + 1,
+			})
+
+			orders, err := d.orderIntents(input.WithState(state), levels)
+			if err != nil {
+				return Decision{}, err
+			}
+
+			return Decision{State: state, Levels: levels, Orders: orders}, nil
+		}
 	}
 
 	levels, err := d.levelsFor(input, center, spacing)
@@ -210,7 +249,7 @@ func (d *DynamicGrid) GetGridLevels(input Input) ([]GridLevelPlan, error) {
 		return nil, err
 	}
 
-	spacing, err := decimal.Of(input.State.Get("spacing_value", nil))
+	spacing, err := persistedSpacing(input.State)
 	if err != nil {
 		return nil, err
 	}
@@ -356,6 +395,28 @@ func (d *DynamicGrid) centerPrice(input Input) (decimal.Decimal, error) {
 	}
 
 	return center, nil
+}
+
+func persistedSpacing(state State) (decimal.Decimal, error) {
+	spacing, err := decimal.Of(state.Get("spacing_value", nil))
+	if err != nil || !spacing.IsPositive() {
+		return decimal.Decimal{}, invalidConfig("dynamic-grid", "spacing_value must be a positive decimal")
+	}
+
+	return spacing, nil
+}
+
+func (d *DynamicGrid) spacingHysteresis(input Input) (decimal.Decimal, error) {
+	value, err := input.Config.Decimal("spacing_hysteresis_percent", "20")
+	if err != nil {
+		return decimal.Decimal{}, invalidConfig(d.Key(), "spacing_hysteresis_percent must be a decimal number")
+	}
+
+	if value.LessThan(decimal.Zero()) || value.GreaterThan(decimal.FromInt(90)) {
+		return decimal.Decimal{}, invalidConfig(d.Key(), "spacing_hysteresis_percent must be between 0 and 90")
+	}
+
+	return value, nil
 }
 
 func (d *DynamicGrid) minSpacing(input Input) (decimal.Decimal, error) {

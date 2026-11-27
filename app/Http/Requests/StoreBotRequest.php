@@ -91,6 +91,7 @@ class StoreBotRequest extends FormRequest
             'max_spacing' => ['nullable', 'regex:/^\d+(\.\d+)?$/', 'gt:0'],
             'volatility_multiplier' => ['nullable', 'numeric', 'gt:0'],
             'recalculation_interval_seconds' => ['nullable', 'integer', 'min:1'],
+            'spacing_hysteresis_percent' => ['nullable', 'numeric', 'regex:/^\d+(\.\d+)?$/', 'min:0', 'max:90'],
             'live_confirmation' => ['nullable', 'string'],
             'stop_loss_percent' => ['nullable', 'regex:/^\d+(\.\d+)?$/', 'decimal:0,4', 'gt:0', 'lt:100'],
             'take_profit_percent' => ['nullable', 'regex:/^\d+(\.\d+)?$/', 'decimal:0,4', 'gt:0', 'lt:100'],

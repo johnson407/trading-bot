@@ -103,7 +103,7 @@ The page has two modes. **Quick setup** asks for name, exchange, symbol, capital
 and center price, then derives the ladder from a preset. **Advanced** exposes the
 full parameter set: strategy, fee rate, center price, level count, spacing
 type/value, order quantity, and strategy-specific parameters (trailing distance,
-martingale size multiplier/caps, dynamic volatility min/max/multiplier/interval).
+martingale size multiplier/caps, dynamic volatility min/max/multiplier/hysteresis/interval).
 Switching from quick to advanced keeps every derived value, so the bot can be
 fine-tuned without retyping it.
 

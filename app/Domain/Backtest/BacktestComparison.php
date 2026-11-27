@@ -229,6 +229,10 @@ final class BacktestComparison
 
         if ($strategyKey === 'dynamic-grid') {
             unset($configuration['spacing_value']);
+
+            if (! array_key_exists('spacing_hysteresis_percent', $configuration)) {
+                $configuration['spacing_hysteresis_percent'] = '20';
+            }
         }
 
         if ($strategyKey === 'martingale-grid'

@@ -86,6 +86,32 @@ func TestEvaluateMapsInvalidConfigurationToTheSameField(t *testing.T) {
 	}
 }
 
+func TestEvaluateMapsInvalidHysteresisToItsField(t *testing.T) {
+	request := plan.Request{
+		StrategyKey: "dynamic-grid",
+		Symbol:      "BTC/USDT",
+		Configuration: map[string]any{
+			"center_price":               "50000",
+			"levels_per_side":            2,
+			"min_spacing":                "50",
+			"max_spacing":                "500",
+			"order_quantity":             "0.001",
+			"spacing_hysteresis_percent": "91",
+		},
+		CapitalAllocation: "1000",
+		BaseInventory:     "0",
+	}
+
+	response := plan.Evaluate(request)
+
+	if len(response.Errors) != 1 {
+		t.Fatalf("errors = %+v, want one", response.Errors)
+	}
+	if response.Errors[0].Field == nil || *response.Errors[0].Field != "spacing_hysteresis_percent" {
+		t.Errorf("field = %v, want spacing_hysteresis_percent", response.Errors[0].Field)
+	}
+}
+
 func TestEvaluateReportsExchangeMinimumsAndAdvisories(t *testing.T) {
 	request := simpleGridRequest()
 	request.Configuration["order_quantity"] = "0.001"

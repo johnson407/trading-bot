@@ -68,6 +68,22 @@ test('quick setup preview sends the preset key and lets the server derive values
     });
 });
 
+test('advanced preview includes dynamic-grid hysteresis', () => {
+    const payload = previewPayload({
+        setupMode: 'advanced',
+        form: {
+            strategy_key: 'dynamic-grid',
+            level_count: 6,
+            order_quantity: '1',
+            min_spacing: '50',
+            max_spacing: '500',
+            spacing_hysteresis_percent: '20',
+        },
+    });
+
+    assert.equal(payload.spacing_hysteresis_percent, '20');
+});
+
 test('dynamic grids hide the shared spacing fields', () => {
     assert.deepEqual(hiddenFields('dynamic-grid'), ['spacing_type', 'spacing_value']);
     assert.deepEqual(hiddenFields('simple-grid'), []);

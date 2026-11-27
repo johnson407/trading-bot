@@ -53,6 +53,7 @@ export function previewPayload({ setupMode, form, presetKey }) {
         max_spacing: form.max_spacing,
         volatility_multiplier: form.volatility_multiplier,
         recalculation_interval_seconds: form.recalculation_interval_seconds,
+        spacing_hysteresis_percent: form.spacing_hysteresis_percent,
     };
 }
 

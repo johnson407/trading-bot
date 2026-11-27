@@ -18,6 +18,7 @@ func testDynamicInput() Input {
 				"max_spacing":                    "20",
 				"initial_spacing":                "10",
 				"recalculation_interval_seconds": 60,
+				"spacing_hysteresis_percent":     "0",
 				"order_quantity":                 "1",
 			},
 		},

@@ -69,6 +69,7 @@ trait BuildsStrategyConfiguration
             $configuration['max_spacing'] = Decimal::of((string) $this->input('max_spacing'))->toString();
             $configuration['volatility_multiplier'] = Decimal::of((string) ($this->input('volatility_multiplier') ?? '1'))->toString();
             $configuration['recalculation_interval_seconds'] = (int) ($this->input('recalculation_interval_seconds') ?? 60);
+            $configuration['spacing_hysteresis_percent'] = Decimal::of((string) ($this->input('spacing_hysteresis_percent') ?? '20'))->toString();
         }
 
         return $configuration;
