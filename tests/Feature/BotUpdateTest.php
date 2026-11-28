@@ -1,6 +1,8 @@
 <?php
 
 use App\Domain\Exchange\ValueObjects\MarketData;
+use App\Http\Requests\UpdateBotRequest;
+use App\Models\ActivityLog;
 use App\Models\Bot;
 use App\Models\Grid;
 use App\Models\GridLevel;
@@ -9,7 +11,10 @@ use App\Models\User;
 use App\Services\Engine\CommandPublisher;
 use App\Services\Exchange\MarketDataResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\Validator;
 
 uses(RefreshDatabase::class);
 
@@ -56,6 +61,20 @@ function updatePayload(array $overrides = []): array
     ], $overrides);
 }
 
+function validateBotUpdateRequest(Bot $bot, array $payload): Validator
+{
+    $route = new Illuminate\Routing\Route('PATCH', '/bots/{bot}', []);
+    $route->bind(Request::create('/bots/'.$bot->id, 'PATCH'));
+    $route->setParameter('bot', $bot);
+
+    $request = UpdateBotRequest::create('/bots/'.$bot->id, 'PATCH', $payload);
+    $request->setRouteResolver(fn () => $route);
+    $request->setContainer(app());
+    $request->setRedirector(app('redirect'));
+
+    return Illuminate\Support\Facades\Validator::make($request->all(), $request->rules());
+}
+
 it('updates the editable fields and strategy configuration', function () {
     $user = User::factory()->create();
     $bot = updatableBot($user);
@@ -100,17 +119,67 @@ it('ignores attempts to change identity fields', function () {
         ->and($bot->strategy_key)->toBe('simple-grid');
 });
 
-it('rejects an update for a running bot', function () {
+it('requires confirmation to update a running paper bot', function () {
     $user = User::factory()->create();
     $bot = updatableBot($user);
-    $bot->forceFill(['status' => 'running'])->save();
+    $bot->forceFill(['status' => 'running', 'mode' => 'paper'])->save();
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload())
+        ->assertSessionHasErrors('confirm_running_edit');
+
+    expect($bot->fresh()->name)->toBe('Old name');
+});
+
+it('requires confirmation only for running paper bots', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+
+    $bot->forceFill(['status' => 'running', 'mode' => 'paper'])->save();
+    expect(validateBotUpdateRequest($bot, updatePayload())->errors()->has('confirm_running_edit'))->toBeTrue()
+        ->and(validateBotUpdateRequest($bot, updatePayload(['confirm_running_edit' => '1']))->passes())->toBeTrue();
+
+    $bot->forceFill(['status' => 'running', 'mode' => 'live'])->save();
+    expect(validateBotUpdateRequest($bot, updatePayload())->passes())->toBeTrue();
+
+    $bot->forceFill(['status' => 'idle', 'mode' => 'paper'])->save();
+    expect(validateBotUpdateRequest($bot, updatePayload())->passes())->toBeTrue();
+});
+
+it('allows running paper edits while keeping live running and paused edits blocked', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+
+    $bot->forceFill(['status' => 'running', 'mode' => 'paper'])->save();
+    expect($user->can('update', $bot))->toBeTrue();
+
+    $bot->forceFill(['status' => 'running', 'mode' => 'live'])->save();
+    expect($user->can('update', $bot))->toBeFalse();
+
+    $bot->forceFill(['status' => 'paused', 'mode' => 'paper'])->save();
+    expect($user->can('update', $bot))->toBeFalse();
+
+    $bot->forceFill(['status' => 'idle', 'mode' => 'paper'])->save();
+    expect($user->can('update', $bot))->toBeTrue();
+
+    $bot->forceFill(['status' => 'stopped', 'mode' => 'paper'])->save();
+    expect($user->can('update', $bot))->toBeTrue();
+});
+
+it('forbids PATCH for live running and paused bots', function (string $status, string $mode) {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill(['status' => $status, 'mode' => $mode])->save();
 
     $this->actingAs($user)
         ->patch(route('bots.update', $bot), updatePayload())
         ->assertForbidden();
 
     expect($bot->fresh()->name)->toBe('Old name');
-});
+})->with([
+    'live running' => ['running', 'live'],
+    'paused paper' => ['paused', 'paper'],
+]);
 
 it('rejects an update from another user', function () {
     $owner = User::factory()->create();
@@ -156,6 +225,186 @@ it('preserves the grid, strategy state, fee and identity when only non-structura
         ->and($bot->symbol)->toBe('BTC/USDT')
         ->and($bot->mode->value)->toBe('paper')
         ->and($bot->strategy_key)->toBe('simple-grid');
+});
+
+it('applies a confirmed running paper edit and requests a reconcile', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill(['status' => 'running', 'mode' => 'paper'])->save();
+    $publisher = app(CommandPublisher::class);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload(['confirm_running_edit' => '1']))
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHasNoErrors();
+
+    $bot->refresh();
+    $activity = ActivityLog::query()
+        ->where('bot_id', $bot->id)
+        ->where('type', 'bot.updated')
+        ->latest('id')
+        ->firstOrFail();
+
+    expect($bot->name)->toBe('New name')
+        ->and($bot->reconcile_pending)->toBeTrue()
+        ->and($bot->strategy_reset_pending)->toBeFalse()
+        ->and($publisher->ofType('bot.config'))->toHaveCount(1)
+        ->and($publisher->ofType('bot.config')[0]['payload'])->toBe(['strategy_reset' => true, 'reconcile' => true])
+        ->and($activity->context['reconcile'])->toBeTrue()
+        ->and($activity->context['strategy_reset'])->toBeTrue()
+        ->and(collect($activity->context['diff'])->pluck('key'))->toContain('capital_allocation', 'strategy.center_price');
+});
+
+it('does not reconcile a running paper bot for name or fee changes', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill(['status' => 'running', 'mode' => 'paper'])->save();
+    $publisher = app(CommandPublisher::class);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload([
+            'name' => 'New name',
+            'fee_rate' => '0.001',
+            'capital_allocation' => '1000',
+            'center_price' => '50000',
+            'level_count' => 6,
+            'spacing_value' => '100',
+            'order_quantity' => '0.001',
+            'confirm_running_edit' => '1',
+        ]))
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHasNoErrors();
+
+    $bot->refresh();
+
+    expect($bot->name)->toBe('New name')
+        ->and($bot->fee_rate)->toBe('0.00100000')
+        ->and($bot->reconcile_pending)->toBeFalse()
+        ->and($publisher->ofType('bot.config'))->toHaveCount(0);
+});
+
+it('treats an unchanged running paper edit as a no-op', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill(['status' => 'running', 'mode' => 'paper'])->save();
+    $publisher = app(CommandPublisher::class);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), [
+            'name' => 'Old name',
+            'capital_allocation' => '1000',
+            'fee_rate' => '0.002',
+            'center_price' => '50000',
+            'level_count' => 6,
+            'spacing_type' => 'arithmetic',
+            'spacing_value' => '100',
+            'order_quantity' => '0.001',
+            'confirm_running_edit' => '1',
+        ])
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHas('status', 'No changes.');
+
+    expect($bot->fresh()->name)->toBe('Old name')
+        ->and(ActivityLog::query()->where('bot_id', $bot->id)->where('type', 'bot.updated')->count())->toBe(0)
+        ->and($publisher->ofType('bot.config'))->toHaveCount(0);
+});
+
+it('reconciles a running paper bot when capital changes', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill(['status' => 'running', 'mode' => 'paper'])->save();
+    $publisher = app(CommandPublisher::class);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload([
+            'name' => 'Old name',
+            'fee_rate' => '0.002',
+            'capital_allocation' => '1500',
+            'center_price' => '50000',
+            'level_count' => 6,
+            'spacing_value' => '100',
+            'order_quantity' => '0.001',
+            'confirm_running_edit' => '1',
+        ]))
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHasNoErrors();
+
+    $bot->refresh();
+
+    expect($bot->capital_allocation)->toBe('1500.0000000000000000')
+        ->and($bot->reconcile_pending)->toBeTrue()
+        ->and($publisher->ofType('bot.config'))->toHaveCount(1)
+        ->and($publisher->ofType('bot.config')[0]['payload'])->toBe(['strategy_reset' => true, 'reconcile' => true]);
+});
+
+it('rechecks running paper confirmation under the lock', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $stale = $bot->fresh();
+
+    $bot->forceFill(['status' => 'running', 'mode' => 'paper'])->save();
+    Route::bind('bot', fn ($value) => $stale);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload())
+        ->assertSessionHasErrors('confirm_running_edit');
+
+    expect($bot->fresh()->name)->toBe('Old name');
+});
+
+it('keeps a running paper reconcile pending when the command cannot be published', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill(['status' => 'running', 'mode' => 'paper'])->save();
+    $publisher = app(CommandPublisher::class);
+    $publisher->fail = true;
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload(['confirm_running_edit' => '1']))
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHasErrors('engine');
+
+    expect($bot->fresh()->reconcile_pending)->toBeTrue();
+
+    $publisher->fail = false;
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload(['confirm_running_edit' => '1']))
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHasNoErrors();
+
+    expect($bot->fresh()->reconcile_pending)->toBeTrue()
+        ->and($publisher->ofType('bot.config'))->toHaveCount(1)
+        ->and($publisher->ofType('bot.config')[0]['payload'])->toBe(['strategy_reset' => true, 'reconcile' => true]);
+});
+
+it('forces a pending reconcile even when a running paper edit is unchanged', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill([
+        'status' => 'running',
+        'mode' => 'paper',
+        'reconcile_pending' => true,
+    ])->save();
+    $publisher = app(CommandPublisher::class);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), [
+            'name' => 'Old name',
+            'capital_allocation' => '1000',
+            'fee_rate' => '0.002',
+            'center_price' => '50000',
+            'level_count' => 6,
+            'spacing_type' => 'arithmetic',
+            'spacing_value' => '100',
+            'order_quantity' => '0.001',
+            'confirm_running_edit' => '1',
+        ])
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHasNoErrors();
+
+    expect($publisher->ofType('bot.config'))->toHaveCount(1)
+        ->and($publisher->ofType('bot.config')[0]['payload'])->toBe(['strategy_reset' => true, 'reconcile' => true]);
 });
 
 it('publishes a config command without writing engine-owned strategy or grid state when structural parameters change', function () {

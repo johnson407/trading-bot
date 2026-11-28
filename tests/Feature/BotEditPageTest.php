@@ -42,14 +42,35 @@ it('renders the edit page with the current configuration for an idle bot', funct
             ->where('configuration.center_price', '50000')
             ->where('configuration.levels_per_side', 6)
             ->where('editable', true)
+            ->where('runningPaper', false)
+            ->where('requiresConfirmation', false)
+            ->where('diff', [])
             ->where('preview.plan.order_count', 12)
             ->where('preview.limits.max_open_orders', 20)
             ->etc());
 });
 
-it('shows a read-only explanation for a running bot instead of forbidding the page', function () {
+it('allows editing a running paper bot with confirmation', function () {
     $user = User::factory()->create();
-    $bot = Bot::factory()->for($user)->create(['status' => 'running']);
+    $bot = Bot::factory()->for($user)->running()->create();
+
+    $this->withoutVite();
+
+    $this->actingAs($user)
+        ->get(route('bots.edit', $bot))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Bots/Edit')
+            ->where('editable', true)
+            ->where('runningPaper', true)
+            ->where('requiresConfirmation', true)
+            ->where('diff', [])
+            ->etc());
+});
+
+it('keeps live running bots read-only', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->live()->running()->create();
 
     $this->withoutVite();
 
@@ -59,6 +80,25 @@ it('shows a read-only explanation for a running bot instead of forbidding the pa
         ->assertInertia(fn (Assert $page) => $page
             ->component('Bots/Edit')
             ->where('editable', false)
+            ->where('runningPaper', false)
+            ->where('requiresConfirmation', false)
+            ->etc());
+});
+
+it('keeps paused bots read-only', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create(['status' => 'paused']);
+
+    $this->withoutVite();
+
+    $this->actingAs($user)
+        ->get(route('bots.edit', $bot))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Bots/Edit')
+            ->where('editable', false)
+            ->where('runningPaper', false)
+            ->where('requiresConfirmation', false)
             ->etc());
 });
 

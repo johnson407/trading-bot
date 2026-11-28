@@ -49,6 +49,7 @@ class BotFactory extends Factory
             'fee_rate' => '0',
             'tick_interval_seconds' => max(1, (int) config('trading.tick.interval_seconds')),
             'consecutive_failures' => 0,
+            'reconcile_pending' => false,
             'settings' => [],
         ];
     }
@@ -56,6 +57,11 @@ class BotFactory extends Factory
     public function running(): static
     {
         return $this->state(fn () => ['status' => BotStatus::Running]);
+    }
+
+    public function reconcilePending(): static
+    {
+        return $this->state(fn () => ['reconcile_pending' => true]);
     }
 
     public function live(): static

@@ -139,7 +139,13 @@ const levelState = (state) => ({
                     <p class="text-sm text-slate-300">{{ bot.symbol }} · {{ bot.strategy_key }} · {{ bot.exchange }}</p>
                 </div>
                 <div class="flex items-center gap-4">
-                    <Link v-if="['idle', 'stopped'].includes(bot.status)" :href="route('bots.edit', bot.id)" class="text-sm text-blue-300 hover:text-blue-200">Edit</Link>
+                    <Link
+                        v-if="['idle', 'stopped'].includes(bot.status) || (bot.status === 'running' && bot.mode === 'paper')"
+                        :href="route('bots.edit', bot.id)"
+                        class="text-sm text-blue-300 hover:text-blue-200"
+                    >
+                        Edit
+                    </Link>
                     <Link :href="route('bots.activity', bot.id)" class="text-sm text-blue-300 hover:text-blue-200">Activity log</Link>
                     <Link :href="route('bots.index')" class="text-sm text-blue-300 hover:text-blue-200">Back to bots</Link>
                 </div>
@@ -254,6 +260,7 @@ const levelState = (state) => ({
                     </div>
                     <p v-if="page.props.errors?.confirmation" class="mt-3 text-sm text-rose-300">{{ page.props.errors.confirmation }}</p>
                     <p v-if="page.props.errors?.action" class="mt-3 text-sm text-rose-300">{{ page.props.errors.action }}</p>
+                    <p v-if="page.props.errors?.engine" class="mt-3 text-sm text-rose-300">{{ page.props.errors.engine }}</p>
                 </div>
 
                 <div class="rounded-lg bg-slate-800 p-6 shadow">

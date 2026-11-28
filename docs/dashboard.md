@@ -247,20 +247,34 @@ Feature test: `tests/Feature/BotArchiveTest.php`.
 ## Edit — `GET /bots/{bot}/edit` and `PATCH /bots/{bot}`
 
 The edit form renders the same ladder preview as creation, evaluated from the
-bot's current risk limits. The preview refreshes as editable fields change. Only the owner may edit, and
-only while the bot is idle or stopped. Editable
+bot's current risk limits. The preview refreshes as editable fields change, and
+the page shows a field-by-field diff of the values that will change. Owners may
+edit idle or stopped bots. A **running paper** bot may also be edited after an
+explicit confirmation; running live bots and paused bots are read-only. Editable
 fields are name, capital allocation, fee rate, and strategy parameters. Symbol,
 exchange, mode, and strategy are immutable; submitted values for them are ignored.
+
+For a running paper bot, the page shows a running banner, the field diff, the
+ladder/order preview, and a confirmation checkbox. Saving without confirmation is
+rejected and nothing changes. A confirmed structural strategy change or capital
+change sets `reconcile_pending` and asks the engine to reconcile: the engine
+cancels open orders, clears strategy state, and the next tick rebuilds the ladder.
+Name-only and fee-only changes do not cancel orders or request a reconcile. If the
+submitted values are unchanged, the page reports `No changes.` and persists
+nothing.
+
 Updates preserve the existing grid, strategy state, and inventory when the
 structural strategy parameters (center, levels, spacing, quantity, or
-strategy-specific limits) are unchanged. Changing them retires the active grid,
-cancels any remaining orders, and clears the strategy state so the next tick
-reinitializes from the new configuration. The edit page itself is viewable for any
-owned bot; bots that are not idle or stopped show a read-only explanation and PATCH
-is denied. Failures are returned as an authorization error or validation errors on
-the edit page.
+strategy-specific limits) are unchanged. For an idle or stopped bot, changing
+them sets a pending strategy reset; the next start clears strategy state before
+trading. The edit page itself is viewable for any owned bot; live running and
+paused bots show a read-only explanation and PATCH is denied. Activity records the
+field diff and whether a strategy reset or reconcile was requested. If the engine
+cannot be notified, the save is retained and an `engine` error explains that the
+engine will retry the reconcile.
 
-Feature test: `tests/Feature/BotUpdateTest.php`.
+Feature tests: `tests/Feature/BotUpdateTest.php`, `tests/Feature/BotEditPageTest.php`,
+`tests/Feature/BotEditUiTest.php`, `tests/Feature/BotPreviewTest.php`.
 
 ## Activity — `GET /bots/{bot}/activity` (`bots.activity`)
 

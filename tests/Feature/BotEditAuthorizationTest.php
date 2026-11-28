@@ -17,14 +17,17 @@ it('allows the owner to update idle and stopped bots', function () {
     }
 });
 
-it('forbids updating a running or paused bot', function () {
+it('allows running paper bots but forbids live running and paused bots', function () {
     $user = User::factory()->create();
 
-    foreach (['running', 'paused'] as $status) {
-        $bot = Bot::factory()->for($user)->create(['status' => $status]);
+    $bot = Bot::factory()->for($user)->create(['status' => 'running', 'mode' => 'paper']);
+    expect(Gate::forUser($user)->allows('update', $bot))->toBeTrue();
 
-        expect(Gate::forUser($user)->allows('update', $bot))->toBeFalse();
-    }
+    $bot->forceFill(['mode' => 'live'])->save();
+    expect(Gate::forUser($user)->allows('update', $bot))->toBeFalse();
+
+    $bot->forceFill(['status' => 'paused', 'mode' => 'paper'])->save();
+    expect(Gate::forUser($user)->allows('update', $bot))->toBeFalse();
 });
 
 it('forbids another user from updating a bot', function () {

@@ -86,6 +86,20 @@ func WithNow(now func() time.Time) Option {
 	}
 }
 
+// OrderCanceler cancels a bot's open orders. It is injectable so tests can
+// exercise cancellation failures without an exchange.
+type OrderCanceler func(ctx context.Context, userID, botID int64, reason string) error
+
+// WithOrderCanceler overrides open-order cancellation. Production uses the
+// runtime's exchange-backed cancelOpenOrders.
+func WithOrderCanceler(canceler OrderCanceler) Option {
+	return func(r *Runtime) {
+		if canceler != nil {
+			r.cancelOrders = canceler
+		}
+	}
+}
+
 type riskEventKey struct {
 	botID int64
 	typ   string
@@ -110,6 +124,7 @@ type Runtime struct {
 	riskEventMu        sync.Mutex
 	ticks              sync.WaitGroup
 	autoResumePending  bool
+	cancelOrders       OrderCanceler
 }
 
 // New builds a runtime. A nil logger discards logs.
@@ -129,6 +144,11 @@ func New(pool *pgxpool.Pool, market Market, logger *slog.Logger, options ...Opti
 		firstScheduled:     map[int64]time.Time{},
 		riskEventNotBefore: map[riskEventKey]time.Time{},
 		autoResumePending:  true,
+	}
+	runtime.cancelOrders = func(ctx context.Context, userID, botID int64, reason string) error {
+		_, err := runtime.cancelOpenOrders(ctx, userID, botID, reason)
+
+		return err
 	}
 	for _, option := range options {
 		option(runtime)
@@ -223,6 +243,20 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 				return r.pause(ctx, bot, pauseCauseLiveGate, "Live start refused: "+err.Error(), "bot.live_start_refused", "risk.live_start_refused", "critical")
 			}
 		}
+		if !bot.live() && bot.ReconcilePending {
+			if err := r.reconcilePendingPaper(ctx, bot); err != nil {
+				message := "Start refused: pending reconcile failed: " + err.Error()
+				_, _ = r.pool.Exec(ctx, `UPDATE bots SET last_error = $2, desired_status = status, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
+
+				return fmt.Errorf("%s", message)
+			}
+
+			refreshed, err := r.loadBot(ctx, bot.ID)
+			if err != nil {
+				return err
+			}
+			bot = refreshed
+		}
 		if bot.StrategyReset {
 			if _, err := r.pool.Exec(ctx,
 				`UPDATE strategy_configs SET state = NULL, updated_at = now()
@@ -286,6 +320,27 @@ func (r *Runtime) resetStrategyState(ctx context.Context, command protocol.Envel
 	}
 
 	return withBotLock(ctx, command.BotID, func(ctx context.Context) error {
+		reconcile, _ := command.PayloadBool("reconcile")
+		if reconcile {
+			bot, err := r.loadBot(ctx, command.BotID)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil
+				}
+
+				return err
+			}
+			if bot.UserID != command.UserID {
+				return nil
+			}
+
+			if !bot.ReconcilePending {
+				return nil
+			}
+
+			return r.reconcileRunningPaper(ctx, bot)
+		}
+
 		_, err := r.pool.Exec(ctx,
 			`UPDATE strategy_configs SET state = NULL, updated_at = now()
 			 WHERE bot_id = $1
@@ -299,6 +354,70 @@ func (r *Runtime) resetStrategyState(ctx context.Context, command protocol.Envel
 
 		return err
 	})
+}
+
+// reconcileRunningPaper completes a pending reconcile for a running paper bot.
+// The caller must hold the bot lock. It cancels open orders before resetting
+// strategy state so the next tick rebuilds the ladder from a clean slate.
+func (r *Runtime) reconcileRunningPaper(ctx context.Context, bot *Bot) error {
+	if bot.live() {
+		if bot.ReconcilePending {
+			if _, err := r.pool.Exec(ctx, `UPDATE bots SET reconcile_pending = false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
+				return fmt.Errorf("clear live reconcile: %w", err)
+			}
+			r.logger.Warn("ignoring reconcile for live bot", "bot_id", bot.ID)
+		}
+
+		return nil
+	}
+
+	if bot.Status != "running" || bot.DesiredStatus != "running" {
+		return nil
+	}
+
+	return r.reconcilePaperState(ctx, bot)
+}
+
+// reconcilePendingPaper completes a pending reconcile before a paper bot starts.
+func (r *Runtime) reconcilePendingPaper(ctx context.Context, bot *Bot) error {
+	if bot.live() {
+		return nil
+	}
+
+	return r.reconcilePaperState(ctx, bot)
+}
+
+func (r *Runtime) reconcilePaperState(ctx context.Context, bot *Bot) error {
+	if !bot.ReconcilePending && !bot.CancelRetry && !bot.StrategyReset {
+		return nil
+	}
+
+	if err := r.cancelOrders(ctx, bot.UserID, bot.ID, "reconcile"); err != nil {
+		_, _ = r.pool.Exec(ctx, `UPDATE bots SET cancel_retry_requested = true, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
+
+		return fmt.Errorf("reconcile cancel open orders: %w", err)
+	}
+
+	if _, err := r.pool.Exec(ctx,
+		`UPDATE strategy_configs SET state = NULL, updated_at = now()
+		 WHERE bot_id = $1
+		   AND EXISTS (SELECT 1 FROM bots WHERE bots.id = $1 AND bots.deleted_at IS NULL)`,
+		bot.ID,
+	); err != nil {
+		return fmt.Errorf("reconcile reset strategy state: %w", err)
+	}
+
+	if _, err := r.pool.Exec(ctx,
+		`UPDATE bots
+		    SET reconcile_pending = false, cancel_retry_requested = false,
+		        strategy_reset_pending = false, updated_at = now()
+		  WHERE id = $1 AND deleted_at IS NULL`,
+		bot.ID,
+	); err != nil {
+		return fmt.Errorf("reconcile clear pending flags: %w", err)
+	}
+
+	return nil
 }
 
 func (r *Runtime) cancelOrder(ctx context.Context, command protocol.Envelope) error {
@@ -485,7 +604,9 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 		    OR (status = 'stopped' AND desired_status = 'running')
 		    OR (status = 'idle' AND desired_status = 'running')
 		    OR kill_switch_requested_at IS NOT NULL
-		    OR cancel_retry_requested = true)`,
+		    OR cancel_retry_requested = true
+		    OR strategy_reset_pending = true
+		    OR reconcile_pending = true)`,
 	)
 	if err != nil {
 		return fmt.Errorf("load desired-status drift: %w", err)
@@ -724,6 +845,25 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 		return nil
 	}
 
+	if bot.ReconcilePending {
+		var reconcileErr error
+		if !bot.live() && (bot.Status != "running" || bot.DesiredStatus != "running") {
+			reconcileErr = r.reconcilePendingPaper(ctx, bot)
+		} else {
+			reconcileErr = r.reconcileRunningPaper(ctx, bot)
+		}
+
+		if reconcileErr != nil {
+			return reconcileErr
+		}
+
+		refreshed, err := r.loadBot(ctx, bot.ID)
+		if err != nil {
+			return err
+		}
+		bot = refreshed
+	}
+
 	if bot.CancelRetry {
 		if _, err := r.cancelOpenOrders(ctx, bot.UserID, bot.ID, "cancel_retry"); err != nil {
 			return err
@@ -757,6 +897,20 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 
 	switch bot.DesiredStatus {
 	case "running":
+		if !bot.live() && bot.ReconcilePending {
+			if err := r.reconcilePendingPaper(ctx, bot); err != nil {
+				message := "Start refused: pending reconcile failed: " + err.Error()
+				_, _ = r.pool.Exec(ctx, `UPDATE bots SET last_error = $2, desired_status = status, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
+
+				return fmt.Errorf("%s", message)
+			}
+
+			refreshed, err := r.loadBot(ctx, bot.ID)
+			if err != nil {
+				return err
+			}
+			bot = refreshed
+		}
 		if bot.live() && !r.liveTrading {
 			return r.pause(ctx, bot, pauseCauseLiveGate, liveDisabledMessage, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
 		}

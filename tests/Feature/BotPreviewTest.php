@@ -4,6 +4,7 @@ use App\Models\Bot;
 use App\Models\Grid;
 use App\Models\Order;
 use App\Models\RiskLimit;
+use App\Models\StrategyConfig;
 use App\Models\User;
 use App\Services\Exchange\ExchangeClientFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -179,6 +180,89 @@ it('derives concrete values from a quick-setup preset', function () {
         ->assertJsonPath('values.order_quantity', '0.0026666666666667')
         ->assertJsonPath('plan.order_count', 12)
         ->assertJsonPath('plan.errors', []);
+});
+
+it('returns a field diff for an owned bot edit preview', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create([
+        'name' => 'Old name',
+        'capital_allocation' => '1000',
+        'fee_rate' => '0.001',
+    ]);
+    StrategyConfig::factory()->for($bot)->create([
+        'strategy_key' => 'simple-grid',
+        'configuration' => [
+            'center_price' => '50000',
+            'levels_per_side' => 3,
+            'spacing_type' => 'arithmetic',
+            'spacing_value' => '100',
+            'order_quantity' => '0.001',
+        ],
+    ]);
+    fakeMarket();
+
+    $response = $this->actingAs($user)->postJson(route('bots.preview'), previewPayload([
+        'bot_id' => $bot->id,
+        'name' => 'New name',
+        'capital_allocation' => '1200',
+        'fee_rate' => '0.002',
+        'center_price' => '51000',
+        'level_count' => 4,
+        'spacing_value' => '150',
+        'order_quantity' => '0.002',
+    ]));
+
+    $response->assertOk()->assertJsonCount(7, 'diff');
+
+    $diff = collect($response->json('diff'))->keyBy('key');
+
+    expect($diff['name']['from'])->toBe('Old name')
+        ->and($diff['name']['to'])->toBe('New name')
+        ->and($diff['capital_allocation']['from'])->toBe('1000')
+        ->and($diff['capital_allocation']['to'])->toBe('1200')
+        ->and($diff['fee_rate']['from'])->toBe('0.001')
+        ->and($diff['fee_rate']['to'])->toBe('0.002')
+        ->and($diff['strategy.center_price']['from'])->toBe('50000')
+        ->and($diff['strategy.center_price']['to'])->toBe('51000')
+        ->and($diff['strategy.levels_per_side']['from'])->toBe('3')
+        ->and($diff['strategy.levels_per_side']['to'])->toBe('4');
+});
+
+it('returns the field diff even when the plan engine is unavailable', function () {
+    config(['engine.plan_url' => 'http://127.0.0.1:1']);
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create(['name' => 'Old name']);
+    StrategyConfig::factory()->for($bot)->create([
+        'strategy_key' => 'simple-grid',
+        'configuration' => [
+            'center_price' => '50000',
+            'levels_per_side' => 3,
+            'spacing_type' => 'arithmetic',
+            'spacing_value' => '100',
+            'order_quantity' => '0.001',
+        ],
+    ]);
+    fakeMarket();
+
+    $this->actingAs($user)
+        ->postJson(route('bots.preview'), previewPayload([
+            'bot_id' => $bot->id,
+            'name' => 'New name',
+        ]))
+        ->assertStatus(503)
+        ->assertJsonPath('diff.0.key', 'name')
+        ->assertJsonPath('diff.0.from', 'Old name')
+        ->assertJsonPath('diff.0.to', 'New name');
+});
+
+it('returns an empty diff for a create preview', function () {
+    $user = User::factory()->create();
+    fakeMarket();
+
+    $this->actingAs($user)
+        ->postJson(route('bots.preview'), previewPayload())
+        ->assertOk()
+        ->assertJsonPath('diff', []);
 });
 
 it('throttles preview requests', function () {

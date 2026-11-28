@@ -191,6 +191,14 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) (retErr error) {
 		return nil
 	}
 
+	if bot.ReconcilePending {
+		if err := r.reconcileRunningPaper(ctx, bot); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
 	tickStart := r.now()
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE bots SET last_tick_at = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
@@ -1158,13 +1166,18 @@ func (r *Runtime) placeOrders(ctx context.Context, bot *Bot, active *gridState, 
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var status, desired string
-	if err := tx.QueryRow(ctx, `SELECT status, desired_status FROM bots WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, bot.ID).Scan(&status, &desired); err != nil {
+	var reconcilePending, cancelRetry, strategyReset bool
+	if err := tx.QueryRow(ctx,
+		`SELECT status, desired_status, reconcile_pending, cancel_retry_requested, strategy_reset_pending
+		 FROM bots WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+		bot.ID,
+	).Scan(&status, &desired, &reconcilePending, &cancelRetry, &strategyReset); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, nil
 		}
 		return 0, err
 	}
-	if status != "running" || desired != "running" {
+	if status != "running" || desired != "running" || reconcilePending || cancelRetry || strategyReset {
 		return 0, nil
 	}
 	atPrice := map[string]bool{}
