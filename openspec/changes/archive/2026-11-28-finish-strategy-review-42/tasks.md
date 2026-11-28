@@ -27,7 +27,7 @@
 ## 6. Documentation and specs
 
 - [x] 6.1 Document nearest-first priority, gap fills, rounding, initial spacing, orphaned inventory, and the volatility window in `docs/strategies.md`, `docs/backtesting.md`, and `docs/bot-parameters.md`.
-- [ ] 6.2 Keep the spec deltas and main specs consistent; run `openspec validate finish-strategy-review-42 --strict`.
+- [x] 6.2 Keep the spec deltas and main specs consistent; run `openspec validate finish-strategy-review-42 --strict`.
 
 ## 7. Verification
 

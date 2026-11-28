@@ -89,7 +89,7 @@ The Simple strategy SHALL create a fixed set of levels around a center price usi
 
 ### Requirement: Trailing grid strategy
 
-The Trailing strategy SHALL keep the grid centered near the current market price and move the center only after price moves beyond a configured trailing distance. When the center moves, orders outside the new grid SHALL be canceled and levels inside the new grid SHALL be replenished.
+The Trailing strategy SHALL keep the grid centered near the current market price and move the center only after price moves beyond a configured trailing distance. When the center moves, orders outside the new grid SHALL be canceled and levels inside the new grid SHALL be replenished. On a recenter, a disarmed entry whose recorded paired price is absent from the new ladder SHALL be pruned so it can no longer block a level at the same price; entries with no recorded pair SHALL remain disarmed.
 
 #### Scenario: Price moves beyond trailing distance
 
@@ -105,6 +105,11 @@ The Trailing strategy SHALL keep the grid centered near the current market price
 
 - **WHEN** the grid is recreated after a trailing recenter
 - **THEN** every level in the new grid receives an order for its current side
+
+#### Scenario: Stale disarmed level is pruned
+
+- **WHEN** a recentered ladder no longer contains the price paired with a disarmed entry
+- **THEN** that disarm entry is removed and the level can receive an order when its price appears again
 
 ### Requirement: Martingale grid strategy
 
@@ -204,7 +209,7 @@ Trailing and martingale strategies SHALL accept only arithmetic or geometric spa
 
 ### Requirement: Dynamic grid strategy
 
-The Dynamic strategy SHALL compute a candidate spacing from recent volatility, clamp it to the configured minimum and maximum, and recalculate no more often than the configured interval. A due recalculation SHALL adopt the candidate only when it differs from the current spacing by at least the hysteresis percentage (default 20, range 0-90), relative to the current spacing; zero disables hysteresis. The engine SHALL supply a rolling window of recent prices.
+The Dynamic strategy SHALL compute a candidate spacing from recent volatility, clamp it to the configured minimum and maximum, and recalculate no more often than the configured interval. A due recalculation SHALL adopt the candidate only when it differs from the current spacing by at least the hysteresis percentage (default 20, range 0-90), relative to the current spacing; zero disables hysteresis. The engine SHALL supply a rolling window of recent prices. With fewer than two prices, spacing SHALL use `initial_spacing` when present, otherwise `min_spacing`, clamped to the configured bounds.
 
 #### Scenario: Volatility widens spacing
 
@@ -250,6 +255,21 @@ The Dynamic strategy SHALL compute a candidate spacing from recent volatility, c
 
 - **WHEN** a dynamic bot is saved with a hysteresis percentage that is negative, greater than 90, or not numeric
 - **THEN** validation fails, identifies the hysteresis field, and no bot is saved
+
+#### Scenario: Initial spacing is clamped
+
+- **WHEN** a new dynamic grid has fewer than two recent prices and `initial_spacing` is outside the configured bounds
+- **THEN** the first ladder uses the nearest bound
+
+#### Scenario: Missing initial spacing falls back
+
+- **WHEN** a new dynamic grid has fewer than two recent prices and no `initial_spacing`
+- **THEN** the first ladder uses `min_spacing`
+
+#### Scenario: Stale dynamic disarmed level is pruned
+
+- **WHEN** a due recalculation adopts a ladder that no longer contains a disarmed entry's paired price
+- **THEN** that disarm entry is removed before orders are emitted
 
 ### Requirement: Dynamic grid state validation
 

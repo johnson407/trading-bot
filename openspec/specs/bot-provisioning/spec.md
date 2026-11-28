@@ -36,7 +36,7 @@ Given a preset, a capital allocation, a center price, a level count, and a perce
 
 ### Requirement: Setup plan evaluation
 
-The system SHALL evaluate a bot setup without persisting it and SHALL return the generated grid levels, each level's side, price, quantity, and notional, plus totals for order count, buy notional, and sell notional. The same evaluation SHALL be used by the preview and by bot creation and update validation so the three cannot disagree. Evaluation SHALL be performed by the Go engine using the same strategy implementations as runtime ticks.
+The system SHALL evaluate a bot setup without persisting it and SHALL return the generated grid levels, each level's side, price, quantity, and notional, plus order count, buy notional, and sell notional. The same Go-engine evaluation SHALL serve preview, creation, and update. Before reporting a setup as valid, evaluation SHALL truncate prices and quantities to the market's precision and reject values that round to zero or fall below a minimum.
 
 #### Scenario: Evaluate a valid setup
 
@@ -57,6 +57,35 @@ The system SHALL evaluate a bot setup without persisting it and SHALL return the
 
 - **WHEN** the engine evaluate interface is unreachable
 - **THEN** preview and save both fail with a clear error and no bot is persisted
+
+#### Scenario: Rounded order is too small
+
+- **WHEN** a level price or order quantity truncates to zero at the market's precision
+- **THEN** evaluation rejects the setup and identifies the affected field
+
+#### Scenario: Rounded order misses a minimum
+
+- **WHEN** a level price or order quantity after truncation falls below the minimum amount or minimum notional
+- **THEN** evaluation rejects the setup and identifies the affected field
+
+### Requirement: Dynamic initial spacing field
+
+The dynamic-grid setup form SHALL expose an optional positive `initial_spacing`. Preview, create, update, and backtest setup SHALL carry the value to the strategy, and the engine SHALL clamp it to the configured minimum and maximum spacing. When omitted, the strategy SHALL use `min_spacing`.
+
+#### Scenario: Initial spacing is submitted
+
+- **WHEN** a dynamic-grid setup supplies `initial_spacing`
+- **THEN** preview, create, update, and backtest pass it through and the first ladder uses the clamped value
+
+#### Scenario: Initial spacing is omitted
+
+- **WHEN** a dynamic-grid setup omits `initial_spacing`
+- **THEN** the first ladder uses `min_spacing`
+
+#### Scenario: Invalid initial spacing is rejected
+
+- **WHEN** `initial_spacing` is zero, negative, or non-numeric
+- **THEN** validation fails on the `initial_spacing` field and no bot is saved
 
 ### Requirement: Preflight rejections
 
