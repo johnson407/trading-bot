@@ -75,7 +75,7 @@ Real-money enablement requires, in order: recorded testnet evidence, the named o
 ## Risks / Trade-offs
 
 - [Single-credential policy blocks a legitimate replacement] -> The operator stops the old bot first; the error names the active bot.
-- [Create/start race bypasses the policy] -> Credential-row lock serializes both paths; desired status closes the in-flight window; the test covers concurrent starts.
+- [Create/start race bypasses the policy] -> Credential-row lock serializes both paths; desired status closes the in-flight window. Deterministic tests cover the active definition and lock usage; a two-process contention test is deferred because the PHP test harness is synchronous.
 - [Preflight false failure right after deploy] -> Scheduler heartbeat has a three-minute grace and the output names the missing signal.
 - [Compose interpolation is quoted incorrectly] -> `ProductionComposeTest` compares the app, engine, Horizon, and scheduler service entries and their defaults, including a one-service mismatch case.
 - [Operators skip the runbook] -> Deployment docs and preflight output link to it; go-live evidence is required by the procedure.

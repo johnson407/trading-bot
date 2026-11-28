@@ -7,7 +7,7 @@
 
 ## 2. Single live bot per credential
 
-- [x] 2.1 Add `LiveCredentialPolicy` with active meaning non-archived and (`status` running/paused OR `desired_status` running). Enforce it in `CreateBot` and `StartBot` inside a transaction that locks the `exchange_credentials` row, excludes the bot being started, and rejects a live bot with no credential. Verify tests for running, in-flight start, resuming the same paused bot, after stop/archive, unaffected paper bots, null credential, and concurrent starts producing one winner.
+- [x] 2.1 Add `LiveCredentialPolicy` with active meaning non-archived and (`status` running/paused OR `desired_status` running). Enforce it in `CreateBot` and `StartBot` inside a transaction that locks the `exchange_credentials` row, excludes the bot being started, and rejects a live bot with no credential. Verify tests for running, in-flight start, resuming the same paused bot, after stop/archive, unaffected paper bots, null credential, and deterministic active-definition/lock coverage; a two-process contention test is deferred because the PHP test harness is synchronous.
 - [x] 2.2 Add `LiveCredentialConflictException` for both a conflicting active bot and a missing live credential; catch it in `BotController::store` as a `mode` validation error and in the start action as an `action` error. Verify the operator gets a redirect with a message and no second bot row or published start, not an HTTP 500, including a create-form test for the missing-credential case.
 
 ## 3. Manual liquidation invariant
@@ -40,10 +40,11 @@
 
 ## Verification record
 
-- Full PHP suite (with Go plan server): `artisan test` -> 1 skipped, 777 passed (5446 assertions).
-- Full engine suite: `gofmt -w internal/runtime/*.go internal/heartbeat/*.go && go vet ./... && go test ./... -count=1` -> all packages pass; runtime 8.036s, heartbeat 0.013s.
+- Full PHP suite (with Go plan server): `artisan test` -> 1 skipped, 779 passed (5452 assertions).
+- Full engine suite: `gofmt -w internal/runtime/*.go internal/heartbeat/*.go && go vet ./... && go test ./... -count=1` -> all packages pass; runtime 8.165s, heartbeat 0.024s.
 - Frontend build: `npm run build` -> 830 modules transformed; production build succeeded.
 - PHPStan: `vendor/bin/phpstan analyse --memory-limit=1G --no-progress` -> no errors.
-- Pint: all 20 changed PHP files pass.
+- Pint: all changed PHP files pass.
 - `openspec validate live-trading-readiness --strict` -> valid.
-- `LivePreflightTest` exercises both `--pre-enable` and default modes, including the closed-gate blocker and every required failure without changing trading state.
+- `LivePreflightTest` exercises both `--pre-enable` and default modes, including the closed-gate blocker, placeholder mail-from blocker, unavailable-heartbeat blocker, every required failure, and no trading-state change.
+- Review follow-ups: the manual-liquidation regression asserts exchange-side cancellation for live pause causes and records the fixed stale-test timestamp; the credential-race design/task notes record the deferred two-process contention test; docs qualify failed live cancellation retries and honor `APP_PORT` in runbook curls.

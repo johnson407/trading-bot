@@ -71,12 +71,14 @@ class LivePreflight extends Command
         }
 
         $mailer = (string) config('mail.default', '');
-        $from = (string) config('mail.from.address', '');
+        $from = strtolower(trim((string) config('mail.from.address', '')));
+        $fromConfigured = filter_var($from, FILTER_VALIDATE_EMAIL) !== false
+            && ! str_ends_with($from, '@example.com');
         $this->addCheck(
             'Mailer delivery',
-            ! in_array($mailer, ['log', 'array'], true) && $from !== '',
-            'Alert email is not deliverable with the current mailer or from address.',
-            'Configure a real mailer and MAIL_FROM_ADDRESS.',
+            ! in_array($mailer, ['log', 'array'], true) && $fromConfigured,
+            'Alert email is not deliverable with the current mailer or a placeholder from address.',
+            'Configure a real mailer and a non-placeholder MAIL_FROM_ADDRESS.',
         );
 
         $url = (string) config('app.url', '');

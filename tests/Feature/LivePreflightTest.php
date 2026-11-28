@@ -6,9 +6,12 @@ use App\Models\User;
 use App\Services\Engine\EngineHeartbeat;
 use App\Services\Engine\HorizonStatus;
 use App\Services\Engine\SchedulerHeartbeat;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Tests\Support\FakeEngineHeartbeat;
+
+uses(RefreshDatabase::class);
 
 beforeEach(function () {
     Cache::flush();
@@ -16,7 +19,7 @@ beforeEach(function () {
     config([
         'trading.live_enabled' => true,
         'mail.default' => 'smtp',
-        'mail.from.address' => 'alerts@example.com',
+        'mail.from.address' => 'alerts@trading-bot.test',
         'app.url' => 'https://bot.example.com',
     ]);
 
@@ -176,4 +179,24 @@ it('does not print secret configuration values', function () {
 
     expect($exit)->toBe(1)
         ->and($output)->not->toContain('super-secret-value');
+});
+
+it('blocks a placeholder mail from address', function () {
+    config(['mail.from.address' => 'alerts@example.com']);
+
+    [$exit, $output] = runLivePreflight();
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('Mailer delivery')
+        ->and($output)->toContain('MAIL_FROM_ADDRESS');
+});
+
+it('blocks when the engine heartbeat is unavailable', function () {
+    app(EngineHeartbeat::class)->available = false;
+
+    [$exit, $output] = runLivePreflight();
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('Engine heartbeat')
+        ->and($output)->toContain('Start the engine');
 });

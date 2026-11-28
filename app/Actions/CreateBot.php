@@ -39,7 +39,7 @@ class CreateBot
             $credential = $user->exchangeCredentials()->where('exchange', $exchange)->first();
 
             if ($mode === 'live' && $credential instanceof ExchangeCredential) {
-                ExchangeCredential::query()
+                $credential = ExchangeCredential::query()
                     ->whereKey($credential->getKey())
                     ->lockForUpdate()
                     ->first();

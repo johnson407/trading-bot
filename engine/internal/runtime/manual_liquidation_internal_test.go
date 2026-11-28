@@ -356,7 +356,7 @@ func manualLiquidationInventories(t *testing.T, ctx context.Context, pool *pgxpo
 	return base, quote
 }
 
-func assertManualLiquidationPolicy(t *testing.T, ctx context.Context, pool *pgxpool.Pool, fake *recordingExchange, botID int64, beforeBase, beforeQuote, wantCause string, wantError string) {
+func assertManualLiquidationPolicy(t *testing.T, ctx context.Context, pool *pgxpool.Pool, fake *recordingExchange, botID int64, beforeBase, beforeQuote, wantCause string, wantError string, wantCancelled int) {
 	t.Helper()
 
 	var openCount int
@@ -396,12 +396,16 @@ func assertManualLiquidationPolicy(t *testing.T, ctx context.Context, pool *pgxp
 	fake.mu.Lock()
 	placed := len(fake.placed)
 	marketOrLiquidation := len(fake.marketOrLiquidation)
+	cancelled := len(fake.cancelled)
 	fake.mu.Unlock()
 	if placed != 0 {
 		t.Fatalf("limit orders submitted after pause = %d, want 0", placed)
 	}
 	if marketOrLiquidation != 0 {
 		t.Fatalf("market or liquidation orders submitted = %d, want 0", marketOrLiquidation)
+	}
+	if cancelled != wantCancelled {
+		t.Fatalf("exchange orders canceled = %d, want %d", cancelled, wantCancelled)
 	}
 }
 
@@ -471,7 +475,7 @@ func TestSafetyPausesCancelWithoutLiquidating(t *testing.T) {
 		},
 		{
 			name:   "stale tick",
-			bot:    manualLiquidationBotOptions{lastSuccessful: "now() - interval '1 hour'"},
+			bot:    manualLiquidationBotOptions{lastSuccessful: "TIMESTAMP '2026-11-28 00:00:00+00'"},
 			market: manualLiquidationMarket{price: "100"},
 			live:   true,
 			clock:  staleClock,
@@ -494,7 +498,7 @@ func TestSafetyPausesCancelWithoutLiquidating(t *testing.T) {
 			wantError: "Live trading is disabled",
 		},
 		{
-			name:   "reconciliation conflict",
+			name:   "reconciliation conflict pause policy",
 			bot:    manualLiquidationBotOptions{},
 			market: manualLiquidationMarket{price: "100"},
 			live:   true,
@@ -510,7 +514,7 @@ func TestSafetyPausesCancelWithoutLiquidating(t *testing.T) {
 			wantCause: pauseCauseReconciliation.String(),
 		},
 		{
-			name:   "strategy stop",
+			name:   "strategy stop pause policy",
 			bot:    manualLiquidationBotOptions{},
 			market: manualLiquidationMarket{price: "100"},
 			live:   true,
@@ -558,8 +562,13 @@ func TestSafetyPausesCancelWithoutLiquidating(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			userID := insertManualLiquidationUser(t, ctx, pool)
 			botID := insertManualLiquidationBot(t, ctx, pool, userID, tc.bot)
+
+			mode := tc.bot.mode
+			if mode == "" {
+				mode = "live"
+			}
 			fake := newRecordingExchange()
-			seedManualLiquidationOrders(t, ctx, pool, fake, botID, tc.bot.mode)
+			seedManualLiquidationOrders(t, ctx, pool, fake, botID, mode)
 
 			options := []Option{
 				WithLiveTrading(tc.live),
@@ -578,7 +587,12 @@ func TestSafetyPausesCancelWithoutLiquidating(t *testing.T) {
 			}
 			tc.trigger(t, trading, userID, botID)
 
-			assertManualLiquidationPolicy(t, ctx, pool, fake, botID, beforeBase, beforeQuote, tc.wantCause, tc.wantError)
+			wantCancelled := 2
+			if mode == "paper" {
+				wantCancelled = 0
+			}
+
+			assertManualLiquidationPolicy(t, ctx, pool, fake, botID, beforeBase, beforeQuote, tc.wantCause, tc.wantError, wantCancelled)
 		})
 	}
 }

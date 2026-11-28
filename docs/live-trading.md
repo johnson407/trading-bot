@@ -156,7 +156,7 @@ canary cap, and the reason live trading is being enabled.
    ```sh
    docker compose -f docker-compose.prod.yml exec app \
        php artisan tinker --execute="echo config('trading.live_enabled') ? 'true' : 'false';"
-   curl -fsS http://127.0.0.1:8000/health/engine
+   curl -fsS "http://127.0.0.1:${APP_PORT:-8000}/health/engine"
    ```
 
    The first command must print `true`, and the heartbeat JSON must contain
@@ -350,7 +350,7 @@ Perform the steps in this order.
    ```sh
    docker compose -f docker-compose.prod.yml exec app \
        php artisan tinker --execute="echo config('trading.live_enabled') ? 'true' : 'false';"
-   curl -fsS http://127.0.0.1:8000/health/engine
+   curl -fsS "http://127.0.0.1:${APP_PORT:-8000}/health/engine"
    ```
 
 5. If the failure is code-related, deploy the previous known-good tag:

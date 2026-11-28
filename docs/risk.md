@@ -72,6 +72,8 @@ Every automatic safety pause is cancel-only. The covered causes are daily loss, 
 - submits no market, liquidation, or compensating order;
 - leaves base and quote inventory unchanged.
 
+If a live cancellation fails, the affected order remains open and the engine records a cancellation-retry marker so the next reconciliation retries it. The policy is still cancel-only: it never substitutes a market, liquidation, or compensating order.
+
 A partial fill that races the cancel keeps its filled quantity in inventory; the unfilled remainder is canceled and retained. Inventory changes only when an exchange fill is applied, never because a bot paused.
 
 The engine has no automatic liquidation path. The operator flattens any remaining inventory manually by following [the manual flatten procedure](live-trading.md#manual-flatten): verify the exchange free balance, place limit orders only, confirm final balances and zero open orders, and record the evidence.
