@@ -19,6 +19,10 @@ func (m *MartingaleGrid) Key() string {
 
 // Initialize mirrors MartingaleGridStrategy::initialize.
 func (m *MartingaleGrid) Initialize(input Input) (Decision, error) {
+	if err := m.validateConfiguration(input); err != nil {
+		return Decision{}, err
+	}
+
 	if !input.State.IsNew() {
 		return idle(input.State), nil
 	}
@@ -86,6 +90,10 @@ func (m *MartingaleGrid) OnTick(input Input) (Decision, error) {
 		return initialized, nil
 	}
 
+	if err := m.validateConfiguration(input); err != nil {
+		return Decision{}, err
+	}
+
 	levels, err := m.GetGridLevels(input)
 	if err != nil {
 		return Decision{}, err
@@ -101,6 +109,10 @@ func (m *MartingaleGrid) OnTick(input Input) (Decision, error) {
 
 // OnFill mirrors MartingaleGridStrategy::onFill.
 func (m *MartingaleGrid) OnFill(input Input, fill FillEvent) (Decision, error) {
+	if err := m.validateConfiguration(input); err != nil {
+		return Decision{}, err
+	}
+
 	base, err := m.baseQuantity(input)
 	if err != nil {
 		return Decision{}, err
@@ -129,34 +141,40 @@ func (m *MartingaleGrid) OnFill(input Input, fill FillEvent) (Decision, error) {
 
 	next := current
 
-	if !capReached && increaseCount < maxIncreases {
-		multiplier, err := m.sizeMultiplier(input)
-		if err != nil {
-			return Decision{}, err
-		}
+	if fill.Side == SideBuy {
+		if !capReached && increaseCount < maxIncreases {
+			multiplier, err := m.sizeMultiplier(input)
+			if err != nil {
+				return Decision{}, err
+			}
 
-		candidate := current.Mul(multiplier)
-		if candidate.GreaterThan(maxQuantity) {
-			next = maxQuantity
-		} else {
-			next = candidate
-		}
+			candidate := current.Mul(multiplier)
+			if candidate.GreaterThan(maxQuantity) {
+				next = maxQuantity
+			} else {
+				next = candidate
+			}
 
-		increaseCount++
+			increaseCount++
 
-		if next.GreaterThanOrEqual(maxQuantity) || increaseCount >= maxIncreases {
-			capReached = true
-			events = append(events, map[string]any{
-				"type":    "martingale.cap_reached",
-				"message": "Martingale size cap reached",
-				"context": map[string]any{
-					"quantity":           next.String(),
-					"increase_count":     increaseCount,
-					"max_order_quantity": maxQuantity.String(),
-					"max_increases":      maxIncreases,
-				},
-			})
+			if next.GreaterThanOrEqual(maxQuantity) || increaseCount >= maxIncreases {
+				capReached = true
+				events = append(events, map[string]any{
+					"type":    "martingale.cap_reached",
+					"message": "Martingale size cap reached",
+					"context": map[string]any{
+						"quantity":           next.String(),
+						"increase_count":     increaseCount,
+						"max_order_quantity": maxQuantity.String(),
+						"max_increases":      maxIncreases,
+					},
+				})
+			}
 		}
+	} else if fill.Side == SideSell {
+		next = base
+		increaseCount = 0
+		capReached = false
 	}
 
 	state := input.State.Merge(map[string]any{
@@ -225,6 +243,40 @@ func (m *MartingaleGrid) GetGridLevels(input Input) ([]GridLevelPlan, error) {
 	}
 
 	return m.levelsFor(input, center)
+}
+
+// validateConfiguration is shared by initialization, existing-state ticks, and
+// fills so an invalid stored configuration fails before any order is emitted.
+func (m *MartingaleGrid) validateConfiguration(input Input) error {
+	if _, err := m.baseQuantity(input); err != nil {
+		return err
+	}
+
+	if _, err := m.maxQuantity(input); err != nil {
+		return err
+	}
+
+	if _, err := m.sizeMultiplier(input); err != nil {
+		return err
+	}
+
+	if _, err := m.maxIncreases(input); err != nil {
+		return err
+	}
+
+	if _, err := m.spacingType(input); err != nil {
+		return err
+	}
+
+	if _, err := m.spacingValue(input); err != nil {
+		return err
+	}
+
+	if _, err := levelsPerSide(m.Key(), input.Config); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (m *MartingaleGrid) orderIntents(input Input, levels []GridLevelPlan) ([]OrderIntent, error) {
@@ -364,6 +416,10 @@ func (m *MartingaleGrid) spacingType(input Input) (SpacingType, error) {
 
 	spacingType, err := parseSpacingType(text)
 	if err != nil {
+		return "", invalidConfig(m.Key(), "spacing_type must be arithmetic or geometric")
+	}
+
+	if spacingType == SpacingDynamic {
 		return "", invalidConfig(m.Key(), "spacing_type must be arithmetic or geometric")
 	}
 

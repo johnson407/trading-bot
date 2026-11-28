@@ -277,6 +277,39 @@ it('rejects trailing and dynamic strategies without required parameters', functi
         ->assertSessionHasErrors(['min_spacing', 'max_spacing']);
 });
 
+it('rejects a martingale maximum below the order quantity', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), botPayload([
+            'strategy_key' => 'martingale-grid',
+            'order_quantity' => '5',
+            'max_order_quantity' => '1',
+            'size_multiplier' => '2',
+            'max_increases' => 3,
+        ]))
+        ->assertSessionHasErrors('max_order_quantity');
+
+    expect(Bot::count())->toBe(0)
+        ->and(StrategyConfig::count())->toBe(0);
+});
+
+it('keeps a field error for a non-numeric martingale maximum', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), botPayload([
+            'strategy_key' => 'martingale-grid',
+            'order_quantity' => '1',
+            'max_order_quantity' => 'not-a-number',
+            'size_multiplier' => '2',
+            'max_increases' => 3,
+        ]))
+        ->assertSessionHasErrors('max_order_quantity');
+
+    expect(Bot::count())->toBe(0);
+});
+
 it('defaults the fee rate from config when the field is omitted', function () {
     config(['trading.paper.fee_rate' => '0.0015']);
     $user = User::factory()->create();

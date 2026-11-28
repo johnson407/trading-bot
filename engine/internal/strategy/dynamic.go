@@ -101,7 +101,12 @@ func (d *DynamicGrid) OnTick(input Input) (Decision, error) {
 			return Decision{}, err
 		}
 
-		return Decision{State: input.State, Levels: levels}, nil
+		orders, err := d.orderIntents(input, levels)
+		if err != nil {
+			return Decision{}, err
+		}
+
+		return Decision{State: input.State, Levels: levels, Orders: orders}, nil
 	}
 
 	center, err := decimal.Of(input.State.Get("center_price", nil))

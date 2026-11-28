@@ -1566,8 +1566,8 @@
                         "spacing_type": "arithmetic",
                         "spacing_value": "10",
                         "levels_per_side": 2,
-                        "current_quantity": "4",
-                        "increase_count": 2,
+                        "current_quantity": "1",
+                        "increase_count": 0,
                         "cap_reached": false,
                         "fill_count": 2,
                         "last_fill_side": "sell",
@@ -1695,7 +1695,7 @@
                         "spacing_value": "1.98019801980198",
                         "levels_per_side": 2,
                         "last_recalculated_at": "2026-11-23T00:45:00+00:00",
-                        "recalculation_count": 5,
+                        "recalculation_count": 4,
                         "fill_count": 0,
                         "last_canceled_client_order_id": "backtest-4"
                     }

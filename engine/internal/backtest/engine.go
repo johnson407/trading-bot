@@ -192,16 +192,7 @@ func (e *Engine) RunContext(ctx context.Context, configuration Configuration, ca
 
 		input := e.inputFor(configuration, strategyConfiguration, portfolio, book, state, market)
 
-		var decision strategy.Decision
-		if index == 0 {
-			initialized, initializeErr := replayStrategy.Initialize(input)
-			if initializeErr != nil {
-				return Result{}, initializeErr
-			}
-			decision, err = replayStrategy.OnTick(input.WithState(initialized.State))
-		} else {
-			decision, err = replayStrategy.OnTick(input)
-		}
+		decision, err := replayStrategy.OnTick(input)
 		if err != nil {
 			return Result{}, err
 		}
@@ -216,12 +207,15 @@ func (e *Engine) RunContext(ctx context.Context, configuration Configuration, ca
 		if previousSet && activeSet && !levelsMatch(previousLevels, activeLevels) {
 			// A replacement cancels every previous order. Re-evaluate once with
 			// the new order book so retained levels get orders again.
-			decision, err = replayStrategy.OnTick(
+			firstPassOrders := decision.Orders
+			replacement, err := replayStrategy.OnTick(
 				e.inputFor(configuration, strategyConfiguration, portfolio, book, state, market),
 			)
 			if err != nil {
 				return Result{}, err
 			}
+			replacement.Orders = mergeReplacementOrders(firstPassOrders, replacement.Orders)
+			decision = replacement
 			state = decision.State
 			var canceledAgain []*SimulatedOrder
 			activeLevels, activeSet, canceledAgain = e.syncGrid(activeLevels, activeSet, decision.Levels, book)
@@ -391,6 +385,16 @@ func (e *Engine) syncGrid(
 	}
 
 	return append([]strategy.GridLevelPlan(nil), levels...), true, canceled
+}
+
+// mergeReplacementOrders keeps the first pass's orders when the replacement
+// evaluation returns none, so a cancelled grid cannot leave the ladder empty.
+func mergeReplacementOrders(first, second []strategy.OrderIntent) []strategy.OrderIntent {
+	if len(second) == 0 {
+		return first
+	}
+
+	return second
 }
 
 func levelsMatch(active, levels []strategy.GridLevelPlan) bool {

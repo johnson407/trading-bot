@@ -86,6 +86,57 @@ func TestEvaluateMapsInvalidConfigurationToTheSameField(t *testing.T) {
 	}
 }
 
+func TestEvaluateMapsRejectedDynamicSpacingToSpacingType(t *testing.T) {
+	cases := []struct {
+		name    string
+		request plan.Request
+	}{
+		{
+			name: "trailing",
+			request: plan.Request{
+				StrategyKey: "trailing-grid",
+				Configuration: map[string]any{
+					"center_price":      "100",
+					"levels_per_side":   2,
+					"spacing_type":      "dynamic",
+					"spacing_value":     "10",
+					"order_quantity":    "1",
+					"trailing_distance": "10",
+				},
+			},
+		},
+		{
+			name: "martingale",
+			request: plan.Request{
+				StrategyKey: "martingale-grid",
+				Configuration: map[string]any{
+					"center_price":        "100",
+					"levels_per_side":     2,
+					"spacing_type":        "dynamic",
+					"spacing_value":       "10",
+					"base_order_quantity": "1",
+					"size_multiplier":     "2",
+					"max_order_quantity":  "10",
+					"max_increases":       3,
+				},
+			},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			response := plan.Evaluate(testCase.request)
+
+			if len(response.Errors) != 1 {
+				t.Fatalf("errors = %+v, want one", response.Errors)
+			}
+			if response.Errors[0].Field == nil || *response.Errors[0].Field != "spacing_type" {
+				t.Errorf("field = %v, want spacing_type", response.Errors[0].Field)
+			}
+		})
+	}
+}
+
 func TestEvaluateMapsInvalidHysteresisToItsField(t *testing.T) {
 	request := plan.Request{
 		StrategyKey: "dynamic-grid",

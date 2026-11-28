@@ -150,14 +150,20 @@ It is a recentering trigger, not a stop-loss. Note it is an absolute price gap, 
 
 | Field | Constraint | Behavior |
 | --- | --- | --- |
-| **size_multiplier** | > 1, default `2` | After each fill, next order size = `current * multiplier`. |
+| **size_multiplier** | > 1, default `2` | After each buy entry fill, next buy entry size = `current * multiplier`. |
 | **max_order_quantity** | required, >= base quantity | Hard ceiling on the escalated size. |
 | **max_increases** | integer >= 0, default `3` | Number of escalation steps before the cap locks. `0` effectively disables escalation. |
 
-On every fill it ratchets quantity up (on both buy and sell fills) until either the quantity cap
-or increase count is hit, then records a `martingale.cap_reached` event. This is the most
+On every buy entry fill it ratchets the buy size up until either the quantity cap or increase
+count is hit, then records a `martingale.cap_reached` event. Every sell fill, including a sell of
+starting inventory, resets the size to the base quantity, the increase count to zero, and the cap
+flag to false. This is the most
 dangerous profile - size grows during a losing sequence by design, which is why both caps are
 mandatory.
+
+Creation and updates reject a maximum below the base order quantity, a multiplier of `1` or less,
+or a negative increase count. The engine repeats those checks at initialization and on every tick
+of an existing bot, so a stale invalid configuration fails before any order is placed.
 
 ### `dynamic-grid`
 
