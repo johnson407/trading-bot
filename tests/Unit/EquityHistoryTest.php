@@ -38,7 +38,8 @@ it('returns chronological points and full-range metrics', function () {
         ->and($history['range_days'])->toBe(7)
         ->and($history['available_ranges'])->toBe([7, 30, 90])
         ->and($history['has_history'])->toBeTrue()
-        ->and($history['collecting'])->toBeFalse();
+        ->and($history['collecting'])->toBeFalse()
+        ->and($history['latest']['equity'])->toBe('90.00000000');
 });
 
 it('excludes snapshots older than the requested range', function () {
@@ -99,6 +100,49 @@ it('reports no history for an empty range', function () {
         ->and($history['metrics'])->toBeNull()
         ->and($history['has_history'])->toBeFalse()
         ->and($history['collecting'])->toBeTrue();
+});
+
+it('keeps the latest snapshot outside the requested range', function () {
+    $this->travelTo(Carbon::parse('2026-11-22 12:00:00'));
+
+    $user = User::factory()->create();
+    $latest = historyPoint($user, now()->subDays(10), '50');
+
+    $history = app(EquityHistory::class)->forUser($user, 7);
+
+    expect($history)->toHaveKey('latest')
+        ->and($history['points'])->toBe([])
+        ->and($history['latest'])->toMatchArray([
+            'at' => $latest->captured_at->toIso8601String(),
+            'equity' => '50.00000000',
+        ]);
+});
+
+it('reports no latest snapshot when the user has none', function () {
+    $user = User::factory()->create();
+
+    $history = app(EquityHistory::class)->forUser($user, 7);
+
+    expect($history)->toHaveKey('latest')
+        ->and($history['latest'])->toBeNull();
+});
+
+it('never exposes another owner as the latest snapshot', function () {
+    $this->travelTo(Carbon::parse('2026-11-22 12:00:00'));
+
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $mine = historyPoint($user, now()->subDay(), '100');
+
+    historyPoint($other, now(), '999999');
+
+    $history = app(EquityHistory::class)->forUser($user, 7);
+
+    expect($history)->toHaveKey('latest')
+        ->and($history['latest'])->toMatchArray([
+            'at' => $mine->captured_at->toIso8601String(),
+            'equity' => '100.00000000',
+        ]);
 });
 
 it('never includes another owner snapshots', function () {

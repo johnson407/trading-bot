@@ -12,6 +12,7 @@ class EquityHistory
      * @return array{
      *     points: array<int, array{at: string, equity: string}>,
      *     metrics: array{period_return: ?string, peak_equity: string, max_drawdown: string}|null,
+     *     latest: array{at: string, equity: string}|null,
      *     range_days: int,
      *     available_ranges: array<int, int>,
      *     has_history: bool,
@@ -34,9 +35,17 @@ class EquityHistory
             ])
             ->all();
 
+        $latest = $user->equitySnapshots()
+            ->orderByDesc('captured_at')
+            ->first(['captured_at', 'equity']);
+
         return [
             'points' => $this->downsample($points),
             'metrics' => $this->metrics($snapshots->all()),
+            'latest' => $latest === null ? null : [
+                'at' => $latest->captured_at->toIso8601String(),
+                'equity' => $latest->equity,
+            ],
             'range_days' => $days,
             'available_ranges' => array_map('intval', config('analytics.ranges', [7, 30, 90])),
             'has_history' => $points !== [],

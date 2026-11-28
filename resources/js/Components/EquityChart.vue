@@ -18,6 +18,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip,
 const props = defineProps({
     labels: { type: Array, default: () => [] },
     series: { type: Array, default: () => [] },
+    heightClass: { type: String, default: 'h-80' },
     valueLabel: { type: String, default: 'Equity' },
     format: {
         type: String,
@@ -81,7 +82,7 @@ const chartOptions = computed(() => ({
 
 <template>
     <div>
-        <div v-if="labels.length" class="h-80">
+        <div v-if="labels.length" :class="heightClass">
             <Line :data="chartData" :options="chartOptions" />
         </div>
         <p v-else class="py-8 text-center text-sm text-slate-400">No equity samples yet.</p>
