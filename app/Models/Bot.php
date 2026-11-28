@@ -37,6 +37,7 @@ use Illuminate\Support\Carbon;
  * @property numeric|null $range_low
  * @property numeric|null $range_high
  * @property int $tick_interval_seconds
+ * @property bool $reconcile_pending
  * @property int $consecutive_failures
  * @property Carbon|null $last_tick_at
  * @property Carbon|null $last_successful_tick_at
@@ -134,6 +135,7 @@ class Bot extends Model
         'range_low',
         'range_high',
         'tick_interval_seconds',
+        'reconcile_pending',
         'settings',
     ];
 
@@ -156,6 +158,7 @@ class Bot extends Model
             'range_low' => 'decimal:8',
             'range_high' => 'decimal:8',
             'tick_interval_seconds' => 'integer',
+            'reconcile_pending' => 'boolean',
             'consecutive_failures' => 'integer',
             'last_tick_at' => 'datetime',
             'last_successful_tick_at' => 'datetime',

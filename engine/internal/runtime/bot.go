@@ -24,6 +24,7 @@ type Bot struct {
 	KillSwitchAt      *time.Time
 	StrategyReset     bool
 	CancelRetry       bool
+	ReconcilePending  bool
 	Exchange          string
 	Symbol            string
 	StrategyKey       string
@@ -53,7 +54,7 @@ func (r *Runtime) loadBot(ctx context.Context, id int64) (*Bot, error) {
 	var capital, base, quote, average, realized, fees, feeRate string
 
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, user_id, name, mode, status, desired_status, kill_switch_requested_at, strategy_reset_pending, cancel_retry_requested,
+		`SELECT id, user_id, name, mode, status, desired_status, kill_switch_requested_at, strategy_reset_pending, cancel_retry_requested, reconcile_pending,
 		        exchange, symbol, strategy_key,
 		        capital_allocation::text, base_inventory::text, quote_inventory::text,
 		        average_entry_price::text, realized_pnl::text, fees_paid::text, fee_rate::text,
@@ -63,7 +64,7 @@ func (r *Runtime) loadBot(ctx context.Context, id int64) (*Bot, error) {
 		id,
 	).Scan(
 		&bot.ID, &bot.UserID, &bot.Name, &bot.Mode, &bot.Status, &bot.DesiredStatus,
-		&bot.KillSwitchAt, &bot.StrategyReset, &bot.CancelRetry,
+		&bot.KillSwitchAt, &bot.StrategyReset, &bot.CancelRetry, &bot.ReconcilePending,
 		&bot.Exchange, &bot.Symbol, &bot.StrategyKey,
 		&capital, &base, &quote, &average, &realized, &fees, &feeRate,
 		&bot.TickInterval, &bot.LastTickAt, &bot.LastSuccessfulAt, &bot.LastError, &settings,

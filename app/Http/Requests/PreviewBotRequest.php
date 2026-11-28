@@ -68,6 +68,8 @@ class PreviewBotRequest extends FormRequest
             'preset_key' => ['nullable', 'string', Rule::in(app(PresetResolver::class)->keys())],
             'source_backtest_run_id' => ['nullable', 'integer', 'min:1'],
             'bot_id' => ['nullable', 'integer'],
+            'name' => ['nullable', 'string', 'max:120'],
+            'fee_rate' => ['nullable', 'numeric', 'min:0', 'max:0.1'],
             'exchange' => ['required', 'string', Rule::in(config('trading.exchanges', ['binance']))],
             'symbol' => ['required', 'string', 'regex:/^[A-Z0-9]{2,12}\/[A-Z0-9]{2,12}$/'],
             'strategy_key' => ['required_without:preset_key', 'string', Rule::in($strategies)],
@@ -113,6 +115,30 @@ class PreviewBotRequest extends FormRequest
         return Bot::query()
             ->where('user_id', $this->user()?->id)
             ->find($this->integer('bot_id'));
+    }
+
+    /**
+     * Shape the submitted edit the same way BotEditDiff expects, falling back
+     * to the current bot values for fields the preview payload omits.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function proposedEdit(): ?array
+    {
+        $bot = $this->previewBot();
+
+        if ($bot === null) {
+            return null;
+        }
+
+        $strategyKey = (string) ($this->input('strategy_key') ?: $bot->strategy_key);
+
+        return [
+            'name' => $this->filled('name') ? trim((string) $this->input('name')) : $bot->name,
+            'capital_allocation' => (string) $this->input('capital_allocation'),
+            'fee_rate' => $this->filled('fee_rate') ? (string) $this->input('fee_rate') : (string) $bot->fee_rate,
+            'configuration' => $this->buildStrategyConfiguration($strategyKey),
+        ];
     }
 
     /** @return array<string, mixed> */

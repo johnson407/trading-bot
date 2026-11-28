@@ -15,7 +15,10 @@ const props = defineProps({
     bot: { type: Object, required: true },
     configuration: { type: Object, default: () => ({}) },
     editable: { type: Boolean, default: false },
+    runningPaper: { type: Boolean, default: false },
+    requiresConfirmation: { type: Boolean, default: false },
     preview: { type: Object, default: null },
+    diff: { type: Array, default: () => [] },
 });
 
 const rawCapitalAllocation = props.bot.capital_allocation;
@@ -38,6 +41,7 @@ const form = useForm({
     volatility_multiplier: props.configuration.volatility_multiplier ?? '1',
     recalculation_interval_seconds: props.configuration.recalculation_interval_seconds ?? 60,
     spacing_hysteresis_percent: props.configuration.spacing_hysteresis_percent ?? '20',
+    confirm_running_edit: false,
 });
 
 const isTrailing = computed(() => props.bot.strategy_key === 'trailing-grid');
@@ -49,6 +53,7 @@ const selectedStrategy = computed(() => strategyMeta(props.bot.strategy_key));
 const preview = ref(props.preview);
 const previewLoading = ref(false);
 const previewError = ref(props.preview?.error ?? '');
+const diff = ref(props.diff ?? []);
 let previewTimer = null;
 let previewRequest = 0;
 
@@ -58,6 +63,8 @@ function previewPayload() {
         exchange: props.bot.exchange,
         symbol: props.bot.symbol,
         strategy_key: props.bot.strategy_key,
+        name: form.name,
+        fee_rate: form.fee_rate,
         capital_allocation: submittedMoney(form.capital_allocation, displayCapitalAllocation, rawCapitalAllocation),
         center_price: form.center_price,
         level_count: Number(form.level_count),
@@ -89,10 +96,17 @@ async function fetchPreview() {
 
         if (requestId === previewRequest) {
             preview.value = data;
+            diff.value = Array.isArray(data.diff) ? data.diff : [];
             previewError.value = '';
         }
     } catch (error) {
         if (requestId === previewRequest) {
+            const responseDiff = error?.response?.data?.diff;
+
+            if (Array.isArray(responseDiff)) {
+                diff.value = responseDiff;
+            }
+
             previewError.value = error?.response?.data?.message ?? 'Preview is unavailable right now.';
         }
     } finally {
@@ -109,22 +123,36 @@ function schedulePreview() {
 
 watch(
     () => [
+        form.name,
         form.capital_allocation,
+        form.fee_rate,
         form.center_price,
         form.level_count,
         form.spacing_type,
         form.spacing_value,
         form.order_quantity,
         form.trailing_distance,
+        form.size_multiplier,
         form.max_order_quantity,
+        form.max_increases,
         form.min_spacing,
         form.max_spacing,
+        form.volatility_multiplier,
+        form.recalculation_interval_seconds,
         form.spacing_hysteresis_percent,
     ],
     schedulePreview,
 );
 
 onBeforeUnmount(() => clearTimeout(previewTimer));
+
+function diffValue(change, value) {
+    if (value === null || value === undefined || value === '') {
+        return '—';
+    }
+
+    return change.type === 'money' ? formatMoney(String(value)) : String(value);
+}
 
 const submit = () => form
     .transform((data) => ({
@@ -162,8 +190,13 @@ const submit = () => form
                     </dl>
                 </div>
 
+                <div v-if="runningPaper" class="rounded-lg border border-amber-700 bg-amber-950 p-6 text-sm text-amber-200">
+                    <p class="font-semibold">This bot is running.</p>
+                    <p class="mt-1">Saving changes will cancel open orders and rebuild the ladder on the next tick.</p>
+                </div>
+
                 <div v-if="!isEditable" class="rounded-lg bg-amber-950 p-6 text-sm text-amber-200">
-                    This bot is {{ bot.status }}. Only idle or stopped bots can be edited. Stop the bot before changing its settings.
+                    This bot is {{ bot.status }}. Live running bots and paused bots cannot be edited. Stop the bot before changing its settings.
                 </div>
 
                 <form v-else class="space-y-6 bg-slate-800 p-6 shadow sm:rounded-lg" @submit.prevent="submit">
@@ -272,18 +305,41 @@ const submit = () => form
                         </template>
                     </div>
 
+                    <div v-if="diff.length" class="rounded-md border border-slate-700 bg-slate-900 p-4">
+                        <h3 class="text-sm font-semibold text-slate-100">Changes to save</h3>
+                        <dl class="mt-3 space-y-2 text-sm">
+                            <div v-for="change in diff" :key="change.key" class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-3">
+                                <dt class="text-slate-300">{{ change.label }}</dt>
+                                <dd class="font-mono text-rose-300 line-through">{{ diffValue(change, change.from) }}</dd>
+                                <dd class="font-mono text-emerald-300">{{ diffValue(change, change.to) }}</dd>
+                            </div>
+                        </dl>
+                    </div>
+
                     <p v-if="previewError" class="rounded-md border border-rose-700 bg-rose-950 p-4 text-sm text-rose-200">
-                    {{ previewError }}
-                </p>
-                <PlanPreview
+                        {{ previewError }}
+                    </p>
+                    <PlanPreview
                     :plan="preview?.plan"
                     :limits="preview?.limits"
                     :market="preview?.market"
                     :loading="previewLoading"
                 />
 
+                    <div v-if="requiresConfirmation" class="space-y-2">
+                        <label class="flex items-start gap-3 text-sm text-slate-200">
+                            <input
+                                v-model="form.confirm_running_edit"
+                                type="checkbox"
+                                class="mt-1 rounded border-slate-500 bg-slate-900 text-emerald-600"
+                            />
+                            <span>I understand open orders will be cancelled and the ladder rebuilt.</span>
+                        </label>
+                        <InputError :message="form.errors.confirm_running_edit" />
+                    </div>
+
                     <div class="flex items-center gap-4">
-                        <PrimaryButton :disabled="form.processing">Save changes</PrimaryButton>
+                        <PrimaryButton :disabled="form.processing || (requiresConfirmation && !form.confirm_running_edit)">Save changes</PrimaryButton>
                         <span v-if="form.recentlySuccessful" class="text-sm text-emerald-300">Saved.</span>
                     </div>
                 </form>

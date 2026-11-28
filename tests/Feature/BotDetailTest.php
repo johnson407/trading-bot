@@ -10,6 +10,8 @@ use App\Models\RiskLimit;
 use App\Models\StrategyConfig;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\MessageBag;
+use Illuminate\Support\ViewErrorBag;
 use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
@@ -188,4 +190,20 @@ it('forbids another user from viewing a bot comparison', function () {
     $bot = Bot::factory()->for($owner)->create();
 
     $this->actingAs($other)->get(route('bots.show', $bot))->assertForbidden();
+});
+
+it('shares engine publish errors with the bot detail page', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create();
+    $message = 'The bot was saved, but the engine could not be notified. The engine will retry the reconcile.';
+    $errors = new ViewErrorBag;
+    $errors->put('default', new MessageBag(['engine' => $message]));
+
+    $this->actingAs($user)
+        ->withSession(['errors' => $errors])
+        ->get(route('bots.show', $bot))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('errors.engine', $message)
+            ->etc());
 });

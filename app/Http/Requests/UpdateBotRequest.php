@@ -55,6 +55,11 @@ class UpdateBotRequest extends FormRequest
             'volatility_multiplier' => ['nullable', 'numeric', 'gt:0'],
             'recalculation_interval_seconds' => ['nullable', 'integer', 'min:1'],
             'spacing_hysteresis_percent' => ['nullable', 'numeric', 'regex:/^\d+(\.\d+)?$/', 'min:0', 'max:90'],
+            'confirm_running_edit' => [
+                'nullable',
+                Rule::requiredIf(fn () => $this->requiresRunningConfirmation()),
+                Rule::when(fn () => $this->requiresRunningConfirmation(), ['accepted']),
+            ],
         ];
     }
 
@@ -82,6 +87,13 @@ class UpdateBotRequest extends FormRequest
                 $validator->errors()->add($problem->field ?? 'strategy_key', $problem->message);
             }
         });
+    }
+
+    private function requiresRunningConfirmation(): bool
+    {
+        $bot = $this->route('bot');
+
+        return $bot instanceof Bot && $bot->isRunning() && ! $bot->isLive();
     }
 
     /** @return array<string, mixed> */

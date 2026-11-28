@@ -261,6 +261,27 @@ func (e Envelope) PayloadInt(name string) (int64, bool) {
 	return id, true
 }
 
+// PayloadBool reads a boolean field from the payload. Only JSON booleans are
+// accepted; strings and numbers are rejected so flags cannot be coerced.
+func (e Envelope) PayloadBool(name string) (bool, bool) {
+	payload, err := e.PayloadMap()
+	if err != nil {
+		return false, false
+	}
+
+	raw, ok := payload[name]
+	if !ok {
+		return false, false
+	}
+
+	var value bool
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return false, false
+	}
+
+	return value, true
+}
+
 // OrderingKey returns the key whose in-stream order must be preserved. Bot
 // commands use the user id when present so a kill_switch for that user shares
 // the same queue; the bot id remains the fallback.

@@ -10,6 +10,7 @@ use App\Actions\StopBot;
 use App\Domain\Activity\ActivityRecorder;
 use App\Domain\Backtest\BacktestComparison;
 use App\Domain\Backtest\Enums\BacktestStatus;
+use App\Domain\Bot\BotEditDiff;
 use App\Domain\Bot\Enums\BotStatus;
 use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Domain\Grid\Exceptions\GridPlanUnavailableException;
@@ -45,6 +46,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -144,10 +146,17 @@ class BotController extends Controller
         GridPlanClient $plans,
         MarketDataResolver $markets,
     ): JsonResponse {
+        $bot = $request->previewBot();
+        $proposed = $request->proposedEdit();
+        $diff = $bot !== null && $proposed !== null ? BotEditDiff::between($bot, $proposed) : [];
+
         try {
             $plan = $plans->evaluate($request->gridPlanRequest());
         } catch (GridPlanUnavailableException $exception) {
-            return response()->json(['message' => $exception->getMessage()], 503);
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'diff' => $diff,
+            ], 503);
         }
 
         $limits = $request->effectiveLimits();
@@ -160,6 +169,7 @@ class BotController extends Controller
             'limits' => $this->limitsPayload($limits),
             'market' => $market === null ? null : $this->marketPayload($market),
             'values' => $request->concreteValues(),
+            'diff' => $diff,
         ]);
     }
 
@@ -428,10 +438,17 @@ class BotController extends Controller
             }
         }
 
+        $runningPaper = $bot->status === BotStatus::Running && ! $bot->isLive();
+        $editable = $runningPaper
+            || in_array($bot->status, [BotStatus::Idle, BotStatus::Stopped], true);
+
         return Inertia::render('Bots/Edit', [
             'bot' => BotSummaryResource::make($bot)->resolve(),
             'configuration' => $configuration,
-            'editable' => in_array($bot->status, [BotStatus::Idle, BotStatus::Stopped], true),
+            'editable' => $editable,
+            'runningPaper' => $runningPaper,
+            'requiresConfirmation' => $runningPaper,
+            'diff' => [],
             'preview' => $configuration === [] ? null : [
                 'plan' => $plan?->toArray(),
                 'limits' => $this->limitsPayload($limits),
@@ -449,50 +466,141 @@ class BotController extends Controller
     ): RedirectResponse {
         $this->authorize('update', $bot);
 
-        $structuralChange = false;
-        $needsStrategyReset = false;
+        $noop = false;
+        $reconcile = false;
+        $strategyReset = false;
+        $diff = [];
 
-        DB::transaction(function () use ($request, $bot, $activity, &$structuralChange, &$needsStrategyReset) {
+        DB::transaction(function () use ($request, $bot, $activity, &$noop, &$reconcile, &$strategyReset, &$diff) {
             /** @var Bot $locked */
             $locked = Bot::query()->lockForUpdate()->findOrFail($bot->id);
 
-            abort_unless(in_array($locked->status, [BotStatus::Idle, BotStatus::Stopped], true), 403);
+            abort_unless($request->user()->can('update', $locked), 403);
 
-            $attributes = [
-                'name' => (string) $request->validated('name'),
+            $runningPaper = $locked->status === BotStatus::Running && ! $locked->isLive();
+
+            if ($runningPaper && ! $request->boolean('confirm_running_edit')) {
+                throw ValidationException::withMessages([
+                    'confirm_running_edit' => 'Confirm that open orders will be cancelled and the ladder rebuilt before saving changes to a running paper bot.',
+                ]);
+            }
+
+            $feeRate = $request->has('fee_rate')
+                ? (string) ($request->validated('fee_rate') ?? '0')
+                : (string) $locked->fee_rate;
+
+            $proposed = [
+                'name' => trim((string) $request->validated('name')),
                 'capital_allocation' => (string) $request->validated('capital_allocation'),
+                'fee_rate' => $feeRate,
+                'configuration' => $request->strategyConfiguration($locked),
             ];
 
-            if ($request->has('fee_rate')) {
-                $attributes['fee_rate'] = (string) ($request->validated('fee_rate') ?? '0');
+            $config = $locked->strategyConfig()->first();
+            $locked->setRelation('strategyConfig', $config);
+
+            $currentConfiguration = data_get($config, 'configuration', []);
+            if (! is_array($currentConfiguration)) {
+                $currentConfiguration = [];
             }
 
-            $locked->update($attributes);
+            $configurationChanged = BotEditDiff::configurationsDiffer($currentConfiguration, $proposed['configuration']);
 
-            $config = $locked->strategyConfig()->firstOrCreate(
-                ['bot_id' => $locked->id],
-                ['strategy_key' => $locked->strategy_key, 'configuration' => [], 'state_version' => 1],
-            );
+            $diff = BotEditDiff::between($locked, $proposed);
 
-            $configuration = $request->strategyConfiguration($locked);
-            $structuralChange = $config->configuration !== $configuration;
-            $needsStrategyReset = $structuralChange || (bool) $locked->strategy_reset_pending;
+            $strategyStructural = $configurationChanged;
+            $capitalChange = false;
 
-            if ($structuralChange) {
-                $locked->forceFill(['strategy_reset_pending' => true])->save();
+            foreach ($diff as $change) {
+                if ($change['key'] === 'capital_allocation') {
+                    $capitalChange = true;
+                }
+
+                if (str_starts_with($change['key'], 'strategy.')) {
+                    $strategyStructural = true;
+                }
             }
 
-            $config->configuration = $configuration;
-            $config->save();
+            if ($diff === [] && ! $locked->reconcile_pending && ! $locked->strategy_reset_pending) {
+                $noop = true;
 
-            $activity->recordUser('bot.updated', "Bot {$locked->name} updated", $locked, $request->user(), [
-                'strategy' => $locked->strategy_key,
-                'symbol' => $locked->symbol,
-                'strategy_reset' => $structuralChange,
-            ]);
+                return;
+            }
+
+            if ($diff !== []) {
+                $attributes = [
+                    'name' => $proposed['name'],
+                    'capital_allocation' => $proposed['capital_allocation'],
+                ];
+
+                if ($request->has('fee_rate')) {
+                    $attributes['fee_rate'] = $feeRate;
+                }
+
+                $locked->update($attributes);
+            }
+
+            if ($strategyStructural) {
+                $config ??= $locked->strategyConfig()->firstOrCreate(
+                    ['bot_id' => $locked->id],
+                    ['strategy_key' => $locked->strategy_key, 'configuration' => [], 'state_version' => 1],
+                );
+
+                $config->configuration = $proposed['configuration'];
+                $config->save();
+            }
+
+            if ($runningPaper) {
+                if ($strategyStructural || $capitalChange || $locked->reconcile_pending) {
+                    $locked->forceFill(['reconcile_pending' => true])->save();
+                    $reconcile = true;
+                }
+            } else {
+                if ($strategyStructural) {
+                    $locked->forceFill(['strategy_reset_pending' => true])->save();
+                }
+
+                $strategyReset = $strategyStructural || (bool) $locked->strategy_reset_pending;
+            }
+
+            if ($diff !== [] || $reconcile || $strategyReset) {
+                $activity->recordUser('bot.updated', "Bot {$locked->name} updated", $locked, $request->user(), [
+                    'strategy' => $locked->strategy_key,
+                    'symbol' => $locked->symbol,
+                    'diff' => $diff,
+                    'strategy_reset' => $strategyReset || $reconcile,
+                    'reconcile' => $reconcile,
+                ]);
+            }
         });
 
-        if ($needsStrategyReset) {
+        if ($noop) {
+            return redirect()->route('bots.show', $bot)->with('status', 'No changes.');
+        }
+
+        if ($reconcile) {
+            try {
+                $commands->publish('bot.config', $request->user()->id, $bot->id, [
+                    'strategy_reset' => true,
+                    'reconcile' => true,
+                ]);
+            } catch (Throwable $exception) {
+                Log::warning('bot.config reconcile publish failed', [
+                    'bot_id' => $bot->id,
+                    'error_type' => $exception::class,
+                ]);
+
+                return redirect()
+                    ->route('bots.show', $bot)
+                    ->withErrors(['engine' => 'The bot was saved, but the engine could not be notified. The engine will retry the reconcile.']);
+            }
+
+            return redirect()
+                ->route('bots.show', $bot)
+                ->with('status', 'Bot updated. Open orders will be cancelled and the ladder rebuilt.');
+        }
+
+        if ($strategyReset) {
             try {
                 $commands->publish('bot.config', $request->user()->id, $bot->id, ['strategy_reset' => true]);
             } catch (Throwable $exception) {

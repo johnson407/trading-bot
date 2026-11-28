@@ -29,7 +29,7 @@ it('creates one account-level kill-switch alert visible only to the owner', func
         ->and($alert->type)->toBe('kill_switch.activated');
 
     $this->actingAs($owner)
-        ->get(route('alerts.index'))
+        ->get(route('alerts.index', ['mode' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->has('alerts.data', 1)
@@ -37,7 +37,7 @@ it('creates one account-level kill-switch alert visible only to the owner', func
             ->etc());
 
     $this->actingAs($other)
-        ->get(route('alerts.index'))
+        ->get(route('alerts.index', ['mode' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->has('alerts.data', 0)

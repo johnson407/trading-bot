@@ -84,6 +84,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('alerts', [AlertController::class, 'index'])->name('alerts.index');
     Route::post('alerts/read-all', [AlertController::class, 'markAllRead'])->name('alerts.read-all');
+    Route::post('alerts/groups/read', [AlertController::class, 'markGroupRead'])->name('alerts.groups.read');
     Route::post('alerts/{alert}/read', [AlertController::class, 'markRead'])->whereNumber('alert')->name('alerts.read');
 });
 

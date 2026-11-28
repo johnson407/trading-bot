@@ -234,7 +234,8 @@ Rules are evaluated every running tick after the mark price is stored and before
 check and strategy logic. Precedence is stop-loss, take-profit, range exit; only one trigger is
 recorded per tick. A trigger pauses and cancels open orders but never sells inventory. There is no
 liquidation, market order, or automatic resume. The exit guard remains editable while the bot is
-running, paused, or stopped; strategy fields still require an idle or stopped bot.
+running, paused, or stopped. Strategy fields are editable while idle or stopped, or while a paper
+bot is running after explicit confirmation; live running and paused bots are read-only.
 
 ---
 
@@ -273,14 +274,17 @@ immediately.
 
 ## 6. Editing and lifecycle notes
 
-- A bot is only editable while idle or stopped.
+- Idle and stopped bots are editable. A running paper bot is editable after an explicit
+  confirmation; live running and paused bots are read-only.
 - Protective exit rules are separate from the strategy form and remain editable in every bot state.
 - The edit form can change name, `capital_allocation`, `fee_rate`, and strategy configuration -
   not exchange, symbol, strategy, or mode.
-- If a structural config field changes (center, levels, spacing, quantity, strategy-specific
-  values), the update cancels open orders, retires the active grid, and clears strategy state, so
-  the new config only takes effect on the next start. Strategies copy structural values into
-  their state on `initialize()`.
+- A running paper edit shows a field diff and ladder preview before saving. A confirmed structural
+  or capital change sets `reconcile_pending`; the engine cancels open orders, clears strategy state,
+  and rebuilds the ladder on the next tick. Name-only and fee-only changes do not cancel orders.
+- An idle or stopped structural change sets a pending strategy reset instead. The update retires
+  the active grid, clears strategy state, and the new config takes effect on the next start.
+  Strategies copy structural values into their state on `initialize()`.
 - Pause keeps open orders; Stop cancels them.
 - A restart after a config change re-initializes the grid; the bot does not resume the old ladder.
 
