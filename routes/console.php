@@ -13,3 +13,13 @@ Schedule::command('analytics:capture-equity')
 
 Schedule::command('alerts:prune')->dailyAt('03:00')->withoutOverlapping();
 Schedule::command('analytics:prune-equity')->dailyAt('03:15')->withoutOverlapping();
+
+Schedule::command('alerts:ingest-engine-events')
+    ->everyTenSeconds()
+    ->withoutOverlapping(5)
+    ->onOneServer();
+
+Schedule::command('alerts:check-engine-heartbeat')
+    ->everyTenSeconds()
+    ->withoutOverlapping(5)
+    ->onOneServer();

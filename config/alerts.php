@@ -11,6 +11,12 @@ return [
     // risk events and activity logs are preserved.
     'retention_days' => max(1, (int) env('ALERTS_RETENTION_DAYS', 90)),
 
+    // The scheduled bridge only processes engine-written source rows. Laravel
+    // recorders mark their own rows processed synchronously.
+    'engine_ingest_enabled' => (bool) env('ALERTS_ENGINE_INGEST_ENABLED', true),
+
+    'engine_ingest_batch' => max(1, (int) env('ALERTS_ENGINE_INGEST_BATCH', 100)),
+
     'incidents' => [
         'risk.daily_loss_limit' => [
             'severity' => 'critical',
@@ -71,6 +77,22 @@ return [
         'risk.exit_cancel_failed' => [
             'severity' => 'critical',
             'title' => 'Orders could not be canceled after protective exit',
+        ],
+        'risk.cancel_failed' => [
+            'severity' => 'warning',
+            'title' => 'Orders could not be canceled',
+        ],
+        'risk.live_start_refused' => [
+            'severity' => 'critical',
+            'title' => 'Live start refused',
+        ],
+        'risk.live_order_rejected' => [
+            'severity' => 'critical',
+            'title' => 'Live order rejected',
+        ],
+        'engine.heartbeat_missing' => [
+            'severity' => 'critical',
+            'title' => 'Engine heartbeat missing',
         ],
     ],
 ];

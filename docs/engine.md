@@ -238,7 +238,7 @@ when both its own last successful tick and the time this engine process first
 observed it running are older than `max(180s, tick_interval_seconds + 30s)`.
 This per-bot restart grace means engine downtime longer than the threshold does
 not pause a bot before its first post-restart tick. If ticks keep failing for
-the full grace, the usual `bot.stale` / `risk.stale_tick` pause-and-cancel runs.
+the full grace, the usual `bot.stale` / `risk.stale_bot` pause-and-cancel runs.
 
 ### Running paper configuration reconcile
 

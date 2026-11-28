@@ -17,10 +17,26 @@ it('only keeps alerts and analytics on the Laravel scheduler', function () {
         expect($commands->contains(fn (string $command) => str_contains($command, $removed)))->toBeFalse();
     }
 
-    expect($commands)->toHaveCount(3)
+    expect($commands)->toHaveCount(5)
         ->and($commands->contains(fn (string $command) => str_contains($command, 'analytics:capture-equity')))->toBeTrue()
         ->and($commands->contains(fn (string $command) => str_contains($command, 'alerts:prune')))->toBeTrue()
-        ->and($commands->contains(fn (string $command) => str_contains($command, 'analytics:prune-equity')))->toBeTrue();
+        ->and($commands->contains(fn (string $command) => str_contains($command, 'analytics:prune-equity')))->toBeTrue()
+        ->and($commands->contains(fn (string $command) => str_contains($command, 'alerts:ingest-engine-events')))->toBeTrue()
+        ->and($commands->contains(fn (string $command) => str_contains($command, 'alerts:check-engine-heartbeat')))->toBeTrue();
+});
+
+it('runs the engine alert bridge every ten seconds on one server', function () {
+    $events = collect(app(Schedule::class)->events());
+
+    foreach (['alerts:ingest-engine-events', 'alerts:check-engine-heartbeat'] as $command) {
+        $event = $events->first(fn ($event) => str_contains((string) $event->command, $command));
+
+        expect($event)->not->toBeNull()
+            ->and($event->expression)->toBe('* * * * *')
+            ->and($event->repeatSeconds)->toBe(10)
+            ->and($event->withoutOverlapping)->toBeTrue()
+            ->and($event->onOneServer)->toBeTrue();
+    }
 });
 
 it('schedules equity capture and pruning', function () {

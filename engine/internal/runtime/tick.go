@@ -260,7 +260,7 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) (retErr error) {
 		if account {
 			message = fmt.Sprintf("Account daily loss limit reached (%s). Bot paused and open orders canceled.", loss.String())
 		}
-		if err := r.pause(ctx, bot, pauseCauseDailyLoss, message, "bot.daily_loss_paused", "risk.daily_loss", "warning"); err != nil {
+		if err := r.pause(ctx, bot, pauseCauseDailyLoss, message, "bot.daily_loss_paused", "risk.daily_loss_limit", "critical"); err != nil {
 			return err
 		}
 		if account {
@@ -734,7 +734,7 @@ func (r *Runtime) pauseOtherBots(ctx context.Context, userID, currentBotID int64
 		if err != nil || other.Status != "running" {
 			continue
 		}
-		if err := r.pause(withTickStats(ctx, nil), other, pauseCauseDailyLoss, message, "bot.daily_loss_paused", "risk.daily_loss", "warning"); err != nil {
+		if err := r.pause(withTickStats(ctx, nil), other, pauseCauseDailyLoss, message, "bot.daily_loss_paused", "risk.daily_loss_limit", "critical"); err != nil {
 			r.logger.Error("pause another bot after account daily loss failed", "bot_id", other.ID, "error_type", fmt.Sprintf("%T", err))
 		}
 	}
@@ -794,7 +794,7 @@ func (r *Runtime) cancelOpenOrders(ctx context.Context, userID, botID int64, rea
 			canceled, err := r.cancelLiveOrder(ctx, bot, order)
 			if err != nil {
 				failures = append(failures, fmt.Errorf("cancel live order %d: %w", order.ID, err))
-				r.riskEvent(ctx, userID, botID, "risk.cancel_failed", "critical", "A live order could not be canceled.", map[string]any{"order_id": order.ID, "client_order_id": order.ClientOrderID})
+				r.riskEvent(ctx, userID, botID, "risk.live_cancel_failed", "critical", "A live order could not be canceled.", map[string]any{"order_id": order.ID, "client_order_id": order.ClientOrderID})
 				continue
 			}
 			if canceled {

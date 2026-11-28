@@ -35,7 +35,7 @@ func TestRiskEventCooldownIsPerBotAndType(t *testing.T) {
 	if !trading.allowRiskEvent(8, "risk.position_limit", time.Minute) {
 		t.Fatal("another bot's first event was suppressed")
 	}
-	if !trading.allowRiskEvent(7, "risk.stale_tick", time.Minute) {
+	if !trading.allowRiskEvent(7, "risk.stale_bot", time.Minute) {
 		t.Fatal("another type's first event was suppressed")
 	}
 }

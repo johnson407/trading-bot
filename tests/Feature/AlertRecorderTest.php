@@ -42,6 +42,27 @@ it('creates an alert from a covered risk event with its source and severity', fu
         ->and($alert->source->is($event))->toBeTrue();
 });
 
+it('reports a duplicate source across dedupe windows as deduplicated', function () {
+    $this->freezeTime();
+
+    $event = RiskEvent::factory()->create([
+        'type' => 'risk.daily_loss_limit',
+        'severity' => 'critical',
+    ]);
+
+    $recorder = app(AlertRecorder::class);
+    $first = $recorder->recordRiskEvent($event);
+
+    $this->travel(901)->seconds();
+
+    $second = $recorder->recordRiskEvent($event);
+
+    expect($first->status->value)->toBe('created')
+        ->and($second->status->value)->toBe('deduplicated')
+        ->and($second->alert?->is($first->alert))->toBeTrue()
+        ->and(Alert::query()->count())->toBe(1);
+});
+
 it('skips risk event types that are not in the incident catalog', function () {
     $event = RiskEvent::factory()->create([
         'type' => 'risk.position_limit',

@@ -6,10 +6,15 @@ owner-scoped notification layer on top of them.
 
 ## What creates an alert
 
-Alert creation is hooked into `RiskEventRecorder` and `ActivityRecorder`. Only the
-types listed in `config/alerts.php` produce an alert. Every other risk event or
-activity entry is still written to its original table and remains visible in the
-bot activity feed.
+Alert creation has two paths. Laravel-side incidents go through
+`RiskEventRecorder` and `ActivityRecorder`, which record the source row and attempt
+the alert synchronously. Engine-written incidents are picked up by the scheduled
+`alerts:ingest-engine-events` command. Both paths use the same `AlertRecorder`
+catalog, deduplication, sanitizer, and email delivery.
+
+Only the types listed in `config/alerts.php` produce an alert. Every other risk
+event or activity entry is still written to its original table and remains visible
+in the bot activity feed.
 
 | Type | Severity | Meaning |
 | --- | --- | --- |
@@ -28,6 +33,9 @@ bot activity feed.
 | `risk.take_profit_triggered` | warning | A protective take-profit paused a bot and canceled its open orders. |
 | `risk.range_exit_triggered` | warning | A protective range bound paused a bot and canceled its open orders. |
 | `risk.cancel_failed` | warning | An open order could not be canceled and the pause retry marker was set. |
+| `risk.live_start_refused` | critical | The engine refused to start a live bot, for example because the gate was closed or the balance check failed. |
+| `risk.live_order_rejected` | critical | The exchange rejected a live order and no open order was recorded. |
+| `engine.heartbeat_missing` | critical | The engine heartbeat is missing or expired for an account with a live bot. This alert has no bot. |
 
 Cancellation failures are critical because they leave orders live after the bot
 has been paused. Stop-loss and exit-cancellation alerts are emailed; take-profit
@@ -54,13 +62,50 @@ the bot key `account`.
 
 The unique index on `(dedupe_key, dedupe_bucket)` makes this safe when two workers
 record the same incident concurrently. The `exchange.failure_threshold` pair
-(activity plus risk event) collapses to one alert for the same reason.
+(activity plus risk event) collapses to one alert for the same reason. A unique
+index on `(source_type, source_id)` also prevents a retry across a bucket boundary
+from creating a second alert for the same source row; that outcome is
+`deduplicated`.
 
 Each alert keeps a polymorphic `source_type`/`source_id` pointing at the risk
 event or activity log that produced it. Archiving a bot keeps the alert's
 `bot_id` and the association, so the inbox can still show the bot name as plain
 text. Permanently deleting a bot sets the alert's `bot_id` to null; the alert
 itself is retained.
+
+### Engine event ingestion
+
+The engine writes `risk_events` and `activity_logs` directly. The
+`alerts:ingest-engine-events` command scans unprocessed rows, creates at most one
+alert per source row, and marks the row processed. It runs every ten seconds with
+`withoutOverlapping(5)` and `onOneServer()` so multiple schedulers do not duplicate
+work.
+
+- `risk_events` and `activity_logs` carry nullable `alert_processed_at` and
+  `alert_ingest_attempts` markers. The migration backfills existing rows as
+  processed so deployment does not replay history.
+- Laravel recorders mark their own rows processed after the synchronous attempt,
+  so the scanner only handles engine-written rows and failed Laravel attempts.
+- A failed alert attempt rolls back that row, increments the attempt count in a
+  separate transaction, and retries on a later run. After three failures the row
+  is marked processed and a warning is logged so one poison row cannot block the
+  batch.
+- `alerts:check-source-duplicates` is a read-only pre-deployment check. The
+  migration aborts if duplicate alert sources exist. Resolve them by keeping the
+  oldest alert for each source, preserving its message, context, source, and
+  delivery, and deleting the newer duplicates.
+- Disable ingestion and heartbeat checks with
+  `ALERTS_ENGINE_INGEST_ENABLED=false`; the schedule stays registered and exits
+  immediately.
+- The engine's per-bot `risk.kill_switch_activated` event is deliberately not
+  alertable. Laravel records the single account-level `kill_switch.activated`
+  activity, so renaming the engine event would create one critical alert per bot.
+
+The heartbeat check alerts once per account, per deduplication window, when the
+engine heartbeat is missing or expired and the account has a non-archived live bot
+that is running or paused. It never pauses a bot, cancels an order, or activates
+the kill switch. HTTP health and dashboard reads only show the outage; they do not
+create alerts.
 
 ## Delivery channels
 
@@ -132,6 +177,8 @@ Feature tests: `tests/Feature/AlertInboxTest.php`,
 | `alerts.dedupe_window_seconds` | `ALERTS_DEDUPE_WINDOW_SECONDS` | `900` | Length of the deduplication bucket. |
 | `alerts.retention_days` | `ALERTS_RETENTION_DAYS` | `90` | Age at which `alerts:prune` removes an alert. |
 | `alerts.incidents` | — | see catalog above | Covered types and their severity/title. Edit this map to add or remove a covered incident. |
+| `alerts.engine_ingest_enabled` | `ALERTS_ENGINE_INGEST_ENABLED` | `true` | Enables the engine-event scanner and heartbeat check. The schedule remains registered and exits immediately when false. |
+| `alerts.engine_ingest_batch` | `ALERTS_ENGINE_INGEST_BATCH` | `100` | Maximum rows read per source table per scanner run. |
 
 Values are read with `env()` and are clamped to at least 1 second/day.
 
@@ -157,4 +204,5 @@ records are audit data and are never pruned by this command.
 | Inbox, filters, read state, badge | `AlertInboxTest` |
 | Retention command | `AlertRetentionTest` |
 | End-to-end daily loss and kill switch | `AlertIntegrationTest` |
+| Engine event ingestion, heartbeat, duplicate check | `AlertIngestionTest` |
 | Protective exits | `ExitGuardAlertTest` |

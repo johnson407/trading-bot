@@ -895,7 +895,7 @@ func TestRestartGraceKeepsRunningBotAfterDowntime(t *testing.T) {
 		t.Fatalf("second reconcile: %v", err)
 	}
 	assertBotState(t, pool, botID, "running", "running")
-	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.stale_tick'`, 0, botID)
+	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.stale_bot'`, 0, botID)
 	assertCount(t, pool, `SELECT COUNT(*) FROM activity_logs WHERE bot_id=$1`, 0, botID)
 }
 
@@ -928,7 +928,7 @@ func TestRestartGraceStillPausesAfterThreshold(t *testing.T) {
 		t.Fatalf("reconcile after grace: %v", err)
 	}
 	assertBotState(t, pool, botID, "paused", "running")
-	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.stale_tick'`, 1, botID)
+	assertCount(t, pool, `SELECT COUNT(*) FROM risk_events WHERE bot_id=$1 AND type='risk.stale_bot'`, 1, botID)
 }
 
 func TestApplyDesiredRefreshesStaleGraceForLateStartingBot(t *testing.T) {

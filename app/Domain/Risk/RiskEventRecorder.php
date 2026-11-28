@@ -40,7 +40,11 @@ class RiskEventRecorder
             'created_at' => now(),
         ]);
 
-        $this->alerts->fromRiskEvent($event);
+        $outcome = $this->alerts->recordRiskEvent($event);
+
+        if ($outcome->shouldMarkProcessed()) {
+            RiskEvent::query()->whereKey($event->id)->update(['alert_processed_at' => now()]);
+        }
 
         return $event;
     }

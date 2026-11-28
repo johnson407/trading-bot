@@ -15,6 +15,8 @@ use Illuminate\Support\Carbon;
  * @property string $severity
  * @property string $message
  * @property array<array-key, mixed>|null $context
+ * @property Carbon|null $alert_processed_at
+ * @property int $alert_ingest_attempts
  * @property Carbon $created_at
  * @property-read Bot|null $bot
  * @property-read User $user
@@ -47,6 +49,8 @@ class ActivityLog extends Model
         'severity',
         'message',
         'context',
+        'alert_processed_at',
+        'alert_ingest_attempts',
         'created_at',
     ];
 
@@ -54,6 +58,8 @@ class ActivityLog extends Model
     {
         return [
             'context' => 'array',
+            'alert_processed_at' => 'datetime',
+            'alert_ingest_attempts' => 'integer',
             'created_at' => 'datetime',
         ];
     }
