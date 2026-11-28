@@ -28,7 +28,12 @@ The engine SHALL refresh a Redis heartbeat at least every five seconds with a te
 
 ### Requirement: Activity and settings ownership
 
-After cutover, `activity_logs` SHALL be insert-only except for nullable `alert_processed_at` and `alert_ingest_attempts` markers, which only the alert bridge and Laravel recorders may update. Existing rows SHALL be backfilled as processed. The engine SHALL NOT insert Laravel-listed types. Engine-owned `bots.settings` keys `mark_price`, `recent_prices`, and `daily_loss_baseline` SHALL be written only by the engine; Laravel SHALL merge later updates without overwriting them.
+After cutover, `activity_logs` SHALL be insert-only except for the alert-processing markers, which only the alert bridge and Laravel recorders may update. Existing rows SHALL be backfilled as processed. The engine SHALL NOT insert Laravel-listed types. Engine-owned `bots.settings` keys `mark_price`, `recent_prices`, and `daily_loss_baseline` SHALL be written only by the engine; Laravel SHALL merge later updates without overwriting them.
+
+#### Scenario: Alert marker updates are limited
+
+- **WHEN** the alert bridge or a Laravel recorder updates an activity row after insertion
+- **THEN** it changes only `alert_processed_at`, `alert_ingest_attempts`, or `alert_next_attempt_at`
 
 #### Scenario: Laravel bot update preserves engine settings
 
@@ -42,7 +47,7 @@ After cutover, `activity_logs` SHALL be insert-only except for nullable `alert_p
 
 #### Scenario: Alert processing preserves the activity event
 
-- **WHEN** the alert bridge marks an activity row processed or increments its attempt count
+- **WHEN** the alert bridge marks an activity row processed, increments its attempt count, or schedules its next attempt
 - **THEN** the user, bot, type, severity, message, context, and creation time remain unchanged
 
 #### Scenario: Historical activity rows are marked processed
