@@ -481,7 +481,7 @@ class BotController extends Controller
 
             if ($runningPaper && ! $request->boolean('confirm_running_edit')) {
                 throw ValidationException::withMessages([
-                    'confirm_running_edit' => 'Confirm that open orders will be cancelled and the ladder rebuilt before saving changes to a running paper bot.',
+                    'confirm_running_edit' => 'Confirm the effect of saving changes to a running paper bot: structural or capital changes cancel open orders and rebuild the ladder.',
                 ]);
             }
 
@@ -493,6 +493,9 @@ class BotController extends Controller
                 'name' => trim((string) $request->validated('name')),
                 'capital_allocation' => (string) $request->validated('capital_allocation'),
                 'fee_rate' => $feeRate,
+                'tick_interval_seconds' => $request->has('tick_interval_seconds')
+                    ? (int) $request->validated('tick_interval_seconds')
+                    : (int) $locked->tick_interval_seconds,
                 'configuration' => $request->strategyConfiguration($locked),
             ];
 
@@ -535,6 +538,10 @@ class BotController extends Controller
 
                 if ($request->has('fee_rate')) {
                     $attributes['fee_rate'] = $feeRate;
+                }
+
+                if ($request->has('tick_interval_seconds')) {
+                    $attributes['tick_interval_seconds'] = $proposed['tick_interval_seconds'];
                 }
 
                 $locked->update($attributes);

@@ -29,7 +29,8 @@ it('documents configuration keys that exist', function () {
             ->and(config()->has($key))->toBeTrue();
     }
 
-    expect($docs)->toContain('php artisan horizon')
+    expect($docs)->toContain('| `trading.tick.interval_seconds` | `TRADING_TICK_INTERVAL` | `10` |')
+        ->and($docs)->toContain('php artisan horizon')
         ->and($docs)->toContain('php artisan schedule:work')
         ->and($docs)->toContain('TRADING_LIVE_ENABLED')
         ->and($docs)->toContain('CCXT');

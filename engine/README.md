@@ -81,7 +81,7 @@ healthcheck runs `/engine healthcheck`, which performs an in-container
 
 ### Tick, grid, paper-fill, and strategy ports (phase 4.2–4.8)
 
-`internal/tick` ports the PHP `bots:dispatch` due-check (60s default, 1s
+`internal/tick` ports the PHP `bots:dispatch` due-check (10s default, 1s
 minimum), the per-interval cache guard, the `RunBotTick` unique/overlap policy,
 and `BotHealthMonitor`'s `max(stale, interval + health)` threshold. It also
 provides an in-process scheduler and one-evaluation-per-bot tracker. None of it
@@ -274,7 +274,7 @@ All values come from the environment, mirroring the `app` service:
 | `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1` / `6379` | Compose sets `redis` / `6379` |
 | `REDIS_PASSWORD` / `REDIS_DB` | empty / `0` | Optional |
 | `TRADING_LIVE_ENABLED` | `false` | Live gate enforced by `internal/risk`; false keeps live bots paused |
-| `TRADING_TICK_INTERVAL` | `60` | Seconds; sets the default stale-price bound (`max(15s, interval / 2)`) |
+| `TRADING_TICK_INTERVAL` | `10` | Seconds; sets the default stale-price bound (`max(15s, interval / 2)`) |
 | `TRADING_EXCHANGES` | `binance` | Comma-separated, case-sensitive exchange allowlist |
 | `TRADING_DEFAULT_EXCHANGE` | `binance` | Used when bot creation submits a blank exchange |
 | `ENGINE_MARKET_DATA_WS_URL` | empty | Full public WebSocket endpoint, e.g. `wss://stream.binance.com:9443/ws`. Empty means market data stays idle |

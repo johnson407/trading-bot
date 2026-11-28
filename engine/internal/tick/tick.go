@@ -12,7 +12,7 @@ import (
 
 // Defaults from dispatch/health behaviour and design.md.
 const (
-	DefaultTickIntervalSeconds   = 60
+	DefaultTickIntervalSeconds   = 10
 	MinimumTickIntervalSeconds   = 1
 	DefaultStaleAfterSeconds     = 180
 	DefaultHealthIntervalSeconds = 30

@@ -26,6 +26,7 @@ class BotSummaryResource extends JsonResource
             'desired_status' => $this->desired_status?->value,
             'capital_allocation' => $this->capital_allocation,
             'fee_rate' => $this->fee_rate,
+            'tick_interval_seconds' => (int) $this->tick_interval_seconds,
             'base_inventory' => $this->base_inventory,
             'quote_inventory' => $this->quote_inventory,
             'average_entry_price' => $this->average_entry_price,

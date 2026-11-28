@@ -14,6 +14,36 @@ it('renders the settings hub', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Settings/Index')
+            ->where('tickIntervalSeconds', 10)
+            ->etc());
+});
+
+it('shows the effective default tick interval as a read-only readout', function () {
+    $this->withoutVite();
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->get(route('settings.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('tickIntervalSeconds', 10)
+            ->etc());
+
+    $hub = file_get_contents(resource_path('js/Pages/Settings/Index.vue'));
+
+    expect($hub)->toContain('Default tick interval')
+        ->and($hub)->toContain('tickIntervalSeconds')
+        ->and($hub)->not->toContain('<form');
+});
+
+it('floors a non-positive configured default tick interval', function () {
+    config(['trading.tick.interval_seconds' => 0]);
+    $this->withoutVite();
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->get(route('settings.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('tickIntervalSeconds', 1)
             ->etc());
 });
 

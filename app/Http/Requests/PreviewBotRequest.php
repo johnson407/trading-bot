@@ -70,6 +70,7 @@ class PreviewBotRequest extends FormRequest
             'bot_id' => ['nullable', 'integer'],
             'name' => ['nullable', 'string', 'max:120'],
             'fee_rate' => ['nullable', 'numeric', 'min:0', 'max:0.1'],
+            'tick_interval_seconds' => ['sometimes', 'integer', 'min:1', 'max:3600'],
             'exchange' => ['required', 'string', Rule::in(config('trading.exchanges', ['binance']))],
             'symbol' => ['required', 'string', 'regex:/^[A-Z0-9]{2,12}\/[A-Z0-9]{2,12}$/'],
             'strategy_key' => ['required_without:preset_key', 'string', Rule::in($strategies)],
@@ -137,6 +138,9 @@ class PreviewBotRequest extends FormRequest
             'name' => $this->filled('name') ? trim((string) $this->input('name')) : $bot->name,
             'capital_allocation' => (string) $this->input('capital_allocation'),
             'fee_rate' => $this->filled('fee_rate') ? (string) $this->input('fee_rate') : (string) $bot->fee_rate,
+            'tick_interval_seconds' => $this->has('tick_interval_seconds')
+                ? (int) $this->input('tick_interval_seconds')
+                : (int) $bot->tick_interval_seconds,
             'configuration' => $this->buildStrategyConfiguration($strategyKey),
         ];
     }

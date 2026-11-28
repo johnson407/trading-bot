@@ -97,6 +97,12 @@ docker compose -f docker-compose.prod.yml config --quiet
 Then run the normal poll or deployment command. Rotate by replacing the value
 and recreating both services together.
 
+The default `TRADING_TICK_INTERVAL` is 10 seconds. If the NAS `.env` pins
+`TRADING_TICK_INTERVAL=60`, that value overrides the new default for newly
+created bots and for the engine's quote-staleness bound. Set it to `10` and
+recreate `app` and `engine`. The forward migration lowers existing bots stored
+at exactly 60 seconds to 10; any other explicit interval is left unchanged.
+
 Releases that add running-paper reconcile require a two-phase rollout:
 
 1. Run the forward migration from the current app container:
@@ -405,8 +411,8 @@ Log retention depends on tick rate. Five bots ticking every second emit about
 432,000 completion lines per day; at roughly 250-400 bytes per line that is
 100-170 MB per day before compression. The 30 MiB-per-service rotation
 therefore keeps only a few hours at that rate. Five bots at the default
-60-second interval emit about 7,200 lines per day, roughly 2-3 MB, which the
-same rotation retains for weeks. Ten one-second bots double the high-rate
+10-second interval emit about 43,200 lines per day, roughly 11-17 MB, which the
+same rotation retains for days. Ten one-second bots double the high-rate
 figures. Operators who need longer history should ship logs to external
 storage or raise `max-size`/`max-file` together with the host disk budget.
 

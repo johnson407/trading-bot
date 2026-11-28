@@ -32,6 +32,7 @@ class UpdateBotRequest extends FormRequest
             'name' => ['required', 'string', 'max:120'],
             'capital_allocation' => ['required', 'regex:/^\d+(\.\d+)?$/', 'gt:0'],
             'fee_rate' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:0.1'],
+            'tick_interval_seconds' => ['sometimes', 'integer', 'min:1', 'max:3600'],
             'center_price' => ['required', 'regex:/^\d+(\.\d+)?$/', 'gt:0'],
             'level_count' => ['required', 'integer', 'min:1', 'max:50'],
             'spacing_type' => [

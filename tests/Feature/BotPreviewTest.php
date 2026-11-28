@@ -188,6 +188,7 @@ it('returns a field diff for an owned bot edit preview', function () {
         'name' => 'Old name',
         'capital_allocation' => '1000',
         'fee_rate' => '0.001',
+        'tick_interval_seconds' => 60,
     ]);
     StrategyConfig::factory()->for($bot)->create([
         'strategy_key' => 'simple-grid',
@@ -206,13 +207,14 @@ it('returns a field diff for an owned bot edit preview', function () {
         'name' => 'New name',
         'capital_allocation' => '1200',
         'fee_rate' => '0.002',
+        'tick_interval_seconds' => 30,
         'center_price' => '51000',
         'level_count' => 4,
         'spacing_value' => '150',
         'order_quantity' => '0.002',
     ]));
 
-    $response->assertOk()->assertJsonCount(7, 'diff');
+    $response->assertOk()->assertJsonCount(8, 'diff');
 
     $diff = collect($response->json('diff'))->keyBy('key');
 
@@ -222,6 +224,8 @@ it('returns a field diff for an owned bot edit preview', function () {
         ->and($diff['capital_allocation']['to'])->toBe('1200')
         ->and($diff['fee_rate']['from'])->toBe('0.001')
         ->and($diff['fee_rate']['to'])->toBe('0.002')
+        ->and($diff['tick_interval_seconds']['from'])->toBe('60')
+        ->and($diff['tick_interval_seconds']['to'])->toBe('30')
         ->and($diff['strategy.center_price']['from'])->toBe('50000')
         ->and($diff['strategy.center_price']['to'])->toBe('51000')
         ->and($diff['strategy.levels_per_side']['from'])->toBe('3')
@@ -275,3 +279,22 @@ it('throttles preview requests', function () {
 
     $this->actingAs($user)->postJson(route('bots.preview'), previewPayload())->assertTooManyRequests();
 });
+
+it('rejects a tick interval outside the supported range during preview', function (mixed $value) {
+    $user = User::factory()->create();
+    fakeMarket();
+
+    $this->actingAs($user)
+        ->postJson(route('bots.preview'), previewPayload(['tick_interval_seconds' => $value]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('tick_interval_seconds');
+})->with([0, 3601, 'ten', 1.5]);
+
+it('accepts the inclusive tick interval preview bounds', function (int $value) {
+    $user = User::factory()->create();
+    fakeMarket();
+
+    $this->actingAs($user)
+        ->postJson(route('bots.preview'), previewPayload(['tick_interval_seconds' => $value]))
+        ->assertOk();
+})->with([1, 3600]);

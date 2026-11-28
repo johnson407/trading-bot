@@ -39,6 +39,7 @@ it('renders the edit page with the current configuration for an idle bot', funct
             ->where('bot.name', 'Editable')
             ->where('bot.symbol', 'BTC/USDT')
             ->where('bot.fee_rate', '0.00150000')
+            ->where('bot.tick_interval_seconds', (int) config('trading.tick.interval_seconds'))
             ->where('configuration.center_price', '50000')
             ->where('configuration.levels_per_side', 6)
             ->where('editable', true)

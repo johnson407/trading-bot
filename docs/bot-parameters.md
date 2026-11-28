@@ -256,7 +256,7 @@ These live in `.env`, `config/trading.php`, and `config/risk.php`:
 | `TRADING_EXCHANGES` | `binance` | Comma-separated allowlist for the exchange dropdown. |
 | `TRADING_PAPER_FEE_RATE` | `0` | Default paper fee fraction (prefills the create form and seeds `fee_rate` when the field is omitted). |
 | `TRADING_MARKET_DATA_CACHE_SECONDS` | `60` | How long preview market data is cached per exchange and symbol. |
-| `TRADING_TICK_INTERVAL` | `60` | Copied into each new bot's `tick_interval_seconds`. The Go engine evaluates each bot only when its interval has elapsed. |
+| `TRADING_TICK_INTERVAL` | `10` | Copied into each new bot's `tick_interval_seconds`. The Go engine evaluates each bot only when its interval has elapsed. |
 | `TRADING_MAX_CONSECUTIVE_FAILURES` | `3` | Documented threshold; the current Go runtime hardcodes 3 and does not read this variable yet. |
 | `TRADING_RECONCILIATION_TOLERANCE` | `0.0001` | Absolute quantity tolerance when comparing local vs exchange balances. |
 | `TRADING_STALE_TICK_SECONDS` | `180` | Documented floor; the current Go runtime hardcodes max(180s, tick interval + 30s). |
@@ -283,11 +283,14 @@ immediately.
 - Idle and stopped bots are editable. A running paper bot is editable after an explicit
   confirmation; live running and paused bots are read-only.
 - Protective exit rules are separate from the strategy form and remain editable in every bot state.
-- The edit form can change name, `capital_allocation`, `fee_rate`, and strategy configuration -
-  not exchange, symbol, strategy, or mode.
+- The edit form can change name, `capital_allocation`, `fee_rate`, `tick_interval_seconds`, and
+  strategy configuration - not exchange, symbol, strategy, or mode. The tick interval accepts 1-3600
+  seconds.
 - A running paper edit shows a field diff and ladder preview before saving. A confirmed structural
   or capital change sets `reconcile_pending`; the engine cancels open orders, clears strategy state,
-  and rebuilds the ladder on the next tick. Name-only and fee-only changes do not cancel orders.
+  and rebuilds the ladder on the next tick. Name-only, fee-only, and interval-only changes do not
+  themselves cancel orders or rebuild the ladder; an overdue bot can still be paused by the
+  stale-tick check, which cancels orders.
 - An idle or stopped structural change sets a pending strategy reset instead. The update retires
   the active grid, clears strategy state, and the new config takes effect on the next start.
   Strategies copy structural values into their state on `initialize()`.
@@ -307,4 +310,4 @@ quantity `0.001`, capital `1000`.
   sell can sit at a level whose ladder plan is still `buy`; the plan side is the center-based
   label, while the open order's side controls fills and inventory.
 - All 12 orders fit under the 20-order default; buy notional fits under 1000.
-- Tick interval 60s, fees 0.
+- Tick interval 10s, fees 0.

@@ -22,6 +22,7 @@ final class BotEditDiff
         ['key' => 'name', 'label' => 'Name', 'type' => 'text', 'source' => 'bot', 'field' => 'name'],
         ['key' => 'capital_allocation', 'label' => 'Capital allocation', 'type' => 'money', 'source' => 'bot', 'field' => 'capital_allocation'],
         ['key' => 'fee_rate', 'label' => 'Fee rate', 'type' => 'rate', 'source' => 'bot', 'field' => 'fee_rate'],
+        ['key' => 'tick_interval_seconds', 'label' => 'Tick interval', 'type' => 'integer', 'source' => 'bot', 'field' => 'tick_interval_seconds'],
         ['key' => 'strategy.center_price', 'label' => 'Center price', 'type' => 'money', 'source' => 'strategy', 'field' => 'center_price'],
         ['key' => 'strategy.levels_per_side', 'label' => 'Levels per side', 'type' => 'integer', 'source' => 'strategy', 'field' => 'levels_per_side'],
         ['key' => 'strategy.spacing_type', 'label' => 'Spacing type', 'type' => 'enum', 'source' => 'strategy', 'field' => 'spacing_type'],

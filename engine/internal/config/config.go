@@ -184,7 +184,7 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
-	tickInterval, err := parsePositiveInt("TRADING_TICK_INTERVAL", envOr(getenv, "TRADING_TICK_INTERVAL", "60"))
+	tickInterval, err := parsePositiveInt("TRADING_TICK_INTERVAL", envOr(getenv, "TRADING_TICK_INTERVAL", "10"))
 	if err != nil {
 		return Config{}, err
 	}

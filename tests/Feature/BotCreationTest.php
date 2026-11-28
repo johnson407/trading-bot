@@ -195,7 +195,7 @@ it('stores the configured default tick interval for a new bot', function () {
 
     $this->actingAs($user)->post(route('bots.store'), botPayload())->assertRedirect(route('bots.index'));
 
-    expect(Bot::where('user_id', $user->id)->firstOrFail()->tick_interval_seconds)->toBe(60);
+    expect(Bot::where('user_id', $user->id)->firstOrFail()->tick_interval_seconds)->toBe(10);
 });
 
 it('stores the configured tick interval override for a new bot', function () {

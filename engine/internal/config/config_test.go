@@ -46,8 +46,8 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("TradingDefaultExchange = %q, want binance", cfg.TradingDefaultExchange)
 	}
 
-	if cfg.TradingTickInterval != 60*time.Second {
-		t.Errorf("TradingTickInterval = %s, want 60s", cfg.TradingTickInterval)
+	if cfg.TradingTickInterval != 10*time.Second {
+		t.Errorf("TradingTickInterval = %s, want 10s", cfg.TradingTickInterval)
 	}
 
 	if cfg.TradingOrderSync != 5*time.Second {
@@ -62,8 +62,8 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("TradingExchangeBaseURL = %q, want empty", cfg.TradingExchangeBaseURL)
 	}
 
-	if cfg.MarketData.StaleAfter != 30*time.Second {
-		t.Errorf("MarketData.StaleAfter = %s, want 30s (half of the 60s tick interval)", cfg.MarketData.StaleAfter)
+	if cfg.MarketData.StaleAfter != 15*time.Second {
+		t.Errorf("MarketData.StaleAfter = %s, want 15s (the floor above half of the 10s tick interval)", cfg.MarketData.StaleAfter)
 	}
 
 	if cfg.BacktestJobTimeout != 600*time.Second {

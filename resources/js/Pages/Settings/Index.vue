@@ -1,6 +1,10 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
+
+defineProps({
+    tickIntervalSeconds: { type: Number, required: true },
+});
 </script>
 
 <template>
@@ -17,7 +21,7 @@ import { Head, Link } from '@inertiajs/vue3';
                     Manage the account configuration used for live trading and risk checks.
                 </p>
 
-                <div class="grid gap-6 md:grid-cols-2">
+                <div class="grid gap-6 md:grid-cols-3">
                     <Link :href="route('exchange-credentials.index')"
                         class="group rounded-lg border border-slate-700 bg-slate-800 p-6 shadow-sm transition hover:border-blue-500 hover:bg-slate-700">
                         <h3 class="text-lg font-semibold text-slate-100">Exchange credentials</h3>
@@ -39,6 +43,16 @@ import { Head, Link } from '@inertiajs/vue3';
                             Edit limits &rarr;
                         </span>
                     </Link>
+
+                    <div class="rounded-lg border border-slate-700 bg-slate-800 p-6 shadow-sm">
+                        <h3 class="text-lg font-semibold text-slate-100">Default tick interval</h3>
+                        <p class="mt-2 text-sm text-slate-300">
+                            New bots evaluate once every
+                            <span class="font-semibold text-slate-100">{{ tickIntervalSeconds }}</span>
+                            seconds unless their individual interval is changed.
+                        </p>
+                        <p class="mt-4 text-xs text-slate-400">Read-only; set with TRADING_TICK_INTERVAL.</p>
+                    </div>
                 </div>
             </div>
         </div>

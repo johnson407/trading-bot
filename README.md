@@ -181,7 +181,7 @@ The dashboard is at <http://localhost:8000>. For frontend development, run
    specific fields appear for trailing, martingale, and dynamic grids.
 5. Save, open the bot detail page, and press **Start**.
 6. Start publishes a command; the Go engine evaluates the bot at its tick
-   interval (60 seconds by default). The detail and list pages poll every five
+   interval (10 seconds by default). The detail and list pages poll every five
    seconds for orders, fills, inventory, and P&L.
 7. Press **Pause** to keep open orders, or **Stop** to request cancellation. If
    the engine is unreachable, stop and kill-switch cancel open live orders
