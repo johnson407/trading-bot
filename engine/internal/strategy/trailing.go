@@ -308,6 +308,10 @@ func (t *TrailingGrid) spacingType(input Input) (SpacingType, error) {
 		return "", invalidConfig(t.Key(), "spacing_type must be arithmetic or geometric")
 	}
 
+	if spacingType == SpacingDynamic {
+		return "", invalidConfig(t.Key(), "spacing_type must be arithmetic or geometric")
+	}
+
 	return spacingType, nil
 }
 

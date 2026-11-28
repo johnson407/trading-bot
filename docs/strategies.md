@@ -75,8 +75,27 @@ place, an optional stop flag, events, and client order IDs to cancel.
 | --- | --- | --- |
 | `simple-grid` | Static arithmetic or geometric ladder | `center_price`, `levels_per_side` or `level_count`, `spacing_type`, `spacing_value`, `order_quantity` |
 | `trailing-grid` | Recenters when price moves beyond a distance | Simple grid keys plus `trailing_distance` |
-| `martingale-grid` | Increases order size after fills with hard caps | Simple grid keys plus `size_multiplier`, `max_order_quantity`, `max_increases` |
+| `martingale-grid` | Increases buy size after entry fills, resets after sells, with hard caps | Simple grid keys plus `size_multiplier`, `max_order_quantity`, `max_increases` |
 | `dynamic-grid` | Sets spacing from recent volatility | `levels_per_side`, `order_quantity`, `min_spacing`, `max_spacing`, optional `volatility_multiplier`, `initial_spacing`, `recalculation_interval_seconds`, `spacing_hysteresis_percent` |
+
+Martingale requires `max_order_quantity` to be at least the base order quantity
+(the submitted `order_quantity`), `size_multiplier` to be greater than `1`, and
+`max_increases` to be zero or greater. Creation, updates, engine initialization,
+and every tick of an existing bot reject values outside those bounds before any
+order is placed.
+Only buy entry fills increase size. Every sell fill resets the current quantity
+to the base, the increase count to zero, and the cap flag to false.
+
+Trailing-grid and martingale-grid accept only `arithmetic` or `geometric`
+spacing. Dynamic spacing is reserved for the dynamic grid, which derives its
+spacing from recent volatility and ignores `spacing_type`.
+
+Dynamic-grid keeps replenishing its ladder between spacing recalculations. On a
+tick that is not due for a recalculation, it retains the persisted spacing and
+emits an order for every armed level that has no open order. This restores
+orders after cancellation, rejection, a position-limit skip, a pause/resume, or
+a grid replacement instead of waiting for the next recalculation. Prices shared
+by the old and new ladders also receive orders after the replacement.
 
 ## Adding a strategy
 

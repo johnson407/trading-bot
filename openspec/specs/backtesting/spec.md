@@ -61,17 +61,32 @@ The system SHALL retrieve historical OHLCV for the run's exchange, symbol, timef
 
 ### Requirement: Deterministic strategy replay
 
-The Go engine SHALL replay the snapshotted strategy through the same lifecycle used for live execution — initialization, tick, fill, cancel, and stop — in a side-effect-free simulation that does not write bot, order, fill, risk, or activity records. Laravel SHALL NOT replay strategies after cutover.
+The Go engine SHALL replay the snapshotted strategy through the same first-tick and subsequent-tick lifecycle used for live execution — initialization inside the normal tick path, tick, fill, cancel, and stop — in a side-effect-free simulation that does not write bot, order, fill, risk, or activity records. Laravel SHALL NOT replay strategies after cutover.
 
 #### Scenario: Strategy lifecycle is honored
 
 - **WHEN** the engine replays a candle sequence
-- **THEN** it calls initialization once, ticks on each subsequent candle, and reports each fill and cancellation to the strategy
+- **THEN** it evaluates the first candle through the strategy's normal tick path with new state, evaluates each subsequent candle, and reports each fill and cancellation to the strategy
 
 #### Scenario: First candle initializes and ticks
 
 - **WHEN** the engine processes the first candle
-- **THEN** it calls initialization and then a tick with the initialized state, and initial grid creation does not trigger an extra tick
+- **THEN** it calls the strategy's normal tick with a new state so initialization and initial order generation happen in one decision, and it does not call initialization separately in a way that suppresses first-candle orders
+
+#### Scenario: Dynamic first candle places its ladder
+
+- **WHEN** a dynamic-grid replay starts with a recalculation interval longer than one candle
+- **THEN** the first candle places the initial ladder without waiting for the interval to elapse
+
+#### Scenario: Grid replacement re-places the new ladder
+
+- **WHEN** a candle causes a grid replacement that cancels the open simulated orders
+- **THEN** the new ladder receives orders for its armed levels, including levels whose prices were also present in the replaced ladder
+
+#### Scenario: A second evaluation that returns no orders does not empty the ladder
+
+- **WHEN** the engine re-evaluates a replaced grid and the second evaluation returns no orders
+- **THEN** the orders already computed for that candle's new ladder are not discarded
 
 #### Scenario: Multiple fills are processed sequentially
 

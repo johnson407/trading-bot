@@ -585,6 +585,66 @@ it('rejects malformed dynamic grid spacing hysteresis values on update', functio
         ->assertSessionHasErrors('spacing_hysteresis_percent');
 })->with(['.5', '20.', '1e1']);
 
+it('rejects a martingale maximum below the order quantity on update', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create([
+        'status' => 'idle',
+        'strategy_key' => 'martingale-grid',
+    ]);
+
+    StrategyConfig::factory()->for($bot)->create([
+        'strategy_key' => 'martingale-grid',
+        'configuration' => [
+            'center_price' => '100',
+            'levels_per_side' => 2,
+            'spacing_type' => 'arithmetic',
+            'spacing_value' => '10',
+            'order_quantity' => '1',
+            'base_order_quantity' => '1',
+            'max_order_quantity' => '10',
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload([
+            'order_quantity' => '5',
+            'max_order_quantity' => '1',
+            'size_multiplier' => '2',
+            'max_increases' => 3,
+        ]))
+        ->assertSessionHasErrors('max_order_quantity');
+});
+
+it('keeps a field error for a non-numeric martingale maximum on update', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create([
+        'status' => 'idle',
+        'strategy_key' => 'martingale-grid',
+    ]);
+
+    StrategyConfig::factory()->for($bot)->create([
+        'strategy_key' => 'martingale-grid',
+        'configuration' => [
+            'center_price' => '100',
+            'levels_per_side' => 2,
+            'spacing_type' => 'arithmetic',
+            'spacing_value' => '10',
+            'order_quantity' => '1',
+            'base_order_quantity' => '1',
+            'max_order_quantity' => '10',
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload([
+            'order_quantity' => '1',
+            'max_order_quantity' => 'not-a-number',
+            'size_multiplier' => '2',
+            'max_increases' => 3,
+        ]))
+        ->assertSessionHasErrors('max_order_quantity');
+});
+
 it('rejects missing strategy fields with validation errors instead of a server error', function (string $strategy, string $field, array $configuration) {
     $user = User::factory()->create();
     $bot = Bot::factory()->for($user)->create([

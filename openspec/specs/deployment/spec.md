@@ -65,7 +65,7 @@ Each successful production build SHALL publish an application image and a matchi
 
 ### Requirement: Production composition
 
-The production composition SHALL run the application, web server, engine, queue worker, scheduler, PostgreSQL, and Redis without source bind mounts. Persistent application storage, database data, and Redis data SHALL use named volumes. Only the web server SHALL publish a host port. Each of the seven services SHALL rotate its JSON container log with a bounded size and file count and SHALL declare a memory limit.
+The production composition SHALL run the application, web server, engine, queue worker, scheduler, PostgreSQL, and Redis without source bind mounts. Persistent application storage, database data, and Redis data SHALL use named volumes. Only the web server SHALL publish a host port. The engine service SHALL have a stop grace period at least as long as its shutdown drain timeout. Each of the seven services SHALL rotate its JSON container log with a bounded size and file count and SHALL declare a memory limit.
 
 #### Scenario: No source code on the host
 
@@ -91,6 +91,11 @@ The production composition SHALL run the application, web server, engine, queue 
 
 - **WHEN** any of the seven production services approaches its configured memory limit
 - **THEN** the container runtime constrains or restarts that service instead of allowing it to exhaust the host
+
+#### Scenario: Engine drains on stop
+
+- **WHEN** the engine service receives a stop request
+- **THEN** Docker waits at least the engine drain timeout before forcing termination
 
 ### Requirement: Migration ownership
 

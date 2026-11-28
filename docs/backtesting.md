@@ -77,11 +77,14 @@ The replay then processes candles in order. For every candle it appends the clos
 to the 30-price window, builds `StrategyInput` with the candle's **close time**,
 and calls the strategy lifecycle:
 
-- The first candle calls `initialize()` and then `onTick()` with the initialized
-  state. Creating the initial grid is not a grid replacement, so it does not
-  trigger another tick.
-- Later candles call `onTick()`.
-- If a grid is replaced, the strategy is re-evaluated once against the new book.
+- The first candle calls `onTick()` with a new state, so initialization and the
+  initial ladder are produced by one decision. Creating the initial grid is not
+  a grid replacement, so it does not trigger another tick.
+- Later candles call `onTick()` with the resulting state.
+- If a grid is replaced, every open order is canceled, the strategy is
+  re-evaluated once against the new book, and every armed level in the new
+  ladder is eligible for a fresh order, including prices shared with the old
+  ladder.
 - Cancellations are applied and reported through `onCancel()`.
 - Orders are placed through the backtest risk guard.
 - Fill processing is sequential: portfolio update → `onFill()` → grid sync →
