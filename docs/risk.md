@@ -40,10 +40,13 @@ realized P&L, plus optional unrealized P&L at the current mark.
 - A paused bot is never resumed by the day's loss monitor. The startup-only
   stale-tick recovery does not apply to a daily-loss, risk, protective-exit, or
   kill-switch pause.
-- Baseline reads fail closed. If the account realized P&L, the rollover baseline,
-  or a per-bot baseline cannot be read or persisted, the tick records an error
-  and places no orders instead of treating the loss as zero. A failed rollover
-  keeps the previous baseline and retries on the next tick; it never stores zero.
+- Baseline reads fail closed. If the account realized P&L, an existing
+  account-scope rollover baseline, or a per-bot baseline cannot be read or
+  persisted, the tick records an error and places no orders instead of treating
+  the loss as zero. A failed rollover keeps the previous baseline and retries
+  on the next tick; it never stores zero. A user with no account-scope row uses
+  the default account limit and the current realized total as an in-memory
+  baseline for that tick, with no persisted account baseline.
 
 ## Protective exits
 

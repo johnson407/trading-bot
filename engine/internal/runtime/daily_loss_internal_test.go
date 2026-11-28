@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -77,6 +78,164 @@ func restoreRenamedBotsRealizedColumn(t *testing.T, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(context.Background(),
 		`ALTER TABLE bots RENAME COLUMN realized_pnl_unavailable_test TO realized_pnl`); err != nil {
 		t.Fatalf("restore leftover realized_pnl column: %v", err)
+	}
+}
+
+// TestRolloverGuardUsesUTCNotSessionTimezone catches a guard that compares
+// the UTC wall clock through the database session timezone. The old row is
+// yesterday in UTC but already today in Asia/Shanghai, so a session-zone
+// comparison would treat the rollover as already done and leave the old
+// baseline in place.
+func TestRolloverGuardUsesUTCNotSessionTimezone(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set RUNTIME_TEST_DSN to run the PostgreSQL runtime test")
+	}
+	separator := "?"
+	if strings.Contains(dsn, "?") {
+		separator = "&"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn+separator+"timezone=Asia/Shanghai")
+	if err != nil {
+		t.Fatalf("connect with session timezone: %v", err)
+	}
+	t.Cleanup(pool.Close)
+
+	userID, botID := dailyLossInternalTestUserBot(t, ctx, pool)
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO risk_limits (scope, user_id, daily_loss_limit, day_start, day_start_realized_pnl, created_at, updated_at)
+		 VALUES ('user', $1, '100', date_trunc('day', now() AT TIME ZONE 'UTC') - interval '4 hours', '0', now(), now())`,
+		userID); err != nil {
+		t.Fatalf("insert account risk limit: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO risk_limits (scope, user_id, bot_id, daily_loss_limit, created_at, updated_at)
+		 VALUES ('bot', $1, $2, '100000', now(), now())`, userID, botID); err != nil {
+		t.Fatalf("insert bot override: %v", err)
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+	bot := &Bot{
+		ID: botID, UserID: userID,
+		Realized: decimal.Zero(), Base: decimal.Zero(), AverageEntry: decimal.Zero(),
+		Settings: map[string]any{"daily_loss_baseline": map[string]any{"day": today, "realized": "0"}},
+	}
+	trading := New(pool, nil, nil)
+	if _, _, accountHit, err := trading.dailyLoss(ctx, bot, decimal.MustParse("100")); err != nil {
+		t.Fatalf("first dailyLoss: %v", err)
+	} else if accountHit {
+		t.Fatal("first dailyLoss paused the account before any loss was realized")
+	}
+
+	var stored time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT day_start FROM risk_limits WHERE user_id=$1 AND scope='user' AND bot_id IS NULL`,
+		userID,
+	).Scan(&stored); err != nil {
+		t.Fatalf("read account day_start: %v", err)
+	}
+	if got := stored.UTC().Format("2006-01-02"); got != today {
+		t.Fatalf("day_start rolled to %s, want UTC day %s", got, today)
+	}
+
+	if _, err := pool.Exec(ctx, `UPDATE bots SET realized_pnl = '-150' WHERE id = $1`, botID); err != nil {
+		t.Fatalf("realize loss: %v", err)
+	}
+	bot.Realized = decimal.MustParse("-150")
+	if _, _, accountHit, err := trading.dailyLoss(ctx, bot, decimal.MustParse("100")); err != nil {
+		t.Fatalf("second dailyLoss: %v", err)
+	} else if !accountHit {
+		t.Fatal("account daily loss was not detected after the rollover persisted the baseline")
+	}
+}
+
+// TestDailyLossWithoutAccountRowUsesCurrentRealizedBaseline preserves the
+// pre-change behavior for users whose account-scope risk-limit row is absent:
+// historical realized P&L is not treated as today's account loss.
+func TestDailyLossWithoutAccountRowUsesCurrentRealizedBaseline(t *testing.T) {
+	pool := dailyLossInternalTestPool(t)
+	ctx := context.Background()
+	userID, botID := dailyLossInternalTestUserBot(t, ctx, pool)
+
+	if _, err := pool.Exec(ctx, `UPDATE bots SET realized_pnl = '-150' WHERE id = $1`, botID); err != nil {
+		t.Fatalf("realize loss: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO risk_limits (scope, user_id, bot_id, daily_loss_limit, created_at, updated_at)
+		 VALUES ('bot', $1, $2, '100000', now(), now())`, userID, botID); err != nil {
+		t.Fatalf("insert bot override: %v", err)
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+	bot := &Bot{
+		ID: botID, UserID: userID,
+		Realized: decimal.MustParse("-150"), Base: decimal.Zero(), AverageEntry: decimal.Zero(),
+		Settings: map[string]any{"daily_loss_baseline": map[string]any{"day": today, "realized": "0"}},
+	}
+	trading := New(pool, nil, nil)
+	_, _, accountHit, err := trading.dailyLoss(ctx, bot, decimal.MustParse("100"))
+	if err != nil {
+		t.Fatalf("dailyLoss: %v", err)
+	}
+	if accountHit {
+		t.Fatal("historical realized P&L was counted as today's account loss without an account baseline row")
+	}
+}
+
+func restoreRenamedBotsSettingsColumn(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	var leftover bool
+	if err := pool.QueryRow(context.Background(),
+		`SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name = 'bots'
+			  AND column_name = 'settings_unavailable_test'
+		)`).Scan(&leftover); err != nil {
+		t.Fatalf("check for leftover renamed settings column: %v", err)
+	}
+	if !leftover {
+		return
+	}
+	if _, err := pool.Exec(context.Background(),
+		`ALTER TABLE bots RENAME COLUMN settings_unavailable_test TO settings`); err != nil {
+		t.Fatalf("restore leftover settings column: %v", err)
+	}
+}
+
+func TestDailyLossFailsClosedWhenAccountExposureCannotBeRead(t *testing.T) {
+	pool := dailyLossInternalTestPool(t)
+	ctx := context.Background()
+	userID, botID := dailyLossInternalTestUserBot(t, ctx, pool)
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO risk_limits (scope, user_id, daily_loss_limit, day_start, day_start_realized_pnl, created_at, updated_at)
+		 VALUES ('user', $1, '100', now(), '0', now(), now())`, userID); err != nil {
+		t.Fatalf("insert account risk limit: %v", err)
+	}
+
+	restoreRenamedBotsSettingsColumn(t, pool)
+	if _, err := pool.Exec(ctx, `ALTER TABLE bots RENAME COLUMN settings TO settings_unavailable_test`); err != nil {
+		t.Fatalf("rename settings: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := pool.Exec(context.Background(),
+			`ALTER TABLE IF EXISTS bots RENAME COLUMN settings_unavailable_test TO settings`); err != nil {
+			t.Errorf("restore settings: %v", err)
+		}
+	})
+
+	today := time.Now().UTC().Format("2006-01-02")
+	bot := &Bot{
+		ID: botID, UserID: userID,
+		Realized: decimal.Zero(), Base: decimal.Zero(), AverageEntry: decimal.Zero(),
+		Settings: map[string]any{"daily_loss_baseline": map[string]any{"day": today, "realized": "0"}},
+	}
+	trading := New(pool, nil, nil)
+	if _, _, _, err := trading.dailyLoss(ctx, bot, decimal.MustParse("100")); err == nil {
+		t.Fatal("dailyLoss with an unreadable account exposure returned nil, want an error")
 	}
 }
 

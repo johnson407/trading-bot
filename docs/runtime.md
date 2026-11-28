@@ -123,7 +123,9 @@ cause is `stale_tick` is resumed with a fresh first-tick grace. A bot with a
 pending cleanup flag does not resume until that cleanup succeeds. Live bots,
 every safety pause, and legacy rows with no recorded cause stay paused. After
 deploying this change, any bot paused before it has no cause and needs one
-explicit operator start.
+explicit operator start. A bot whose recording time was already invalidated by
+pre-fix bookkeeping and that has no pending cleanup flag also stays paused until
+an operator starts it; deploy does not rewrite pause provenance.
 
 ## Backtests
 

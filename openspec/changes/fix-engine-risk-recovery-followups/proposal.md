@@ -37,6 +37,6 @@ None.
 - `engine/internal/runtime/tick.go` — `dailyLoss`, per-bot baseline persistence, paper `placeOrders`, `pause`.
 - `engine/internal/runtime/live.go` — live `placeLiveOrders` invalid-order tracking.
 - `engine/internal/runtime/runtime.go` — risk-event cooldown helper, auto-resume query/update, `reconcile` ordering, `reconcilePaperState`, `applyDesired`, `resetStrategyState`.
-- Engine tests: `daily_loss_internal_test.go` (new), `daily_loss_limit_integration_test.go`, `runtime_integration_test.go`, `risk_event_internal_test.go`, `auto_resume_internal_test.go`, plus placement tests.
+- Engine tests: `daily_loss_internal_test.go` (new), `invalid_order_internal_test.go` (new), `daily_loss_limit_integration_test.go`, `auto_resume_internal_test.go`.
 - Docs: `docs/engine.md`, `docs/runtime.md`, `docs/risk.md`, `engine/README.md`.
 - No schema, API, dependency, or Laravel application changes.

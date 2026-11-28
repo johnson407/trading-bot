@@ -4,7 +4,7 @@
 
 ### Requirement: Pause provenance refresh during engine bookkeeping
 
-When the engine updates a paused bot's `updated_at` for cancellation retry, reconcile, or strategy-reset bookkeeping without changing the pause cause, it SHALL refresh `pause_reason_recorded_at` in the same update so the current cause remains eligible for auto-resume. Start, stop, kill-switch, and auto-resume writes SHALL keep their existing provenance semantics.
+When the engine updates a paused bot's `updated_at` for cancellation retry, reconcile, or strategy-reset bookkeeping without changing the pause cause, it SHALL refresh `pause_reason_recorded_at` in the same update so the current cause remains eligible for auto-resume. Start, stop, and successful auto-resume SHALL clear both fields; the kill-switch SHALL continue to record the kill-switch cause and time.
 
 #### Scenario: Cancellation retry keeps a paused cause current
 
@@ -28,7 +28,7 @@ When the engine updates a paused bot's `updated_at` for cancellation retry, reco
 
 ### Requirement: Auto-resume waits for pending cleanup
 
-Before auto-resuming stale-paused bots, the engine SHALL complete pending cancellation-retry, reconcile, and strategy-reset cleanup for paused bots. A bot whose cleanup is still pending SHALL NOT auto-resume on that pass.
+Before auto-resuming stale-paused bots, the engine SHALL attempt pending cancellation-retry, reconcile, and strategy-reset cleanup for paused bots. A bot whose cleanup has not completed SHALL NOT auto-resume on that pass, but an eligible bot with no pending cleanup SHALL still auto-resume even when another bot's cleanup is failing.
 
 #### Scenario: Cleanup completes before auto-resume
 

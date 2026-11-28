@@ -548,8 +548,14 @@ func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal)
 		baseline = mustDecimal(fmt.Sprint(stored["realized"]))
 	} else {
 		baseline = bot.Realized
+		previous, hadPrevious := bot.Settings["daily_loss_baseline"]
 		bot.Settings["daily_loss_baseline"] = map[string]any{"day": today, "realized": bot.Realized.String()}
 		if err := r.persistSettings(ctx, bot); err != nil {
+			if hadPrevious {
+				bot.Settings["daily_loss_baseline"] = previous
+			} else {
+				delete(bot.Settings, "daily_loss_baseline")
+			}
 			return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("persist daily loss baseline: %w", err)
 		}
 	}
@@ -584,11 +590,20 @@ func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal)
 		if _, err := r.pool.Exec(ctx,
 			`UPDATE risk_limits SET day_start = $3, day_start_realized_pnl = $2, updated_at = now()
 			 WHERE user_id = $1 AND scope = 'user' AND bot_id IS NULL
-			   AND (day_start IS NULL OR (day_start AT TIME ZONE 'UTC')::date <> $4::date)`,
+			   AND (day_start IS NULL OR day_start::date <> $4::date)`,
 			bot.UserID, userBaselineRaw, now, today,
 		); err != nil {
 			return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("persist account daily loss baseline: %w", err)
 		}
+	} else if !accountRow {
+		// With no account-scope row there is nowhere to persist a baseline.
+		// Use the current realized total for this tick so historical P&L is
+		// not counted as today's account loss.
+		realized, err := r.accountRealizedPNL(ctx, bot.UserID)
+		if err != nil {
+			return decimal.Zero(), decimal.Zero(), false, err
+		}
+		userBaselineRaw = realized.String()
 	}
 
 	rows, err := r.pool.Query(ctx,

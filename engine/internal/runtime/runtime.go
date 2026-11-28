@@ -246,7 +246,9 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 		if !bot.live() && bot.ReconcilePending {
 			if err := r.reconcilePendingPaper(ctx, bot); err != nil {
 				message := "Start refused: pending reconcile failed: " + err.Error()
-				_, _ = r.pool.Exec(ctx, `UPDATE bots SET last_error = $2, desired_status = status, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
+				_, _ = r.pool.Exec(ctx, `UPDATE bots SET last_error = $2, desired_status = status,
+					pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL THEN now() ELSE pause_reason_recorded_at END,
+					updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
 
 				return fmt.Errorf("%s", message)
 			}
@@ -651,9 +653,15 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 	// Complete pending cancellation-retry/reconcile/strategy-reset cleanup
 	// before resuming stale-paused bots so the provenance refresh in that
 	// cleanup makes them eligible in this same pass.
-	if r.autoResumePending && !cleanupFailed {
+	if r.autoResumePending {
 		if err := r.autoResumeStalePausedBots(ctx); err != nil {
 			r.logger.Error("auto-resume of stale-paused bots failed", "error_type", fmt.Sprintf("%T", err))
+		}
+		if cleanupFailed {
+			// The blocked bot stays ineligible through its pending-flag
+			// predicates, but unrelated stale-paused bots can still resume.
+			// Keep the one-shot pass pending so cleanup is retried next time.
+			r.autoResumePending = true
 		}
 	}
 
@@ -939,7 +947,9 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 		if !bot.live() && bot.ReconcilePending {
 			if err := r.reconcilePendingPaper(ctx, bot); err != nil {
 				message := "Start refused: pending reconcile failed: " + err.Error()
-				_, _ = r.pool.Exec(ctx, `UPDATE bots SET last_error = $2, desired_status = status, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
+				_, _ = r.pool.Exec(ctx, `UPDATE bots SET last_error = $2, desired_status = status,
+					pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL THEN now() ELSE pause_reason_recorded_at END,
+					updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
 
 				return fmt.Errorf("%s", message)
 			}

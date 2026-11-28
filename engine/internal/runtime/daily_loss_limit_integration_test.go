@@ -193,8 +193,8 @@ func TestDailyLossBotOverrideTakesPrecedenceOverAccountLimit(t *testing.T) {
 }
 
 // This covers the per-bot default. Without an account-scope row there is no
-// place to persist the account baseline, so the account-wide default is not
-// exercised here; normal bot creation inserts that row.
+// place to persist the account baseline, so the account check uses the current
+// realized total as its in-memory baseline; normal bot creation inserts that row.
 func TestDailyLossUsesDefaultWhenNoRiskLimitRows(t *testing.T) {
 	pool := dailyLossTestPool(t)
 	ctx := context.Background()
@@ -288,6 +288,79 @@ func TestRolloverFailureDoesNotPersistZeroBaseline(t *testing.T) {
 	}
 	if dayStart.After(time.Now().UTC().Add(-time.Hour)) {
 		t.Fatalf("day_start = %v, want the previous (pre-rollover) day", dayStart)
+	}
+
+	if _, err := pool.Exec(ctx, `DROP TRIGGER IF EXISTS test_block_risk_limit_rollover_trigger ON risk_limits`); err != nil {
+		t.Fatalf("drop rollover failure trigger: %v", err)
+	}
+	if err := trading.TickBot(ctx, botID); err != nil {
+		t.Fatalf("retry tick: %v", err)
+	}
+	if err := pool.QueryRow(ctx,
+		`SELECT day_start_realized_pnl::text, day_start FROM risk_limits WHERE user_id=$1 AND scope='user' AND bot_id IS NULL`,
+		userID,
+	).Scan(&baseline, &dayStart); err != nil {
+		t.Fatalf("read retried account baseline: %v", err)
+	}
+	if baseline != "0.0000000000000000" {
+		t.Fatalf("retried account baseline = %q, want 0", baseline)
+	}
+	if dayStart.Format("2006-01-02") != time.Now().UTC().Format("2006-01-02") {
+		t.Fatalf("retried day_start = %v, want today", dayStart)
+	}
+}
+
+func TestRolloverAlreadyCompletedIsNotOverwritten(t *testing.T) {
+	pool := dailyLossTestPool(t)
+	ctx := context.Background()
+	userID, botID := dailyLossTestBot(t, pool, "-150")
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO risk_limits (scope, user_id, daily_loss_limit, day_start, day_start_realized_pnl, created_at, updated_at)
+		 VALUES ('user', $1, '1000', now() - interval '1 day', '42', now(), now())`, userID); err != nil {
+		t.Fatalf("insert account risk limit: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO risk_limits (scope, user_id, bot_id, daily_loss_limit, created_at, updated_at)
+		 VALUES ('bot', $1, $2, '100000', now(), now())`, userID, botID); err != nil {
+		t.Fatalf("insert bot override: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_skip_risk_limit_rollover() RETURNS trigger AS $$
+		BEGIN
+			IF NEW.day_start IS DISTINCT FROM OLD.day_start THEN
+				RETURN NULL;
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER test_skip_risk_limit_rollover_trigger
+			BEFORE UPDATE ON risk_limits
+			FOR EACH ROW EXECUTE FUNCTION test_skip_risk_limit_rollover();
+	`); err != nil {
+		t.Fatalf("install rollover skip trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS test_skip_risk_limit_rollover_trigger ON risk_limits`)
+		_, _ = pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS test_skip_risk_limit_rollover()`)
+	})
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+	if err := trading.TickBot(ctx, botID); err != nil {
+		t.Fatalf("tick: %v", err)
+	}
+	assertBotState(t, pool, botID, "running", "running")
+	assertNoLastError(t, pool, botID)
+
+	var baseline string
+	if err := pool.QueryRow(ctx,
+		`SELECT day_start_realized_pnl::text FROM risk_limits WHERE user_id=$1 AND scope='user' AND bot_id IS NULL`,
+		userID,
+	).Scan(&baseline); err != nil {
+		t.Fatalf("read account baseline: %v", err)
+	}
+	if baseline != "42.0000000000000000" {
+		t.Fatalf("account baseline = %q, want the existing value 42", baseline)
 	}
 }
 

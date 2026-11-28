@@ -294,7 +294,7 @@ that drain before forcing termination.
 | `bots.status` | Go engine | Runtime state. The engine applies `desired_status` and must not set running over a pause, stop, or kill-switch, except the single startup stale-tick paper resume described above. |
 | `bots.last_error` | Go engine | Runtime failure text. Laravel does not write it after the ownership migration. |
 | `bots.pause_reason` | Go engine | Fixed cause of the latest pause: `stale_tick`, `risk_limit`, `protective_exit`, `daily_loss`, `kill_switch`, `reconciliation_conflict`, `tick_failure`, `live_gate`, `strategy_stop`, `unsupported_exchange`, or `user`. Written in the same update as `status` and `last_error`; cleared on user start, stop, and successful auto-resume. Null for legacy rows. |
-| `bots.pause_reason_recorded_at` | Go engine | Time the cause was recorded. Must equal `updated_at` for startup auto-resume. Bookkeeping writes that bump `updated_at` on a paused bot (cancellation retry, reconcile, strategy reset) refresh it in the same update; start, stop, kill-switch, and auto-resume clear it. |
+| `bots.pause_reason_recorded_at` | Go engine | Time the cause was recorded. Must equal `updated_at` for startup auto-resume. Bookkeeping writes that bump `updated_at` on a paused bot (cancellation retry, reconcile, strategy reset) refresh it in the same update; start, stop, and successful auto-resume clear it, while a kill-switch pause records the `kill_switch` cause and time. |
 
 Laravel now writes only `desired_status` on start, pause, stop, and kill-switch;
 it no longer writes `status`, `last_error`, or the pause-provenance columns, and
@@ -409,8 +409,9 @@ and paper fills are persisted by `internal/runtime`. `internal/decimal` matches 
 - position notional, open-order, and sell-inventory reservation checks;
 - per-bot and account-wide daily loss pause/cancel with engine-owned baselines;
   the runtime resolves limits bot override → account → default per column and
-  fails the tick closed when the stored limit or account day-start baseline
-  cannot be read;
+  fails the tick closed and retries next tick when the account realized P&L,
+  an existing account day-start baseline, or the rollover write fails; archived
+  bots' realized P&L and inventory stay in the account total;
 - protective stop-loss, take-profit, and range exits (pause/cancel only, no
   market flatten, no automatic resume);
 - consecutive exchange failure threshold pause/cancel;
