@@ -96,6 +96,87 @@ func TestDynamicFirstCandlePlacesLadder(t *testing.T) {
 	}
 }
 
+func TestDynamicReplacementReplenishesSharedPricesInReplay(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	candles := []Candle{
+		{
+			OpenTime: start,
+			Open:     mustDecimal(t, "100"),
+			High:     mustDecimal(t, "100"),
+			Low:      mustDecimal(t, "100"),
+			Close:    mustDecimal(t, "100"),
+			Volume:   mustDecimal(t, "1"),
+		},
+		{
+			OpenTime: start.Add(time.Hour),
+			Open:     mustDecimal(t, "100"),
+			High:     mustDecimal(t, "110"),
+			Low:      mustDecimal(t, "100"),
+			Close:    mustDecimal(t, "110"),
+			Volume:   mustDecimal(t, "1"),
+		},
+		{
+			OpenTime: start.Add(2 * time.Hour),
+			Open:     mustDecimal(t, "110"),
+			High:     mustDecimal(t, "110"),
+			Low:      mustDecimal(t, "90"),
+			Close:    mustDecimal(t, "90"),
+			Volume:   mustDecimal(t, "1"),
+		},
+		{
+			OpenTime: start.Add(3 * time.Hour),
+			Open:     mustDecimal(t, "90"),
+			High:     mustDecimal(t, "90"),
+			Low:      mustDecimal(t, "80"),
+			Close:    mustDecimal(t, "80"),
+			Volume:   mustDecimal(t, "1"),
+		},
+	}
+
+	result, err := NewEngine().Run(Configuration{
+		Symbol:            "BTC/USDT",
+		StrategyKey:       "dynamic-grid",
+		Timeframe:         Timeframe1h,
+		StartAt:           start,
+		EndAt:             start.Add(4 * time.Hour),
+		CapitalAllocation: mustDecimal(t, "1000"),
+		FeeRate:           mustDecimal(t, "0"),
+		StrategyConfiguration: map[string]any{
+			"levels_per_side":                2,
+			"order_quantity":                 "1",
+			"min_spacing":                    "5",
+			"max_spacing":                    "20",
+			"initial_spacing":                "10",
+			"volatility_multiplier":          "1",
+			"recalculation_interval_seconds": 5400,
+			"spacing_hysteresis_percent":     0,
+		},
+		RiskLimits: RiskLimits{
+			MaxPositionNotional: mustDecimal(t, "1000"),
+			MaxOpenOrders:       20,
+			DailyLossLimit:      mustDecimal(t, "100"),
+		},
+		ExitRules: risk.NewExitRules(nil, nil, nil, nil),
+	}, candles, nil)
+	if err != nil {
+		t.Fatalf("run replay: %v", err)
+	}
+
+	// The first candle places 80/90/110/120. The second candle is not yet due
+	// for recalculation; the third is due and widens spacing to 20, producing
+	// 60/80/120/140 with 80 and 120 shared with the old ladder. The fourth
+	// candle fills the shared buy at 80, so a lost shared-price order is visible.
+	filledBuyAt := make(map[string]bool, len(result.Fills))
+	for _, fill := range result.Fills {
+		if fill.Side == strategy.SideBuy {
+			filledBuyAt[fill.Price.String()] = true
+		}
+	}
+	if !filledBuyAt["80"] {
+		t.Fatalf("missing shared-price buy fill at 80 after replacement: %+v", result.Fills)
+	}
+}
+
 func TestReplacementPlacesEveryLevelInNewLadder(t *testing.T) {
 	engine := NewEngine()
 	book := NewSimulatedOrderBook("USDT")

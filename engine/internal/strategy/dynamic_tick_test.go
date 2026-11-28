@@ -44,6 +44,23 @@ func dynamicTickTestState() State {
 	})
 }
 
+func TestDynamicGridIgnoresDynamicSpacingType(t *testing.T) {
+	input := dynamicTickTestInput(NewState())
+	input.Config.Values["spacing_type"] = "dynamic"
+
+	decision, err := NewDynamicGrid().Initialize(input)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+
+	if len(decision.Levels) != 4 {
+		t.Fatalf("levels = %d, want 4 from min/max spacing", len(decision.Levels))
+	}
+	if got := decision.State.Get("spacing_value", nil); got != "10" {
+		t.Fatalf("spacing_value = %v, want 10", got)
+	}
+}
+
 func TestDynamicGridNonDueTickReplenishesOrders(t *testing.T) {
 	tests := []struct {
 		name     string
