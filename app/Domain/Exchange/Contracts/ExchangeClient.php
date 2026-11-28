@@ -3,6 +3,7 @@
 namespace App\Domain\Exchange\Contracts;
 
 use App\Domain\Exchange\ValueObjects\Balance;
+use App\Domain\Exchange\ValueObjects\Candle;
 use App\Domain\Exchange\ValueObjects\ExchangeOrder;
 use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Domain\Order\Enums\OrderSide;
@@ -14,6 +15,9 @@ interface ExchangeClient
     public function exchange(): string;
 
     public function market(string $symbol): MarketData;
+
+    /** @return list<Candle> */
+    public function candles(string $symbol, string $timeframe, int $limit): array;
 
     /** @return list<Balance> */
     public function balances(Bot $bot): array;

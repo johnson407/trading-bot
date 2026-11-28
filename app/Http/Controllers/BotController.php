@@ -38,6 +38,7 @@ use App\Services\Engine\CommandPublisher;
 use App\Services\Engine\EngineHeartbeat;
 use App\Services\Engine\GridPlanClient;
 use App\Services\Exchange\MarketDataResolver;
+use App\Services\GridActivity\GridActivityService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
@@ -636,6 +637,19 @@ class BotController extends Controller
         } catch (Throwable $exception) {
             return back()->withErrors(['action' => $exception->getMessage()]);
         }
+    }
+
+    public function gridActivity(Bot $bot, Request $request, GridActivityService $activity): Response
+    {
+        $this->authorize('view', $bot);
+
+        $range = $request->query('range');
+        $bot->loadMissing('strategyConfig');
+
+        return Inertia::render('Bots/GridActivity', [
+            'bot' => BotSummaryResource::make($bot)->resolve(),
+            'gridActivity' => $activity->build($bot, is_string($range) ? $range : null),
+        ]);
     }
 
     public function activity(Bot $bot): Response

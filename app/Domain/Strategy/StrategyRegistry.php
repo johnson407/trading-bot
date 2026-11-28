@@ -10,12 +10,14 @@ namespace App\Domain\Strategy;
  */
 class StrategyRegistry
 {
+    public const DYNAMIC_GRID = 'dynamic-grid';
+
     /** @var list<string> */
     private const KEYS = [
         'simple-grid',
         'trailing-grid',
         'martingale-grid',
-        'dynamic-grid',
+        self::DYNAMIC_GRID,
     ];
 
     public function has(string $key): bool

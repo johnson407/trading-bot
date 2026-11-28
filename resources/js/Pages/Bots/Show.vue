@@ -146,6 +146,7 @@ const levelState = (state) => ({
                     >
                         Edit
                     </Link>
+                    <Link :href="route('bots.grid-activity', bot.id)" class="text-sm text-blue-300 hover:text-blue-200">Grid activity</Link>
                     <Link :href="route('bots.activity', bot.id)" class="text-sm text-blue-300 hover:text-blue-200">Activity log</Link>
                     <Link :href="route('bots.index')" class="text-sm text-blue-300 hover:text-blue-200">Back to bots</Link>
                 </div>

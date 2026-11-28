@@ -49,6 +49,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('bots/{bot}/restore', [BotController::class, 'restore'])->name('bots.restore')->withTrashed()->middleware('throttle:bot-control');
     Route::post('bots/{bot}/orders/{order}/cancel', [BotController::class, 'cancelOrder'])->name('bots.orders.cancel')->middleware('throttle:bot-control');
     Route::get('bots/{bot}/activity', [BotController::class, 'activity'])->name('bots.activity');
+    Route::get('bots/{bot}/grid-activity', [BotController::class, 'gridActivity'])->name('bots.grid-activity')->middleware('throttle:bot-preview');
     Route::get('bots/{bot}/edit', [BotController::class, 'edit'])->name('bots.edit')->middleware('throttle:bot-control');
     Route::patch('bots/{bot}', [BotController::class, 'update'])->name('bots.update')->middleware('throttle:bot-control');
     Route::patch('bots/{bot}/exit-guard', [BotExitGuardController::class, 'update'])->name('bots.exit-guard.update')->middleware('throttle:bot-control');

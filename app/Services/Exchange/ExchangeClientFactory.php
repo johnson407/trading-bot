@@ -24,8 +24,12 @@ class ExchangeClientFactory
 
     /**
      * Public-data client for an exchange, used before a bot exists.
+     *
+     * A bounded client (shorter timeout, fewer attempts) is used for
+     * request-time public data such as candles and must not reuse the
+     * shared default client.
      */
-    public function forExchange(string $exchange): ExchangeClient
+    public function forExchange(string $exchange, ?int $maxAttempts = null, ?int $timeoutMs = null): ExchangeClient
     {
         if (isset($this->overrides[$exchange])) {
             return $this->overrides[$exchange];
@@ -35,8 +39,14 @@ class ExchangeClientFactory
             return $this->paper;
         }
 
-        return $this->paperClients[$exchange] ??= new PaperExchangeClient(
-            new CcxtExchangeClient(exchange: $exchange),
+        $key = $exchange.'|'.($maxAttempts ?? 'default').'|'.($timeoutMs ?? 'default');
+
+        return $this->paperClients[$key] ??= new PaperExchangeClient(
+            new CcxtExchangeClient(
+                exchange: $exchange,
+                maxAttempts: $maxAttempts,
+                timeoutMs: $timeoutMs,
+            ),
         );
     }
 

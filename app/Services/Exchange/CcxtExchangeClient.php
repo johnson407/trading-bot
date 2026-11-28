@@ -7,6 +7,7 @@ use App\Domain\Exchange\Enums\ExchangeErrorType;
 use App\Domain\Exchange\Exceptions\ExchangeException;
 use App\Domain\Exchange\ExchangeErrorMapper;
 use App\Domain\Exchange\ValueObjects\Balance;
+use App\Domain\Exchange\ValueObjects\Candle;
 use App\Domain\Exchange\ValueObjects\ExchangeOrder;
 use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Domain\Order\Enums\OrderSide;
@@ -41,6 +42,7 @@ class CcxtExchangeClient implements ExchangeClient
         ?int $maxAttempts = null,
         ?int $retryDelayMs = null,
         private readonly ?string $exchange = null,
+        private readonly ?int $timeoutMs = null,
     ) {
         $this->clientFactory = $clientFactory;
         $this->sleeper = $sleeper;
@@ -86,6 +88,48 @@ class CcxtExchangeClient implements ExchangeClient
                     ? (new DateTimeImmutable('@'.intdiv((int) $ticker['timestamp'], 1000)))->setTimezone(new DateTimeZone('UTC'))
                     : null,
             );
+        });
+    }
+
+    public function candles(string $symbol, string $timeframe, int $limit): array
+    {
+        return $this->withRetry('candles', function () use ($symbol, $timeframe, $limit) {
+            $client = $this->publicClient();
+            $client->load_markets();
+            $rows = $client->fetch_ohlcv($symbol, $timeframe, null, $limit);
+
+            if (! is_array($rows)) {
+                return [];
+            }
+
+            $byOpenTime = [];
+
+            foreach ($rows as $row) {
+                if (! is_array($row) || count($row) < 5 || ! is_numeric($row[0] ?? null) || ! isset($row[4])) {
+                    continue;
+                }
+
+                try {
+                    $close = Decimal::of(Number::decimalString($row[4]));
+                } catch (Throwable) {
+                    continue;
+                }
+
+                if (! $close->isPositive()) {
+                    continue;
+                }
+
+                $openTimeMs = (int) $row[0];
+
+                $byOpenTime[$openTimeMs] ??= new Candle(
+                    (new DateTimeImmutable('@'.intdiv($openTimeMs, 1000)))->setTimezone(new DateTimeZone('UTC')),
+                    $close,
+                );
+            }
+
+            ksort($byOpenTime);
+
+            return array_values($byOpenTime);
         });
     }
 
@@ -309,7 +353,7 @@ class CcxtExchangeClient implements ExchangeClient
         $options = array_merge([
             'enableRateLimit' => true,
             'rateLimit' => (int) config('trading.exchange.rate_limit_ms', 1000),
-            'timeout' => (int) config('trading.exchange.timeout_ms', 10000),
+            'timeout' => $this->timeoutMs ?? (int) config('trading.exchange.timeout_ms', 10000),
         ], $options);
 
         if ($this->clientFactory !== null) {

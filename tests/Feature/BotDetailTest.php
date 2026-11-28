@@ -70,6 +70,18 @@ it('exposes the open order grid level so the ladder can show an opposite order s
         ->and($show)->toContain('orderForLevel(level).side !== level.side');
 });
 
+it('links to the grid activity view from the bot detail header', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create();
+
+    $this->actingAs($user)->get(route('bots.show', $bot))->assertOk();
+
+    $show = file_get_contents(resource_path('js/Pages/Bots/Show.vue'));
+
+    expect($show)->toContain("route('bots.grid-activity', bot.id)")
+        ->and($show)->toContain('Grid activity');
+});
+
 it('reflects a new fill on the next poll', function () {
     $user = User::factory()->create();
     $bot = Bot::factory()->for($user)->create();
