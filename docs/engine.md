@@ -240,6 +240,26 @@ This per-bot restart grace means engine downtime longer than the threshold does
 not pause a bot before its first post-restart tick. If ticks keep failing for
 the full grace, the usual `bot.stale` / `risk.stale_tick` pause-and-cancel runs.
 
+### Running paper configuration reconcile
+
+A confirmed structural or capital edit to a running paper bot sets
+`bots.reconcile_pending` and publishes `bot.config` with
+`{"strategy_reset": true, "reconcile": true}`. Under the per-bot lock the engine
+cancels open orders, resets the strategy state, and clears
+`reconcile_pending`, `cancel_retry_requested`, and `strategy_reset_pending`. If
+cancellation fails, the flags stay set, new placement is blocked, and the
+periodic reconcile retries. On success the next tick rebuilds the ladder from the
+new configuration.
+
+The tick path and the paper `placeOrders` transaction both check the pending
+flags. A pending or failed reconcile cannot place orders and does not update
+`last_successful_tick_at`. Starting a paper bot with a pending reconcile completes
+the cancel/reset first; if that fails, the start is refused and `last_error`
+records the failure. The periodic reconcile selects `reconcile_pending`,
+`cancel_retry_requested`, and `strategy_reset_pending`, so a lost command still
+recovers. Live bots ignore reconcile requests and log them; a `bot.config` without
+`reconcile` keeps the reset-only behavior.
+
 At startup, before desired-status drift and stale checks, the engine runs one
 recovery pass for stale-paused paper Binance bots. It resumes only rows with
 `status = paused`, `desired_status = running`, `pause_reason = stale_tick`,

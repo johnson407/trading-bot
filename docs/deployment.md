@@ -97,6 +97,29 @@ docker compose -f docker-compose.prod.yml config --quiet
 Then run the normal poll or deployment command. Rotate by replacing the value
 and recreating both services together.
 
+Releases that add running-paper reconcile require a two-phase rollout:
+
+1. Run the forward migration from the current app container:
+   `docker compose exec app php artisan migrate --force`. This adds
+   `bots.reconcile_pending`; the old app and engine ignore it.
+2. Deploy the engine image that understands `reconcile`.
+3. Deploy the app image that publishes reconcile commands.
+
+Do not deploy the new app before the engine: an old engine would reset strategy
+state without cancelling open orders. The new engine also requires the column,
+so the migration must run before the engine image starts.
+
+Roll back in reverse: app first, then clear pending reconcile requests, then
+engine. The old engine ignores `reconcile_pending`, but clearing prevents a
+later upgrade from acting on a stale request. Do not clear
+`cancel_retry_requested`; it is used by other cancellation retries.
+
+```sql
+UPDATE bots
+   SET reconcile_pending = false
+ WHERE reconcile_pending = true;
+```
+
 ## NAS layout
 
 Keep configuration, state, and logs together in a persistent directory. The
@@ -348,6 +371,12 @@ back images, does not write a hold, and exits non-zero so the next poll retries.
 Image rollback does not roll back database schema or data. Migrations should be
 backward-compatible. For data recovery, restore a QNAP snapshot or `pg_dump`
 backup, then deploy the matching image tag.
+
+Running-paper reconcile is engine-first on upgrade and app-first on rollback.
+After rolling the app back, clear pending reconcile flags before retagging the
+engine, using the SQL in [Upgrading an existing deployment](#upgrading-an-existing-deployment).
+This prevents an old engine from resetting strategy state without cancelling the
+orders the new app asked it to reconcile.
 
 ## Logs and troubleshooting
 

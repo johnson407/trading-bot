@@ -47,6 +47,34 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPayloadBool(t *testing.T) {
+	t.Parallel()
+
+	envelope := protocol.Envelope{
+		Payload: json.RawMessage(`{"reconcile":true,"disabled":false,"text":"true","number":1}`),
+	}
+
+	if value, ok := envelope.PayloadBool("reconcile"); !ok || !value {
+		t.Errorf("PayloadBool(reconcile) = %v/%v, want true/true", value, ok)
+	}
+
+	if value, ok := envelope.PayloadBool("disabled"); !ok || value {
+		t.Errorf("PayloadBool(disabled) = %v/%v, want false/true", value, ok)
+	}
+
+	if _, ok := envelope.PayloadBool("text"); ok {
+		t.Error("PayloadBool(text) accepted a string, want rejection")
+	}
+
+	if _, ok := envelope.PayloadBool("number"); ok {
+		t.Error("PayloadBool(number) accepted a number, want rejection")
+	}
+
+	if _, ok := envelope.PayloadBool("missing"); ok {
+		t.Error("PayloadBool(missing) = true, want false")
+	}
+}
+
 func TestDecodeAcceptsHigherVersionWithoutExecuting(t *testing.T) {
 	t.Parallel()
 

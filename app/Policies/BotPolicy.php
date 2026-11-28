@@ -16,7 +16,10 @@ class BotPolicy
     public function update(User $user, Bot $bot): bool
     {
         return $this->owns($user, $bot)
-            && in_array($bot->status, [BotStatus::Idle, BotStatus::Stopped], true);
+            && (
+                in_array($bot->status, [BotStatus::Idle, BotStatus::Stopped], true)
+                || ($bot->isRunning() && ! $bot->isLive())
+            );
     }
 
     public function delete(User $user, Bot $bot): bool
