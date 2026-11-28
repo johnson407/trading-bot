@@ -28,6 +28,11 @@ class PaperExchangeClient implements ExchangeClient
         return ($this->publicData ?? app(CcxtExchangeClient::class))->market($symbol);
     }
 
+    public function candles(string $symbol, string $timeframe, int $limit): array
+    {
+        return ($this->publicData ?? app(CcxtExchangeClient::class))->candles($symbol, $timeframe, $limit);
+    }
+
     public function balances(Bot $bot): array
     {
         return $this->privateOperation('balances');

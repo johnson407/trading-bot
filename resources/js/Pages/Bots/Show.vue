@@ -140,6 +140,7 @@ const levelState = (state) => ({
                 </div>
                 <div class="flex items-center gap-4">
                     <Link v-if="['idle', 'stopped'].includes(bot.status)" :href="route('bots.edit', bot.id)" class="text-sm text-blue-300 hover:text-blue-200">Edit</Link>
+                    <Link :href="route('bots.grid-activity', bot.id)" class="text-sm text-blue-300 hover:text-blue-200">Grid activity</Link>
                     <Link :href="route('bots.activity', bot.id)" class="text-sm text-blue-300 hover:text-blue-200">Activity log</Link>
                     <Link :href="route('bots.index')" class="text-sm text-blue-300 hover:text-blue-200">Back to bots</Link>
                 </div>

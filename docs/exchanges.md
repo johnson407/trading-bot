@@ -89,6 +89,27 @@ cancels open live orders locally through `CancelBotOrders` as an emergency
 measure. The engine still consumes in-band `order.cancel` and `kill_switch`
 commands when healthy.
 
+## Public price history for grid activity
+
+The grid activity page fetches public OHLCV candles for the bot's exchange and
+symbol; it does not use API keys or private endpoints. Each range maps to one
+timeframe and a bounded candle count: 1 hour to 1-minute (60), 6 hours to
+5-minute (72), 24 hours to 5-minute (288, the default), and 7 days to 1-hour
+(168). Successful results are cached for 60 seconds and failures for 30 seconds,
+with a short single-flight lock so concurrent page loads do not stampede the
+exchange. The fetch uses one attempt with a 5-second timeout, so a dead exchange
+degrades the page instead of retrying for the normal three-attempt path.
+
+| Config key | Default | Purpose |
+| --- | --- | --- |
+| `trading.grid_activity.default_range` | `24h` | Range used when `?range=` is absent or unknown |
+| `trading.grid_activity.cache_seconds` | `60` | Successful candle cache lifetime |
+| `trading.grid_activity.failure_cache_seconds` | `30` | Failed candle cache lifetime |
+| `trading.grid_activity.request_timeout_ms` | `5000` | Public market-load and candle timeout |
+| `trading.grid_activity.max_attempts` | `1` | Attempts for the public candle path |
+| `trading.grid_activity.max_markers` | `2000` | Fills and cancels returned per page |
+| `trading.grid_activity.max_grids` | `200` | Ladders returned per page |
+
 ## Rate limiting and retries
 
 CCXT's built-in rate limiter is enabled. The wrapper retries only transient

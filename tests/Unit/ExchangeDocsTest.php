@@ -15,6 +15,13 @@ it('documents configuration keys that exist', function () {
         'trading.failure.max_consecutive',
         'trading.reconciliation.tolerance',
         'trading.orders.sync_interval_seconds',
+        'trading.grid_activity.default_range',
+        'trading.grid_activity.cache_seconds',
+        'trading.grid_activity.failure_cache_seconds',
+        'trading.grid_activity.request_timeout_ms',
+        'trading.grid_activity.max_attempts',
+        'trading.grid_activity.max_markers',
+        'trading.grid_activity.max_grids',
     ];
 
     foreach ($keys as $key) {

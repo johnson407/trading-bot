@@ -154,7 +154,8 @@ Feature tests: `tests/Feature/BotCreationTest.php`, `tests/Feature/BotPreviewTes
 
 Shows mode/status, realized and unrealized P&L, inventory, a grid ladder with
 the plan side, the actual open-order side when it differs, price, and state,
-open orders, recent fills, and risk limits. The mark price for
+open orders, recent fills, and risk limits. The header links to **Grid activity**,
+the price-and-churn view described below. The mark price for
 unrealized P&L is the bot's stored mark (latest tick), otherwise the average entry
 price — the same source the bot list and dashboard use.
 
@@ -262,6 +263,35 @@ the edit page.
 
 Feature test: `tests/Feature/BotUpdateTest.php`.
 
+## Grid activity — `GET /bots/{bot}/grid-activity` (`bots.grid-activity`)
+
+An owner-only, read-only view linked from the bot detail header. It shows a price
+line from public exchange candles, each stored grid's levels clipped to that
+grid's lifetime, fill and cancel markers, and a churn summary for the selected
+window. Ranges are 1 hour, 6 hours, 24 hours (default), and 7 days; the window is
+half-open, so an event exactly at the start belongs to it and one exactly at the
+end does not. An unknown or missing `range` falls back to 24 hours.
+
+Grid levels are drawn per ladder: the current ladder is emphasized, and while the
+bot is not running it is labeled "current ladder, not necessarily trading".
+Fills and cancels have independent show/hide controls. Cancels are all-cause:
+grid replacement, re-arm, pause, stop, operator, and kill switch. The summary
+reports exact fills, cancels, cancel-to-fill ratio, stored grid revisions, median
+lifetime of stopped ladders replaced in the window, current spacing, and
+dynamic-grid hysteresis. A revision is one stored `grids` row; restart re-arms
+that reuse a ladder do not add one. The current ladder is excluded from the
+median. Marker lists and ladders are capped; the page says when it is showing the
+most recent subset while the summary keeps exact totals.
+
+If public price history cannot be fetched, the page shows grids, markers, and
+summary without a price line and states that price history is unavailable. If the
+window contains no grids, fills, or cancels, the page shows an empty state even
+when candles are available. The page includes an accessible table of the plotted
+price points, fills, and cancels. It refreshes every 30 seconds only while the tab
+is visible; hidden tabs do not poll.
+
+Feature test: `tests/Feature/GridActivityTest.php`.
+
 ## Activity — `GET /bots/{bot}/activity` (`bots.activity`)
 
 Shows the latest 100 activity entries and 100 risk events for one bot, newest
@@ -362,7 +392,8 @@ Feature test: `tests/Feature/BacktestSweepDashboardTest.php`.
 ## Polling and freshness
 
 List and detail pages poll every five seconds, meeting the MVP's five-second
-status target without WebSockets. Polls request only the changing props and
+status target without WebSockets. The grid activity page polls every 30 seconds
+and only while the tab is visible. Polls request only the changing props and
 preserve scroll/state. Control actions use normal Inertia POSTs with CSRF
 protection; a failed action never leaves a partial state change visible.
 
@@ -378,6 +409,7 @@ protection; a failed action never leaves a partial state change visible.
 | Create bot | `bots.create`, `bots.store` | `BotCreationTest` |
 | Backtest to bot | `bots.create`, `bots.store` | `BacktestToBotTest`, `BacktestToBotUiTest` |
 | Bot detail | `bots.show` | `BotDetailTest` |
+| Grid activity | `bots.grid-activity` | `GridActivityTest` |
 | Backtest comparison | `bots.show`, `backtests.show` | `BotDetailTest`, `BacktestComparisonTest` |
 | Protective exits | `bots.exit-guard.update` | `BotExitGuardTest` |
 | Start/pause/stop | `bots.start`, `bots.pause`, `bots.stop` | `BotControlTest` |

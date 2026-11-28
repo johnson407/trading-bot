@@ -42,6 +42,25 @@ return [
         'cache_seconds' => (int) env('TRADING_MARKET_DATA_CACHE_SECONDS', 60),
     ],
 
+    'grid_activity' => [
+        // Fixed window definitions keep the chart and its price resolution in
+        // sync. Candles are requested only for the selected window and are
+        // cached briefly so a page refresh does not hammer the exchange.
+        'ranges' => [
+            '1h' => ['timeframe' => '1m', 'limit' => 60, 'seconds' => 3600],
+            '6h' => ['timeframe' => '5m', 'limit' => 72, 'seconds' => 21600],
+            '24h' => ['timeframe' => '5m', 'limit' => 288, 'seconds' => 86400],
+            '7d' => ['timeframe' => '1h', 'limit' => 168, 'seconds' => 604800],
+        ],
+        'default_range' => '24h',
+        'cache_seconds' => 60,
+        'failure_cache_seconds' => 30,
+        'request_timeout_ms' => 5000,
+        'max_attempts' => 1,
+        'max_markers' => 2000,
+        'max_grids' => 200,
+    ],
+
     'tick' => [
         'interval_seconds' => (int) env('TRADING_TICK_INTERVAL', 60),
         'stale_after_seconds' => (int) env('TRADING_STALE_TICK_SECONDS', 180),

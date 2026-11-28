@@ -3,12 +3,14 @@
 use App\Domain\Exchange\Enums\ExchangeErrorType;
 use App\Domain\Exchange\Exceptions\ExchangeException;
 use App\Domain\Exchange\ValueObjects\Balance;
+use App\Domain\Exchange\ValueObjects\Candle;
 use App\Domain\Exchange\ValueObjects\ExchangeOrder;
 use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Domain\Order\Enums\OrderSide;
 use App\Domain\Order\Enums\OrderStatus;
 use App\Domain\Support\Decimal;
 use App\Models\Bot;
+use App\Services\Exchange\PaperExchangeClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Fixtures\FakeExchangeClient;
 
@@ -23,6 +25,14 @@ it('satisfies every exchange client contract method', function () {
         ->and($market->last->toString())->toBe('101.5')
         ->and($market->pricePrecision)->toBe(2)
         ->and($market->amountPrecision)->toBe(6);
+
+    $candles = $client->candles('BTC/USDT', '5m', 2);
+    expect($candles)->toHaveCount(2)
+        ->and($candles[0])->toBeInstanceOf(Candle::class)
+        ->and($candles[0]->close->toString())->toBe('100.5')
+        ->and($client->candleCalls)->toBe([
+            ['symbol' => 'BTC/USDT', 'timeframe' => '5m', 'limit' => 2],
+        ]);
 
     $balances = $client->balances($bot);
     expect($balances)->toHaveCount(2)
@@ -78,4 +88,17 @@ it('throws a normalized not-found error', function () {
 
     expect(fn () => $client->order(new Bot, 'BTC/USDT', 'missing'))
         ->toThrow(ExchangeException::class, 'Order not found.');
+});
+
+it('delegates public candles through the paper client', function () {
+    $public = new FakeExchangeClient;
+    $paper = new PaperExchangeClient($public);
+
+    $candles = $paper->candles('BTC/USDT', '5m', 2);
+
+    expect($candles)->toHaveCount(2)
+        ->and($candles[0])->toBeInstanceOf(Candle::class)
+        ->and($public->candleCalls)->toBe([
+            ['symbol' => 'BTC/USDT', 'timeframe' => '5m', 'limit' => 2],
+        ]);
 });

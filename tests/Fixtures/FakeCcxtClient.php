@@ -34,6 +34,11 @@ class FakeCcxtClient
             'timestamp' => 1700000000000,
         ],
         public array $openOrders = [],
+        /** @var list<array<int, mixed>> */
+        public array $ohlcv = [
+            [1700000000000, '100', '101', '99', '100.5', '10'],
+            [1700000300000, '101', '102', '100', '101.5', '5'],
+        ],
         public ?Throwable $error = null,
         public ?string $failMethod = null,
         public int $failures = 0,
@@ -105,6 +110,14 @@ class FakeCcxtClient
         $this->maybeFail('fetch_open_orders');
 
         return $this->openOrders === [] ? [$this->order] : $this->openOrders;
+    }
+
+    public function fetch_ohlcv(string $symbol, ?string $timeframe = null, ?int $since = null, ?int $limit = null): array
+    {
+        $this->record('fetch_ohlcv', [$symbol, $timeframe, $since, $limit]);
+        $this->maybeFail('fetch_ohlcv');
+
+        return $this->ohlcv;
     }
 
     public function count(string $method): int
