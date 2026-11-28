@@ -112,7 +112,11 @@ class ActivityRecorder
             'created_at' => now(),
         ]);
 
-        $this->alerts->fromActivity($activity);
+        $outcome = $this->alerts->recordActivity($activity);
+
+        if ($outcome->shouldMarkProcessed()) {
+            ActivityLog::query()->whereKey($activity->id)->update(['alert_processed_at' => now()]);
+        }
 
         return $activity;
     }

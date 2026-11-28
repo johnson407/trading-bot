@@ -767,7 +767,7 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 			if bot.Status != "running" {
 				return nil
 			}
-			return r.pause(ctx, bot, pauseCauseStaleTick, "No successful tick within the stale-tick threshold. Bot paused and open orders canceled.", "bot.stale", "risk.stale_tick", "critical")
+			return r.pause(ctx, bot, pauseCauseStaleTick, "No successful tick within the stale-tick threshold. Bot paused and open orders canceled.", "bot.stale", "risk.stale_bot", "warning")
 		}); err != nil {
 			r.logger.Error("stale-bot reconciliation failed", "bot_id", botID, "error_type", fmt.Sprintf("%T", err))
 		}

@@ -71,7 +71,9 @@ Docker deployment.
    timestamp, revision, and running-bot count. Laravel reads it for the dashboard
    warning, the global engine status bar, bot-health stale detection, and
    stop/kill-switch emergency decisions. An expired heartbeat is a warning; it
-   never pauses a bot or cancels an order automatically.
+   never pauses a bot or cancels an order automatically. A scheduled monitor
+   creates one deduplicated critical `engine.heartbeat_missing` alert per account
+   with a non-archived live bot; HTTP health and dashboard reads do not create it.
 4. Laravel never writes runtime `status` or `last_error` after creation, and it
    does not write engine-owned activity types or `grids`/`grid_levels` rows.
 

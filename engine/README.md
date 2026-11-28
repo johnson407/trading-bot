@@ -192,7 +192,7 @@ only when **both** its last successful tick and this process's first observation
 of it running are older than `max(180s, tick_interval_seconds + 30s)`. A restart
 therefore gives every running bot one full threshold to tick again; engine
 downtime alone does not pause it. If ticks keep failing through the grace, the
-normal `bot.stale` / `risk.stale_tick` pause-and-cancel path runs. Grace entries
+normal `bot.stale` / `risk.stale_bot` pause-and-cancel path runs. Grace entries
 are dropped once a bot is no longer running.
 
 Position-limit and invalid-order blocks are counted per placement attempt. The
