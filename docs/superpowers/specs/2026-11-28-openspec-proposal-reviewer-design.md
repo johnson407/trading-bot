@@ -1,7 +1,7 @@
 # OpenSpec Proposal Reviewer Subagent — Design
 
 Date: 2026-11-28
-Status: awaiting approval
+Status: Approved and implemented
 
 ## Intent
 
@@ -49,12 +49,25 @@ existing workflows, cannot express bundle cross-checks).
 
 - **Mode:** `subagent`, with a description that makes the catalog entry clear.
 - **Model:** inherit the parent session's model.
-- **Read-only enforcement:** permissions deny `edit`; allow `read`, `glob`,
-  `grep`, and `openspec` shell commands only. Broad deny first, exceptions after,
+- **Read-only enforcement:** permissions deny `edit`; allow `read`, `glob`, and
+  `grep`; deny reads of `*.env` and `*.env.*`; allow only the
+  `openspec validate *` shell command. Do not allow `skill`, so the reviewer
+  cannot load an apply or archive skill. Broad deny first, exceptions after,
   because the last matching rule wins.
 - **Change selection:** accept a change ID or path. With none given, review the
   only active change; if several exist, list them and stop rather than guess.
-  Archived changes are out of scope.
+  Archived changes and paths outside this repository are out of scope. A
+  missing `proposal.md` is a Critical gap and stops the review.
+- **Required artifacts:** `proposal.md` and `tasks.md` always; at least one
+  delta spec unless `.openspec.yaml` sets `skip_specs: true`; `design.md` for a
+  non-trivial change unless the proposal explains why none is needed.
+- **Validation bound to the verdict:** a failed validation is at least
+  Important (Critical when a required artifact is invalid); validation that
+  cannot run is at least Important and caps the verdict at
+  `APPROVE WITH COMMENTS` / `With fixes`.
+- **Blocked checks:** a check that would need an edit or a non-validation shell
+  command is reported under "Blocked checks" rather than attempted or worked
+  around.
 - **Evidence:** every finding cites artifact and section, quotes the problem
   text, and explains the consequence.
 - **Verdict mapping:** `APPROVE` when only minors/nits remain,
