@@ -159,7 +159,7 @@ it('adds archived flags to alert payloads and keeps archived bots out of the fil
     Alert::factory()->for($user)->for($archived)->create();
 
     $this->actingAs($user)
-        ->get(route('alerts.index'))
+        ->get(route('alerts.index', ['mode' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->has('alerts.data', 1)
