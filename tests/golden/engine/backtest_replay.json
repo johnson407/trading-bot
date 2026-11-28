@@ -376,12 +376,16 @@
                     "data": {
                         "center_price": "100",
                         "disarmed_levels": {
-                            "130": {
+                            "110": {
                                 "pair": "90",
                                 "side": "sell"
                             },
                             "70": {
-                                "pair": "110",
+                                "pair": "80",
+                                "side": "buy"
+                            },
+                            "80": {
+                                "pair": "90",
                                 "side": "buy"
                             }
                         },
@@ -741,7 +745,7 @@
                     "data": {
                         "center_price": "100",
                         "disarmed_levels": {
-                            "80": {
+                            "90": {
                                 "pair": "110",
                                 "side": "buy"
                             }

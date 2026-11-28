@@ -272,6 +272,7 @@ func (e *Engine) RunContext(ctx context.Context, configuration Configuration, ca
 					ExchangeFillID:    "backtest-" + itoa(fill.Sequence),
 					Side:              fill.Side,
 					Price:             fill.Price,
+					OrderPrice:        order.Price,
 					Quantity:          fill.Quantity,
 					Fee:               fill.Fee,
 					ClientOrderID:     stringPointer(fill.ClientOrderID),

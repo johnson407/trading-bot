@@ -105,7 +105,7 @@ func BuildLevels(
 // ApplyFillToLevelState ports GeneratesGridLevels::applyFillToLevelState.
 func ApplyFillToLevelState(state State, fill FillEvent, next *GridLevelPlan) State {
 	disarmed := disarmedLevels(state)
-	price := fill.Price.String()
+	price := fill.LevelPrice().String()
 
 	// A fill at the paired level re-arms the original level.
 	for key, entry := range disarmed {

@@ -120,6 +120,7 @@ type fixtureFill struct {
 	ExchangeFillID    string  `json:"exchange_fill_id"`
 	Side              string  `json:"side"`
 	Price             string  `json:"price"`
+	OrderPrice        string  `json:"order_price"`
 	Quantity          string  `json:"quantity"`
 	Fee               string  `json:"fee"`
 	ClientOrderID     *string `json:"client_order_id"`
@@ -334,10 +335,16 @@ func buildInput(t *testing.T, testCase fixtureCase) strategy.Input {
 func buildFill(t *testing.T, fill fixtureFill) strategy.FillEvent {
 	t.Helper()
 
+	orderPrice := fill.OrderPrice
+	if orderPrice == "" {
+		orderPrice = fill.Price
+	}
+
 	return strategy.FillEvent{
 		ExchangeFillID:    fill.ExchangeFillID,
 		Side:              strategy.Side(fill.Side),
 		Price:             mustDecimal(t, fill.Price),
+		OrderPrice:        mustDecimal(t, orderPrice),
 		Quantity:          mustDecimal(t, fill.Quantity),
 		Fee:               mustDecimal(t, fill.Fee),
 		ClientOrderID:     fill.ClientOrderID,
