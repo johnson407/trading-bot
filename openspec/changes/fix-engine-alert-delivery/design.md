@@ -32,7 +32,7 @@ Triggers were rejected because they would put Laravel mail/queue work inside the
 
 ### Durable processed markers and one alert per source
 
-Add nullable `alert_processed_at` and `alert_ingest_attempts` columns to `risk_events` and `activity_logs`, with a partial index on `id` where `alert_processed_at IS NULL`. The migration backfills every existing row as processed before the scanner can run.
+Add nullable `alert_processed_at`, `alert_ingest_attempts`, and nullable `alert_next_attempt_at` columns to `risk_events` and `activity_logs`, with a partial index on `id` where `alert_processed_at IS NULL`. Existing rows are backfilled as processed by adding `alert_processed_at` with a temporary stable default and immediately dropping the default, avoiding a full-table rewrite. Indexes are created concurrently and the migration sets a short lock timeout so the engine's hot write path is not blocked during deploy.
 
 Add a unique index on `alerts(source_type, source_id)` for non-null sources. Add a read-only `alerts:check-source-duplicates` command that lists every `(source_type, source_id)` group with more than one alert and exits non-zero when any exist. Run it against production before the deploy. If duplicates remain, the migration aborts with the same report rather than deleting alert history. Resolution is to delete the newer alert rows by id, keeping the oldest alert with its message, context, source, and delivery, then re-run the migration. This makes a retry across a dedupe-window boundary unable to create a second alert for the same source.
 
@@ -40,7 +40,7 @@ Laravel's `RiskEventRecorder` and `ActivityRecorder` mark their own source rows 
 
 ### Per-row transaction with bounded poison-row handling
 
-The scanner first selects candidate ids with a short read-only query: `SELECT id FROM <table> WHERE alert_processed_at IS NULL ORDER BY id LIMIT :batch`, with no locks. For each id it opens one transaction and re-selects that row with `WHERE id = :id AND alert_processed_at IS NULL FOR UPDATE SKIP LOCKED`, skipping it when another worker has already taken or processed it. The lock is therefore held for the whole per-row transaction, and two workers cannot process the same row. A row is marked processed for `created`, `deduplicated`, `not_configured`, and `disabled`; `failed` rolls back only that row's transaction. A failure increments `alert_ingest_attempts` in its own short transaction after the rollback, so the count survives. After three failed attempts the row is marked processed and the failure is logged, so one poison row cannot block the queue.
+The scanner first selects candidate ids with a short read-only query: `SELECT id FROM <table> WHERE alert_processed_at IS NULL AND (alert_next_attempt_at IS NULL OR alert_next_attempt_at <= now()) ORDER BY id LIMIT :batch`, with no locks. For each id it opens one transaction and re-selects that row with `WHERE id = :id AND alert_processed_at IS NULL FOR UPDATE SKIP LOCKED`, skipping it when another worker has already taken or processed it. The lock is therefore held for the whole per-row transaction, and two workers cannot process the same row. A row is marked processed for `created`, `deduplicated`, `not_configured`, and `disabled`; any `Throwable` rolls back only that row's transaction. A failure increments `alert_ingest_attempts` and sets `alert_next_attempt_at` with exponential backoff in its own short transaction, so the count survives. Failed rows are never marked processed; after six failures the scanner creates one source-keyed `alerts.ingestion_failed` alert and keeps retrying, so a transient outage cannot silently discard safety alerts.
 
 `AlertRecorder` gains result-returning methods for risk events, activity logs, and source-less system incidents. The result is one of `created`, `deduplicated`, `not_configured`, `disabled`, or `failed`. A unique violation on `alerts(source_type, source_id)` is reported as `deduplicated`, not `failed`: the recorder catches that violation, loads the alert with the same source, and returns `deduplicated`, so the scanner marks the row processed instead of retrying it as a poison row. Existing `fromRiskEvent` and `fromActivity` signatures stay for their current callers. A source-less system incident stores null source fields, which the alerts table already allows.
 
@@ -72,7 +72,7 @@ A global alert has no natural owner because alerts require a user. Alerting ever
 ## Risks / Trade-offs
 
 - [A row is alerted but the marker update fails] -> The unique source index makes the retry idempotent; the marker is in the same transaction as the alert.
-- [A source row is marked processed after a transient alert failure] -> Only `failed` rolls back; the attempt counter retries it and poisons it after three failures.
+- [A source row is marked processed after a transient alert failure] -> Only `failed` rolls back; the row is retried with backoff and never discarded, and repeated failure raises a visible `alerts.ingestion_failed` alert.
 - [The scanner falls behind during a burst] -> Batches are bounded, the run is non-overlapping for five minutes, and the next run continues from the remaining rows.
 - [The scanner adds load to PostgreSQL] -> Partial `alert_processed_at IS NULL` indexes, small batches, and a ten-second cadence limit the cost.
 - [Engine event rename changes existing dashboards or tests] -> Update engine tests, docs, and type-based queries in the same change; old rows remain historical.
@@ -82,7 +82,7 @@ A global alert has no natural owner because alerts require a user. Alerting ever
 
 ## Migration Plan
 
-1. Run `alerts:check-source-duplicates` against production and resolve any reported duplicates by deleting the newer alert rows and keeping the oldest. Add the markers, attempt counters, partial indexes, and the unique alert source index; backfill existing source rows as processed. The migration aborts if duplicate source alerts still exist.
+1. Run `alerts:check-source-duplicates` against production and resolve any reported duplicates by deleting the newer alert rows and keeping the oldest. Add the markers, attempt counters, next-attempt timestamps, partial indexes, and the unique alert source index concurrently; backfill existing source rows as processed without a full-table rewrite. The migration aborts if duplicate source alerts still exist.
 2. Add `alerts.engine_ingest_enabled` and register the schedule entry.
 3. Deploy the engine event-name changes and the Laravel scanner together with the switch enabled.
 4. Verify one engine-shaped event produces one alert and one marker, and that a repeated run creates no duplicate.

@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property array<array-key, mixed>|null $context
  * @property Carbon|null $alert_processed_at
  * @property int $alert_ingest_attempts
+ * @property Carbon|null $alert_next_attempt_at
  * @property Carbon $created_at
  * @property-read Bot|null $bot
  * @property-read User $user
@@ -51,6 +52,7 @@ class RiskEvent extends Model
         'context',
         'alert_processed_at',
         'alert_ingest_attempts',
+        'alert_next_attempt_at',
         'created_at',
     ];
 
@@ -60,6 +62,7 @@ class RiskEvent extends Model
             'context' => 'array',
             'alert_processed_at' => 'datetime',
             'alert_ingest_attempts' => 'integer',
+            'alert_next_attempt_at' => 'datetime',
             'created_at' => 'datetime',
         ];
     }

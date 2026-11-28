@@ -56,7 +56,7 @@ return [
         ],
         'risk.live_cancel_failed' => [
             'severity' => 'critical',
-            'title' => 'Orders could not be canceled after live gate pause',
+            'title' => 'A live order could not be canceled while pausing',
         ],
         'risk.failure_cancel_failed' => [
             'severity' => 'critical',
@@ -82,6 +82,10 @@ return [
             'severity' => 'warning',
             'title' => 'Orders could not be canceled',
         ],
+        'risk.stop_cancel_failed' => [
+            'severity' => 'critical',
+            'title' => 'Stop could not cancel orders',
+        ],
         'risk.live_start_refused' => [
             'severity' => 'critical',
             'title' => 'Live start refused',
@@ -93,6 +97,10 @@ return [
         'engine.heartbeat_missing' => [
             'severity' => 'critical',
             'title' => 'Engine heartbeat missing',
+        ],
+        'alerts.ingestion_failed' => [
+            'severity' => 'critical',
+            'title' => 'Safety alert ingestion is failing',
         ],
     ],
 ];

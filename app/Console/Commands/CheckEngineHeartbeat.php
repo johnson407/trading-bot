@@ -19,11 +19,12 @@ class CheckEngineHeartbeat extends Command
             return self::SUCCESS;
         }
 
-        if ($heartbeat->available()) {
+        $status = $heartbeat->status();
+
+        if ($status['available']) {
             return self::SUCCESS;
         }
 
-        $status = $heartbeat->status();
         $userIds = Bot::query()
             ->where('mode', 'live')
             ->whereIn('status', ['running', 'paused'])

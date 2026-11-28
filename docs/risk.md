@@ -98,7 +98,7 @@ Paper mode is the default and never sends private exchange orders. There is no s
 
 ## Risk events
 
-Risk events are queryable per bot and per user, newest first. Important types include `risk.position_limit`, `risk.invalid_order`, `risk.open_order_limit`, `risk.daily_loss_limit`, `risk.kill_switch_cancel_failed`, `exchange.failure_threshold`, `risk.stop_loss_triggered`, `risk.take_profit_triggered`, `risk.range_exit_triggered`, `risk.cancel_failed`, `risk.live_trading_disabled`, `risk.live_start_refused`, and `risk.live_order_rejected`. Each event stores severity, message, and JSON context.
+Risk events are queryable per bot and per user, newest first. Important types include `risk.position_limit`, `risk.invalid_order`, `risk.open_order_limit`, `risk.daily_loss_limit`, `risk.kill_switch_cancel_failed`, `exchange.failure_threshold`, `risk.stop_loss_triggered`, `risk.take_profit_triggered`, `risk.range_exit_triggered`, `risk.cancel_failed`, `risk.live_cancel_failed`, `risk.stop_cancel_failed`, `risk.live_trading_disabled`, `risk.live_start_refused`, and `risk.live_order_rejected`. Each event stores severity, message, and JSON context.
 
 Invalid orders are aggregated per placement attempt: one `risk.invalid_order` event records `orders_skipped` and a `reasons` breakdown instead of one event per skipped order. Repeats for the same bot and event type are suppressed for five minutes, like position-limit blocks.
 

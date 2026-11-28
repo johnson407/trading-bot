@@ -25,18 +25,22 @@ it('only keeps alerts and analytics on the Laravel scheduler', function () {
         ->and($commands->contains(fn (string $command) => str_contains($command, 'alerts:check-engine-heartbeat')))->toBeTrue();
 });
 
-it('runs the engine alert bridge every ten seconds on one server', function () {
+it('runs the engine alert bridge every ten seconds and the heartbeat check every minute', function () {
     $events = collect(app(Schedule::class)->events());
 
-    foreach (['alerts:ingest-engine-events', 'alerts:check-engine-heartbeat'] as $command) {
-        $event = $events->first(fn ($event) => str_contains((string) $event->command, $command));
+    $ingest = $events->first(fn ($event) => str_contains((string) $event->command, 'alerts:ingest-engine-events'));
+    $heartbeat = $events->first(fn ($event) => str_contains((string) $event->command, 'alerts:check-engine-heartbeat'));
 
-        expect($event)->not->toBeNull()
-            ->and($event->expression)->toBe('* * * * *')
-            ->and($event->repeatSeconds)->toBe(10)
-            ->and($event->withoutOverlapping)->toBeTrue()
-            ->and($event->onOneServer)->toBeTrue();
-    }
+    expect($ingest)->not->toBeNull()
+        ->and($ingest->expression)->toBe('* * * * *')
+        ->and($ingest->repeatSeconds)->toBe(10)
+        ->and($ingest->withoutOverlapping)->toBeTrue()
+        ->and($ingest->onOneServer)->toBeTrue()
+        ->and($heartbeat)->not->toBeNull()
+        ->and($heartbeat->expression)->toBe('* * * * *')
+        ->and($heartbeat->repeatSeconds)->toBeNull()
+        ->and($heartbeat->withoutOverlapping)->toBeTrue()
+        ->and($heartbeat->onOneServer)->toBeTrue();
 });
 
 it('schedules equity capture and pruning', function () {

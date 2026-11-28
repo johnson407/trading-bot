@@ -9,6 +9,7 @@ use App\Models\RiskEvent;
 use App\Models\User;
 use App\Services\Engine\EngineHeartbeat;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -86,7 +87,7 @@ it('marks source rows processed after a Laravel-side alert attempt and never re-
     expect(Alert::query()->count())->toBe(2);
 });
 
-it('retries a failed ingestion and marks the row processed after three attempts', function () {
+it('retries failed ingestion with backoff and never discards the source row', function () {
     $event = RiskEvent::factory()->create([
         'type' => 'risk.daily_loss_limit',
         'severity' => 'critical',
@@ -95,23 +96,68 @@ it('retries a failed ingestion and marks the row processed after three attempts'
     Schema::rename('alerts', 'alerts_unavailable');
 
     try {
-        $this->artisan('alerts:ingest-engine-events')->assertSuccessful();
-        $this->artisan('alerts:ingest-engine-events')->assertSuccessful();
+        $this->artisan('alerts:ingest-engine-events')->assertFailed();
+        DB::table('risk_events')->where('id', $event->id)->update(['alert_next_attempt_at' => null]);
+        $this->artisan('alerts:ingest-engine-events')->assertFailed();
 
         expect($event->fresh()->alert_ingest_attempts)->toBe(2)
-            ->and($event->fresh()->alert_processed_at)->toBeNull();
-
-        $this->artisan('alerts:ingest-engine-events')->assertSuccessful();
+            ->and($event->fresh()->alert_processed_at)->toBeNull()
+            ->and($event->fresh()->alert_next_attempt_at)->not->toBeNull();
     } finally {
         Schema::rename('alerts_unavailable', 'alerts');
     }
 
-    expect($event->fresh()->alert_ingest_attempts)->toBe(3)
-        ->and($event->fresh()->alert_processed_at)->not->toBeNull();
+    DB::table('risk_events')->where('id', $event->id)->update(['alert_next_attempt_at' => null]);
+
+    $this->artisan('alerts:ingest-engine-events')->assertSuccessful();
+
+    expect($event->fresh()->alert_processed_at)->not->toBeNull()
+        ->and(Alert::query()->where('type', 'risk.daily_loss_limit')->count())->toBe(1);
+});
+
+it('raises one visible failure alert after six failed ingestion attempts', function () {
+    $event = RiskEvent::factory()->create([
+        'type' => 'risk.daily_loss_limit',
+        'severity' => 'critical',
+    ]);
+
+    DB::unprepared(<<<'SQL'
+        CREATE FUNCTION fail_risk_event_alert() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.source_type = 'App\Models\RiskEvent' THEN
+                RAISE EXCEPTION 'alert insert blocked for test';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    SQL);
+    DB::unprepared('CREATE TRIGGER fail_risk_event_alert_trigger BEFORE INSERT ON alerts FOR EACH ROW EXECUTE FUNCTION fail_risk_event_alert()');
+
+    try {
+        for ($attempt = 1; $attempt <= 6; $attempt++) {
+            $this->artisan('alerts:ingest-engine-events')->assertFailed();
+            DB::table('risk_events')->where('id', $event->id)->update(['alert_next_attempt_at' => null]);
+        }
+
+        $failure = Alert::query()->where('type', 'alerts.ingestion_failed')->sole();
+
+        expect($event->fresh()->alert_ingest_attempts)->toBe(6)
+            ->and($event->fresh()->alert_processed_at)->toBeNull()
+            ->and($failure->source_type)->toBe('alerts.ingestion_failed:risk_events')
+            ->and($failure->source_id)->toBe($event->id);
+
+        DB::table('risk_events')->where('id', $event->id)->update(['alert_next_attempt_at' => null]);
+        $this->artisan('alerts:ingest-engine-events')->assertFailed();
+
+        expect(Alert::query()->where('type', 'alerts.ingestion_failed')->count())->toBe(1);
+    } finally {
+        DB::unprepared('DROP TRIGGER IF EXISTS fail_risk_event_alert_trigger ON alerts');
+        DB::unprepared('DROP FUNCTION IF EXISTS fail_risk_event_alert()');
+    }
 });
 
 it('reports duplicate alert sources before the unique index is enforced', function () {
-    DB::statement('ALTER TABLE alerts DROP CONSTRAINT IF EXISTS alerts_source_type_source_id_unique');
+    DB::statement('DROP INDEX IF EXISTS alerts_source_type_source_id_unique');
 
     $user = User::factory()->create();
 
@@ -139,6 +185,25 @@ it('passes the duplicate source check when sources are unique', function () {
     $this->artisan('alerts:check-source-duplicates')->assertSuccessful();
 });
 
+it('aborts the ingestion migration when duplicate alert sources remain', function () {
+    DB::statement('DROP INDEX IF EXISTS alerts_source_type_source_id_unique');
+
+    $user = User::factory()->create();
+    Alert::factory()->for($user)->create([
+        'source_type' => RiskEvent::class,
+        'source_id' => 99,
+    ]);
+    Alert::factory()->for($user)->create([
+        'source_type' => RiskEvent::class,
+        'source_id' => 99,
+    ]);
+
+    $migration = require database_path('migrations/2026_11_28_000200_add_alert_ingestion_markers.php');
+
+    expect(fn () => $migration->up())
+        ->toThrow(RuntimeException::class, 'alerts:check-source-duplicates');
+});
+
 it('alerts once for an engine heartbeat outage without changing bot state', function () {
     $user = User::factory()->create();
     $bot = Bot::factory()->for($user)->create([
@@ -159,8 +224,57 @@ it('alerts once for an engine heartbeat outage without changing bot state', func
         ->and($bot->fresh()->status->value)->toBe('running');
 });
 
+it('dedupes a sustained outage per window and alerts again after recovery', function () {
+    $user = User::factory()->create();
+    Bot::factory()->for($user)->create([
+        'mode' => 'live',
+        'status' => 'running',
+        'desired_status' => 'running',
+    ]);
+
+    Carbon::setTestNow('2026-01-01 00:00:00');
+    $heartbeat = app(EngineHeartbeat::class);
+    $heartbeat->available = false;
+
+    try {
+        $this->artisan('alerts:check-engine-heartbeat')->assertSuccessful();
+        $this->artisan('alerts:check-engine-heartbeat')->assertSuccessful();
+
+        expect(Alert::query()->count())->toBe(1);
+
+        Carbon::setTestNow(now()->addSeconds(901));
+        $this->artisan('alerts:check-engine-heartbeat')->assertSuccessful();
+
+        expect(Alert::query()->count())->toBe(2);
+
+        $heartbeat->available = true;
+        Carbon::setTestNow(now()->addSeconds(901));
+        $this->artisan('alerts:check-engine-heartbeat')->assertSuccessful();
+
+        expect(Alert::query()->count())->toBe(2);
+
+        $heartbeat->available = false;
+        Carbon::setTestNow(now()->addSeconds(901));
+        $this->artisan('alerts:check-engine-heartbeat')->assertSuccessful();
+
+        expect(Alert::query()->count())->toBe(3);
+    } finally {
+        Carbon::setTestNow();
+    }
+});
+
 it('does not alert for heartbeat outages without a live bot', function () {
     Bot::factory()->create(['mode' => 'paper', 'status' => 'running']);
+    app(EngineHeartbeat::class)->available = false;
+
+    $this->artisan('alerts:check-engine-heartbeat')->assertSuccessful();
+
+    expect(Alert::query()->count())->toBe(0);
+});
+
+it('does not alert for a heartbeat outage when the only live bot is archived', function () {
+    $bot = Bot::factory()->create(['mode' => 'live', 'status' => 'running']);
+    $bot->delete();
     app(EngineHeartbeat::class)->available = false;
 
     $this->artisan('alerts:check-engine-heartbeat')->assertSuccessful();

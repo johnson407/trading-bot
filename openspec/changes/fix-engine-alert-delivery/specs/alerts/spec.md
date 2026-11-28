@@ -41,10 +41,15 @@ The system SHALL ingest unprocessed safety events written directly by the tradin
 - **WHEN** ingestion retries a source row after a transaction or deduplication-window boundary
 - **THEN** the unique alert source constraint prevents a second alert, the recorder reports the source as deduplicated, and the row is marked processed rather than retried as a failure
 
-#### Scenario: Failed ingestion retries before poison-row disposition
+#### Scenario: Failed ingestion retries with backoff
 
 - **WHEN** alert recording for a source row fails
-- **THEN** that row's transaction rolls back, its attempt count increments, and it is retried until the bounded attempt limit marks it processed and logs the failure
+- **THEN** that row's transaction rolls back, its attempt count increments, a later retry is scheduled with exponential backoff, and the row is never marked processed
+
+#### Scenario: Repeated ingestion failure becomes visible
+
+- **WHEN** a source row has failed alert recording six times
+- **THEN** the scanner creates one deduplicated critical `alerts.ingestion_failed` alert for that source row and keeps retrying
 
 #### Scenario: Engine kill-switch event does not duplicate the account alert
 

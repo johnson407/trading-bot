@@ -27,25 +27,30 @@ in the bot activity feed.
 | `risk.daily_loss_cancel_failed` | critical | Orders could not be canceled after a daily-loss pause. |
 | `risk.kill_switch_cancel_failed` | critical | Orders could not be canceled after the kill switch. |
 | `risk.strategy_stop_cancel_failed` | critical | Orders could not be canceled after a strategy stop. |
-| `risk.live_cancel_failed` | critical | Orders could not be canceled after a live-gate pause. |
+| `risk.live_cancel_failed` | critical | A live order could not be canceled while pausing a bot. |
 | `risk.failure_cancel_failed` | critical | Orders could not be canceled after a consecutive-failure pause. |
 | `risk.stop_loss_triggered` | critical | A protective stop-loss paused a bot and canceled its open orders. |
 | `risk.take_profit_triggered` | warning | A protective take-profit paused a bot and canceled its open orders. |
 | `risk.range_exit_triggered` | warning | A protective range bound paused a bot and canceled its open orders. |
 | `risk.cancel_failed` | warning | An open order could not be canceled and the pause retry marker was set. |
+| `risk.stop_cancel_failed` | critical | A stop could not cancel an open live order. |
 | `risk.live_start_refused` | critical | The engine refused to start a live bot, for example because the gate was closed or the balance check failed. |
 | `risk.live_order_rejected` | critical | The exchange rejected a live order and no open order was recorded. |
 | `engine.heartbeat_missing` | critical | The engine heartbeat is missing or expired for an account with a live bot. This alert has no bot. |
+| `alerts.ingestion_failed` | critical | A safety event could not be turned into an alert after repeated retries. The scanner keeps retrying. |
 
 Cancellation failures are critical because they leave orders live after the bot
-has been paused. Stop-loss and exit-cancellation alerts are emailed; take-profit
-and range exits are warning-level and stay in the in-app inbox.
+has been paused, except for the local-only `risk.cancel_failed` warning. Stop-loss
+and exit-cancellation alerts are emailed; take-profit and range exits are
+warning-level and stay in the in-app inbox.
 
 These events do **not** alert, because they are normal trading behavior or already
 visible in the activity feed:
 
 - `risk.position_limit`
+- `risk.invalid_order`
 - `risk.insufficient_inventory`
+- `risk.kill_switch_activated`
 - `order.min_amount`
 - `order.min_notional`
 - `order.level_missing`
@@ -87,9 +92,11 @@ work.
 - Laravel recorders mark their own rows processed after the synchronous attempt,
   so the scanner only handles engine-written rows and failed Laravel attempts.
 - A failed alert attempt rolls back that row, increments the attempt count in a
-  separate transaction, and retries on a later run. After three failures the row
-  is marked processed and a warning is logged so one poison row cannot block the
-  batch.
+  separate transaction, and schedules a later retry with exponential backoff.
+  Failed rows are never discarded. After six failed attempts the scanner creates
+  one critical `alerts.ingestion_failed` alert for that source row and keeps
+  retrying, so a transient database outage cannot silently lose a safety alert.
+  The command exits non-zero while failures remain.
 - `alerts:check-source-duplicates` is a read-only pre-deployment check. The
   migration aborts if duplicate alert sources exist. Resolve them by keeping the
   oldest alert for each source, preserving its message, context, source, and
@@ -205,4 +212,5 @@ records are audit data and are never pruned by this command.
 | Retention command | `AlertRetentionTest` |
 | End-to-end daily loss and kill switch | `AlertIntegrationTest` |
 | Engine event ingestion, heartbeat, duplicate check | `AlertIngestionTest` |
+| Scanner-created critical email delivery | `AlertIngestionDeliveryTest` |
 | Protective exits | `ExitGuardAlertTest` |

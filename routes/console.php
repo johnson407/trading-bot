@@ -20,6 +20,6 @@ Schedule::command('alerts:ingest-engine-events')
     ->onOneServer();
 
 Schedule::command('alerts:check-engine-heartbeat')
-    ->everyTenSeconds()
+    ->everyMinute()
     ->withoutOverlapping(5)
     ->onOneServer();
