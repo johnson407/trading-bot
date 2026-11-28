@@ -326,12 +326,22 @@ Feature test: `tests/Feature/ExchangeCredentialUiTest.php`.
 
 ## Alerts — `GET /alerts` (`alerts.index`)
 
-Shows the signed-in user's operational alerts newest first, 50 per page. Each row
-includes severity, title, message, bot link when present, timestamp, and read
-state. An alert for an archived bot shows the bot name as plain text. An optional
-bot filter narrows the list to one active owned bot; another user's bot id, or an
-archived bot id, is rejected with 404.
+Shows the signed-in user's operational alerts. The default **Grouped** view covers
+the last 30 days, groups by alert type and bot, newest group first, 20 groups per
+page. Each group shows the highest severity, type, bot link, latest message and
+time, total count, and unread count. Expanding a group shows its five most recent
+occurrences; **View all** opens the same group in the ungrouped **All alerts**
+view with the bot filter preserved. **Mark group read** marks only unread alerts
+up to the group's latest timestamp, so later occurrences stay unread.
 
+The **All alerts** view keeps the previous 50-per-page ungrouped table: severity,
+title, message, bot link when present, timestamp, and read state. An alert for an
+archived bot shows the bot name as plain text. An optional bot filter narrows
+both views to one active owned bot; another user's bot id, or an archived bot id,
+is rejected with 404.
+
+- `POST /alerts/groups/read` marks one grouped row read through its latest
+  timestamp.
 - `POST /alerts/{alert}/read` marks one owned alert read.
 - `POST /alerts/read-all` marks all visible unread alerts read and honors the active
   bot filter.
@@ -340,7 +350,8 @@ archived bot id, is rejected with 404.
   [alerts.md](alerts.md) for the covered incidents and delivery details.
 
 Feature tests: `tests/Feature/AlertInboxTest.php`,
-`tests/Feature/AlertIntegrationTest.php`.
+`tests/Feature/AlertGroupedInboxTest.php`, `tests/Feature/AlertIntegrationTest.php`;
+unit coverage: `tests/Unit/AlertGroupingTest.php`.
 
 ## Backtest parameter sweeps — `/backtests/sweeps`
 
@@ -399,6 +410,6 @@ protection; a failed action never leaves a partial state change visible.
 | Activity | `bots.activity` | `ActivityLogTest` |
 | Kill switch | `kill-switch.create`, `kill-switch.store` | `KillSwitchUiTest` |
 | Credentials | `exchange-credentials.*` | `ExchangeCredentialUiTest` |
-| Alerts | `alerts.index`, `alerts.read`, `alerts.read-all` | `AlertInboxTest` |
+| Alerts | `alerts.index`, `alerts.groups.read`, `alerts.read`, `alerts.read-all` | `AlertInboxTest`, `AlertGroupedInboxTest` |
 | Backtest sweeps | `backtest-sweeps.index`, `backtest-sweeps.create`, `backtest-sweeps.store`, `backtest-sweeps.show` | `BacktestSweepDashboardTest` |
 | Authorization | all bot/credential routes | `AuthorizationTest` |

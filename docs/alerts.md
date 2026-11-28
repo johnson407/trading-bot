@@ -96,13 +96,23 @@ values recognized by it do not reach the alert, the email, or those log entries.
 ## Inbox
 
 The inbox lives at `GET /alerts` (`alerts.index`) and requires an authenticated,
-verified user.
+verified user. It opens in the **Grouped** view by default.
 
-- Alerts are owner-scoped and shown newest first, 50 per page.
-- Each row shows severity, title, message, bot link when present, timestamp, and
-  read state. An archived bot's name is shown as plain text instead of a link.
-- An optional `bot_id` filter narrows the list to one active owned bot. Another
-  user's bot id, or an archived bot id, returns 404.
+- The grouped view covers the last 30 days and groups alerts by type and bot,
+  newest group first, 20 groups per page.
+- A group row shows the highest severity, type, bot link, latest message and
+  timestamp, total count, and unread count. Account-level groups show “No bot”;
+  archived bot names are plain text instead of links.
+- Expanding a group shows its five most recent occurrences. **View all** opens
+  the same group in the ungrouped All alerts view with the bot filter preserved.
+  Archived bot groups do not offer View all because archived bot filters are
+  rejected.
+- `POST /alerts/groups/read` marks only the unread alerts in one type and bot
+  group through the group's latest timestamp. Later alerts stay unread.
+- **All alerts** keeps the ungrouped view: newest first, 50 per page, with
+  severity, title, message, bot link, timestamp, and read state.
+- Both views honor the optional `bot_id` filter and reject another user's bot id
+  or an archived bot id with 404.
 - `POST /alerts/{alert}/read` marks one alert read.
 - `POST /alerts/read-all` marks all visible unread alerts read, honoring the active
   bot filter.
@@ -110,7 +120,9 @@ verified user.
   responsive navigation.
 
 Feature tests: `tests/Feature/AlertInboxTest.php`,
-`tests/Feature/AlertIntegrationTest.php`.
+`tests/Feature/AlertGroupedInboxTest.php`,
+`tests/Feature/AlertIntegrationTest.php`. Unit coverage:
+`tests/Unit/AlertGroupingTest.php`.
 
 ## Configuration
 

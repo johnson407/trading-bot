@@ -27,7 +27,7 @@ it('lists only the signed-in user alerts newest first and paginates', function (
     ]);
 
     $this->actingAs($user)
-        ->get(route('alerts.index'))
+        ->get(route('alerts.index', ['mode' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Alerts/Index')
@@ -48,7 +48,7 @@ it('filters alerts by an owned bot and rejects another user bot', function () {
     Alert::factory()->for($user)->create();
 
     $this->actingAs($user)
-        ->get(route('alerts.index', ['bot_id' => $owned->id]))
+        ->get(route('alerts.index', ['bot_id' => $owned->id, 'mode' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->has('alerts.data', 1)
@@ -73,7 +73,7 @@ it('renders the inbox props for an alert', function () {
     ]);
 
     $this->actingAs($user)
-        ->get(route('alerts.index'))
+        ->get(route('alerts.index', ['mode' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Alerts/Index')
