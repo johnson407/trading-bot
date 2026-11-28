@@ -105,6 +105,7 @@ it('shares equity history for the default range with period metrics', function (
             ->where('equityHistory.metrics.period_return', '20.00')
             ->where('equityHistory.metrics.peak_equity', '1200.00000000')
             ->where('equityHistory.metrics.max_drawdown', '0.00')
+            ->where('equityHistory.latest.equity', '1200.00000000')
             ->etc());
 });
 
@@ -164,6 +165,33 @@ it('renders the equity history controls, metrics, and collecting state', functio
         ->toContain("route('dashboard')")
         ->toContain('equityHistory.metrics.period_return === null')
         ->toContain('—');
+});
+
+it('allows the dashboard to size the equity chart', function () {
+    $chart = file_get_contents(resource_path('js/Components/EquityChart.vue'));
+    $dashboard = file_get_contents(resource_path('js/Pages/Dashboard.vue'));
+
+    expect($chart)
+        ->toContain("heightClass: { type: String, default: 'h-80' }")
+        ->toContain(':class="heightClass"')
+        ->and($dashboard)->toContain('height-class="h-56 sm:h-72 lg:h-80"');
+});
+
+it('renders the compact portfolio and operations layout', function () {
+    $page = file_get_contents(resource_path('js/Pages/Dashboard.vue'));
+
+    expect($page)
+        ->toContain('equityHistory.latest')
+        ->toContain('Account equity')
+        ->toContain('equityHistory.collecting && equityHistory.has_history')
+        ->toContain('All bots healthy')
+        ->toContain('max-h-72')
+        ->toContain('tabindex="0"')
+        ->toContain('lg:col-span-8')
+        ->toContain('lg:col-span-4')
+        ->toContain('hidden sm:table-cell')
+        ->not->toContain('<template #header>')
+        ->not->toContain('py-12');
 });
 
 it('does not query equity history for a summary-only partial reload', function () {

@@ -15,9 +15,11 @@ redirects, owner access, and cross-user denial.
 
 Shows bot counts by state, aggregate realized and unrealized P&L, the account
 equity history, and the ten most recent activity rows for the signed-in owner.
-Counts cover active (non-archived) bots, while aggregate realized and unrealized
-P&L include archived bots so their residual balances remain visible. Recent
-activity for an archived bot shows its name as plain text rather than a link.
+The account equity headline and chart occupy the main panel; triage and fleet
+counts sit in an operations rail beside it. Counts cover active (non-archived)
+bots, while aggregate realized and unrealized P&L include archived bots so their
+residual balances remain visible. Recent activity for an archived bot shows its
+name as plain text rather than a link.
 It also shows a warning when the Go engine heartbeat is missing or expired. The
 warning is informational only: it never pauses bots, cancels orders, or activates
 the kill-switch, and it refreshes with the same five-second partial reload.
@@ -25,11 +27,13 @@ the kill-switch, and it refreshes with the same five-second partial reload.
 A **Needs attention** panel lists only non-archived bots that need operator action:
 bots paused by the engine, bots missing a successful tick, and bots with an error.
 Each row shows issue badges, the last tick and last successful tick, and the
-engine's reason. The panel is hidden when no bot needs attention. Stale detection
-requires a fresh heartbeat, a known engine start time, at least one full stale
-threshold of engine uptime, and a running bot whose desired status is also running;
-the threshold is `max(180 seconds, bot interval + 30 seconds)`. This keeps an
-engine restart from briefly flagging every running bot as stale.
+engine's reason. The panel stays in place and shows **All bots healthy** when no
+bot needs attention; a bounded, keyboard-scrollable list keeps the fleet summary
+visible when many bots need action. Stale detection requires a fresh heartbeat, a
+known engine start time, at least one full stale threshold of engine uptime, and a
+running bot whose desired status is also running; the threshold is
+`max(180 seconds, bot interval + 30 seconds)`. This keeps an engine restart from
+briefly flagging every running bot as stale.
 
 For an engine-paused paper bot the row offers a one-click **Resume** via
 `bots.start`. For a live bot the row links to the bot detail page instead, so the
@@ -44,8 +48,11 @@ row changes state. Stale and error rows have no resume action.
 The equity section accepts `?range=7`, `?range=30`, or `?range=90`; an omitted or
 unknown range falls back to the configured 30-day default. It renders the selected
 range's account equity curve with period return, peak equity, and maximum
-drawdown. A range with no snapshots shows an empty state, and a range with fewer
-than two snapshots is marked as collecting without fabricated metrics. The section
+drawdown. The **Account equity** headline always comes from the latest snapshot,
+independent of the selected range, and shows the snapshot time; changing the
+range only updates the chart and metrics. A range with no snapshots shows an
+empty state, and a range with fewer than two snapshots is marked as collecting
+without fabricated metrics. The section
 refreshes independently every minute, while the summary and recent activity keep
 their five-second partial reload. See [analytics.md](analytics.md) for capture
 cadence, formulas, and retention.
