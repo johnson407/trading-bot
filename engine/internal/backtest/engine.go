@@ -245,7 +245,7 @@ func (e *Engine) RunContext(ctx context.Context, configuration Configuration, ca
 		}
 
 		if activeSet {
-			e.placeIntents(decision.Orders, book, riskGuard, portfolio, index)
+			e.placeIntents(decision.Orders, book, riskGuard, portfolio, index, closePrice)
 		}
 
 		for _, order := range book.QualifyingOrders(closePrice, index) {
@@ -260,7 +260,7 @@ func (e *Engine) RunContext(ctx context.Context, configuration Configuration, ca
 				)
 			}
 
-			fill := book.Fill(order, at, configuration.FeeRate)
+			fill := book.Fill(order, at, closePrice, configuration.FeeRate)
 			if applyErr := portfolio.Apply(fill); applyErr != nil {
 				return Result{}, applyErr
 			}
@@ -272,6 +272,7 @@ func (e *Engine) RunContext(ctx context.Context, configuration Configuration, ca
 					ExchangeFillID:    "backtest-" + itoa(fill.Sequence),
 					Side:              fill.Side,
 					Price:             fill.Price,
+					OrderPrice:        order.Price,
 					Quantity:          fill.Quantity,
 					Fee:               fill.Fee,
 					ClientOrderID:     stringPointer(fill.ClientOrderID),
@@ -306,7 +307,7 @@ func (e *Engine) RunContext(ctx context.Context, configuration Configuration, ca
 				if opposite != nil {
 					intents = append(intents, *opposite)
 				}
-				e.placeIntents(intents, book, riskGuard, portfolio, index)
+				e.placeIntents(intents, book, riskGuard, portfolio, index, closePrice)
 			}
 		}
 
@@ -431,8 +432,9 @@ func (e *Engine) placeIntents(
 	riskGuard *BacktestRiskGuard,
 	portfolio *InMemoryPortfolio,
 	candleIndex int,
+	market decimal.Decimal,
 ) {
-	for _, intent := range intents {
+	for _, intent := range strategy.SortOrderIntents(intents, market) {
 		if book.HasOpenAtPrice(intent.Price) {
 			continue
 		}

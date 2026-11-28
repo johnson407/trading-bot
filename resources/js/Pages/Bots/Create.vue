@@ -51,6 +51,7 @@ const form = useForm({
     max_increases: 3,
     min_spacing: '50',
     max_spacing: '500',
+    initial_spacing: '',
     volatility_multiplier: '1',
     recalculation_interval_seconds: 60,
     spacing_hysteresis_percent: '20',
@@ -169,6 +170,7 @@ watch(
         form.max_order_quantity,
         form.min_spacing,
         form.max_spacing,
+        form.initial_spacing,
         form.spacing_hysteresis_percent,
     ],
     () => {
@@ -521,6 +523,11 @@ const submit = () => {
                                         <InputLabel for="max_spacing" value="Maximum spacing" />
                                         <TextInput id="max_spacing" v-model="form.max_spacing" class="mt-1 block w-full" :readonly="sourceMode" />
                                         <InputError class="mt-2" :message="form.errors.max_spacing" />
+                                    </div>
+                                    <div>
+                                        <InputLabel for="initial_spacing" value="Initial spacing (optional)" />
+                                        <TextInput id="initial_spacing" v-model="form.initial_spacing" class="mt-1 block w-full" :readonly="sourceMode" />
+                                        <InputError class="mt-2" :message="form.errors.initial_spacing" />
                                     </div>
                                     <div>
                                         <InputLabel for="volatility_multiplier" value="Volatility multiplier" />

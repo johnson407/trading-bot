@@ -134,7 +134,7 @@ func (t *TrailingGrid) OnTick(input Input) (Decision, error) {
 		}
 	}
 
-	state := input.State.Merge(map[string]any{
+	state := PruneDisarmedLevels(input.State, levels).Merge(map[string]any{
 		"center_price":        newCenter.String(),
 		"recenter_count":      asInt(input.State.Get("recenter_count", 0)) + 1,
 		"last_recenter_price": newCenter.String(),

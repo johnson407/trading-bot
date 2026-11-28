@@ -35,6 +35,7 @@ final class BotEditDiff
         ['key' => 'strategy.max_increases', 'label' => 'Max increases', 'type' => 'integer', 'source' => 'strategy', 'field' => 'max_increases'],
         ['key' => 'strategy.min_spacing', 'label' => 'Min spacing', 'type' => 'money', 'source' => 'strategy', 'field' => 'min_spacing'],
         ['key' => 'strategy.max_spacing', 'label' => 'Max spacing', 'type' => 'money', 'source' => 'strategy', 'field' => 'max_spacing'],
+        ['key' => 'strategy.initial_spacing', 'label' => 'Initial spacing', 'type' => 'money', 'source' => 'strategy', 'field' => 'initial_spacing'],
         ['key' => 'strategy.volatility_multiplier', 'label' => 'Volatility multiplier', 'type' => 'number', 'source' => 'strategy', 'field' => 'volatility_multiplier'],
         ['key' => 'strategy.recalculation_interval_seconds', 'label' => 'Recalculation interval', 'type' => 'integer', 'source' => 'strategy', 'field' => 'recalculation_interval_seconds'],
         ['key' => 'strategy.spacing_hysteresis_percent', 'label' => 'Spacing hysteresis', 'type' => 'rate', 'source' => 'strategy', 'field' => 'spacing_hysteresis_percent'],

@@ -62,43 +62,43 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "range_end",
-                    "final_equity": "10000",
-                    "net_pnl": "0",
-                    "realized_pnl": "0",
-                    "unrealized_pnl": "0",
-                    "fees": "0",
-                    "return_percent": "0",
-                    "max_drawdown": "0",
-                    "max_drawdown_percent": "0",
-                    "final_base_inventory": "0",
-                    "final_quote_inventory": "10000",
-                    "final_price": "100",
-                    "fill_count": 0,
-                    "buy_count": 0,
-                    "sell_count": 0,
-                    "candles_processed": 1,
-                    "duration_ms": 0
-                },
-                "fills": [],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
                         "equity": "10000"
                     }
                 ],
+                "fills": [],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
+                        "fill_count": 0,
+                        "initialized": true,
                         "last_fill_side": null,
-                        "fill_count": 0
-                    }
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 0,
+                    "candles_processed": 1,
+                    "duration_ms": 0,
+                    "end_reason": "range_end",
+                    "fees": "0",
+                    "fill_count": 0,
+                    "final_base_inventory": "0",
+                    "final_equity": "10000",
+                    "final_price": "100",
+                    "final_quote_inventory": "10000",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "return_percent": "0",
+                    "sell_count": 0,
+                    "unrealized_pnl": "0"
                 }
             }
         },
@@ -168,49 +168,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "range_end",
-                    "final_equity": "10019.8",
-                    "net_pnl": "19.8",
-                    "realized_pnl": "19.8",
-                    "unrealized_pnl": "0",
-                    "fees": "0.2",
-                    "return_percent": "0.198",
-                    "max_drawdown": "0.09",
-                    "max_drawdown_percent": "0.0009",
-                    "final_base_inventory": "0",
-                    "final_quote_inventory": "10019.8",
-                    "final_price": "110",
-                    "fill_count": 2,
-                    "buy_count": 1,
-                    "sell_count": 1,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [
-                    {
-                        "sequence": 1,
-                        "side": "buy",
-                        "price": "90",
-                        "quantity": "1",
-                        "fee": "0.09",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:30:00+00:00",
-                        "client_order_id": "backtest-2",
-                        "grid_level_sequence": 2
-                    },
-                    {
-                        "sequence": 2,
-                        "side": "sell",
-                        "price": "110",
-                        "quantity": "1",
-                        "fee": "0.11",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:45:00+00:00",
-                        "client_order_id": "backtest-3",
-                        "grid_level_sequence": 3
-                    }
-                ],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -225,24 +182,67 @@
                         "equity": "10019.8"
                     }
                 ],
+                "fills": [
+                    {
+                        "client_order_id": "backtest-1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "grid_level_sequence": 2,
+                        "price": "90",
+                        "quantity": "1",
+                        "sequence": 1,
+                        "side": "buy"
+                    },
+                    {
+                        "client_order_id": "backtest-3",
+                        "fee": "0.11",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:45:00+00:00",
+                        "grid_level_sequence": 3,
+                        "price": "110",
+                        "quantity": "1",
+                        "sequence": 2,
+                        "side": "sell"
+                    }
+                ],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
-                        "last_fill_side": "sell",
-                        "fill_count": 2,
-                        "last_fill_price": "110",
                         "disarmed_levels": {
                             "110": {
-                                "side": "sell",
-                                "pair": "90"
+                                "pair": "90",
+                                "side": "sell"
                             }
-                        }
-                    }
+                        },
+                        "fill_count": 2,
+                        "initialized": true,
+                        "last_fill_price": "110",
+                        "last_fill_side": "sell",
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 1,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "range_end",
+                    "fees": "0.2",
+                    "fill_count": 2,
+                    "final_base_inventory": "0",
+                    "final_equity": "10019.8",
+                    "final_price": "110",
+                    "final_quote_inventory": "10019.8",
+                    "max_drawdown": "0.09",
+                    "max_drawdown_percent": "0.0009",
+                    "net_pnl": "19.8",
+                    "realized_pnl": "19.8",
+                    "return_percent": "0.198",
+                    "sell_count": 1,
+                    "unrealized_pnl": "0"
                 }
             }
         },
@@ -312,71 +312,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "range_end",
-                    "final_equity": "10129.65",
-                    "net_pnl": "129.65",
-                    "realized_pnl": "29.65",
-                    "unrealized_pnl": "100",
-                    "fees": "0.35",
-                    "return_percent": "1.2965",
-                    "max_drawdown": "30.24",
-                    "max_drawdown_percent": "0.3024",
-                    "final_base_inventory": "2",
-                    "final_quote_inventory": "9869.65",
-                    "final_price": "130",
-                    "fill_count": 4,
-                    "buy_count": 3,
-                    "sell_count": 1,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [
-                    {
-                        "sequence": 1,
-                        "side": "buy",
-                        "price": "70",
-                        "quantity": "1",
-                        "fee": "0.07",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:30:00+00:00",
-                        "client_order_id": "backtest-1",
-                        "grid_level_sequence": 1
-                    },
-                    {
-                        "sequence": 2,
-                        "side": "buy",
-                        "price": "80",
-                        "quantity": "1",
-                        "fee": "0.08",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:30:00+00:00",
-                        "client_order_id": "backtest-2",
-                        "grid_level_sequence": 2
-                    },
-                    {
-                        "sequence": 3,
-                        "side": "buy",
-                        "price": "90",
-                        "quantity": "1",
-                        "fee": "0.09",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:30:00+00:00",
-                        "client_order_id": "backtest-3",
-                        "grid_level_sequence": 3
-                    },
-                    {
-                        "sequence": 4,
-                        "side": "sell",
-                        "price": "110",
-                        "quantity": "1",
-                        "fee": "0.11",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:45:00+00:00",
-                        "client_order_id": "backtest-4",
-                        "grid_level_sequence": 4
-                    }
-                ],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -384,39 +319,104 @@
                     },
                     {
                         "at": "2026-11-23T00:30:00+00:00",
-                        "equity": "9969.76"
+                        "equity": "9999.79"
                     },
                     {
                         "at": "2026-11-23T00:45:00+00:00",
-                        "equity": "10129.65"
+                        "equity": "10179.66"
+                    }
+                ],
+                "fills": [
+                    {
+                        "client_order_id": "backtest-3",
+                        "fee": "0.07",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "grid_level_sequence": 1,
+                        "price": "70",
+                        "quantity": "1",
+                        "sequence": 1,
+                        "side": "buy"
+                    },
+                    {
+                        "client_order_id": "backtest-2",
+                        "fee": "0.07",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "grid_level_sequence": 2,
+                        "price": "70",
+                        "quantity": "1",
+                        "sequence": 2,
+                        "side": "buy"
+                    },
+                    {
+                        "client_order_id": "backtest-1",
+                        "fee": "0.07",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "grid_level_sequence": 3,
+                        "price": "70",
+                        "quantity": "1",
+                        "sequence": 3,
+                        "side": "buy"
+                    },
+                    {
+                        "client_order_id": "backtest-4",
+                        "fee": "0.13",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:45:00+00:00",
+                        "grid_level_sequence": 4,
+                        "price": "130",
+                        "quantity": "1",
+                        "sequence": 4,
+                        "side": "sell"
                     }
                 ],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 3,
-                        "last_fill_side": "sell",
-                        "fill_count": 4,
-                        "last_fill_price": "110",
                         "disarmed_levels": {
+                            "110": {
+                                "pair": "90",
+                                "side": "sell"
+                            },
                             "70": {
-                                "side": "buy",
-                                "pair": "80"
+                                "pair": "80",
+                                "side": "buy"
                             },
                             "80": {
-                                "side": "buy",
-                                "pair": "90"
-                            },
-                            "110": {
-                                "side": "sell",
-                                "pair": "90"
+                                "pair": "90",
+                                "side": "buy"
                             }
-                        }
-                    }
+                        },
+                        "fill_count": 4,
+                        "initialized": true,
+                        "last_fill_price": "130",
+                        "last_fill_side": "sell",
+                        "levels_per_side": 3,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 3,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "range_end",
+                    "fees": "0.34",
+                    "fill_count": 4,
+                    "final_base_inventory": "2",
+                    "final_equity": "10179.66",
+                    "final_price": "130",
+                    "final_quote_inventory": "9919.66",
+                    "max_drawdown": "0.21",
+                    "max_drawdown_percent": "0.0021",
+                    "net_pnl": "179.66",
+                    "realized_pnl": "59.66",
+                    "return_percent": "1.7966",
+                    "sell_count": 1,
+                    "unrealized_pnl": "120"
                 }
             }
         },
@@ -486,26 +486,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "range_end",
-                    "final_equity": "5",
-                    "net_pnl": "0",
-                    "realized_pnl": "0",
-                    "unrealized_pnl": "0",
-                    "fees": "0",
-                    "return_percent": "0",
-                    "max_drawdown": "0",
-                    "max_drawdown_percent": "0",
-                    "final_base_inventory": "0",
-                    "final_quote_inventory": "5",
-                    "final_price": "90",
-                    "fill_count": 0,
-                    "buy_count": 0,
-                    "sell_count": 0,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -520,17 +500,37 @@
                         "equity": "5"
                     }
                 ],
+                "fills": [],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
+                        "fill_count": 0,
+                        "initialized": true,
                         "last_fill_side": null,
-                        "fill_count": 0
-                    }
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "range_end",
+                    "fees": "0",
+                    "fill_count": 0,
+                    "final_base_inventory": "0",
+                    "final_equity": "5",
+                    "final_price": "90",
+                    "final_quote_inventory": "5",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "return_percent": "0",
+                    "sell_count": 0,
+                    "unrealized_pnl": "0"
                 }
             }
         },
@@ -600,26 +600,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "range_end",
-                    "final_equity": "10000",
-                    "net_pnl": "0",
-                    "realized_pnl": "0",
-                    "unrealized_pnl": "0",
-                    "fees": "0",
-                    "return_percent": "0",
-                    "max_drawdown": "0",
-                    "max_drawdown_percent": "0",
-                    "final_base_inventory": "0",
-                    "final_quote_inventory": "10000",
-                    "final_price": "90",
-                    "fill_count": 0,
-                    "buy_count": 0,
-                    "sell_count": 0,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -634,17 +614,37 @@
                         "equity": "10000"
                     }
                 ],
+                "fills": [],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
+                        "fill_count": 0,
+                        "initialized": true,
                         "last_fill_side": null,
-                        "fill_count": 0
-                    }
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "range_end",
+                    "fees": "0",
+                    "fill_count": 0,
+                    "final_base_inventory": "0",
+                    "final_equity": "10000",
+                    "final_price": "90",
+                    "final_quote_inventory": "10000",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "return_percent": "0",
+                    "sell_count": 0,
+                    "unrealized_pnl": "0"
                 }
             }
         },
@@ -714,49 +714,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "range_end",
-                    "final_equity": "10009.83",
-                    "net_pnl": "9.83",
-                    "realized_pnl": "9.83",
-                    "unrealized_pnl": "0",
-                    "fees": "0.17",
-                    "return_percent": "0.0983",
-                    "max_drawdown": "0.08",
-                    "max_drawdown_percent": "0.0008",
-                    "final_base_inventory": "0",
-                    "final_quote_inventory": "10009.83",
-                    "final_price": "90",
-                    "fill_count": 2,
-                    "buy_count": 1,
-                    "sell_count": 1,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [
-                    {
-                        "sequence": 1,
-                        "side": "buy",
-                        "price": "80",
-                        "quantity": "1",
-                        "fee": "0.08",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:30:00+00:00",
-                        "client_order_id": "backtest-1",
-                        "grid_level_sequence": 1
-                    },
-                    {
-                        "sequence": 2,
-                        "side": "sell",
-                        "price": "90",
-                        "quantity": "1",
-                        "fee": "0.09",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:45:00+00:00",
-                        "client_order_id": "backtest-2",
-                        "grid_level_sequence": 2
-                    }
-                ],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -768,27 +725,59 @@
                     },
                     {
                         "at": "2026-11-23T00:45:00+00:00",
-                        "equity": "10009.83"
+                        "equity": "10009.92"
+                    }
+                ],
+                "fills": [
+                    {
+                        "client_order_id": "backtest-1",
+                        "fee": "0.08",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "grid_level_sequence": 2,
+                        "price": "80",
+                        "quantity": "1",
+                        "sequence": 1,
+                        "side": "buy"
                     }
                 ],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
-                        "last_fill_side": "sell",
-                        "fill_count": 2,
-                        "last_fill_price": "90",
                         "disarmed_levels": {
                             "90": {
-                                "side": "sell",
-                                "pair": "80"
+                                "pair": "110",
+                                "side": "buy"
                             }
-                        }
-                    }
+                        },
+                        "fill_count": 1,
+                        "initialized": true,
+                        "last_fill_price": "80",
+                        "last_fill_side": "buy",
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 1,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "range_end",
+                    "fees": "0.08",
+                    "fill_count": 1,
+                    "final_base_inventory": "1",
+                    "final_equity": "10009.92",
+                    "final_price": "90",
+                    "final_quote_inventory": "9919.92",
+                    "max_drawdown": "0.08",
+                    "max_drawdown_percent": "0.0008",
+                    "net_pnl": "9.92",
+                    "realized_pnl": "-0.08",
+                    "return_percent": "0.0992",
+                    "sell_count": 0,
+                    "unrealized_pnl": "10"
                 }
             }
         },
@@ -858,38 +847,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "risk_pause",
-                    "final_equity": "9989.91",
-                    "net_pnl": "-10.09",
-                    "realized_pnl": "-0.09",
-                    "unrealized_pnl": "-10",
-                    "fees": "0.09",
-                    "return_percent": "-0.1009",
-                    "max_drawdown": "10.09",
-                    "max_drawdown_percent": "0.1009",
-                    "final_base_inventory": "1",
-                    "final_quote_inventory": "9909.91",
-                    "final_price": "80",
-                    "fill_count": 1,
-                    "buy_count": 1,
-                    "sell_count": 0,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [
-                    {
-                        "sequence": 1,
-                        "side": "buy",
-                        "price": "90",
-                        "quantity": "1",
-                        "fee": "0.09",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:30:00+00:00",
-                        "client_order_id": "backtest-2",
-                        "grid_level_sequence": 2
-                    }
-                ],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -904,25 +861,57 @@
                         "equity": "9989.91"
                     }
                 ],
+                "fills": [
+                    {
+                        "client_order_id": "backtest-1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "grid_level_sequence": 2,
+                        "price": "90",
+                        "quantity": "1",
+                        "sequence": 1,
+                        "side": "buy"
+                    }
+                ],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
-                        "last_fill_side": "buy",
-                        "fill_count": 1,
-                        "last_fill_price": "90",
                         "disarmed_levels": {
                             "90": {
-                                "side": "buy",
-                                "pair": "110"
+                                "pair": "110",
+                                "side": "buy"
                             }
                         },
-                        "last_canceled_client_order_id": "backtest-3"
-                    }
+                        "fill_count": 1,
+                        "initialized": true,
+                        "last_canceled_client_order_id": "backtest-3",
+                        "last_fill_price": "90",
+                        "last_fill_side": "buy",
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 1,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "risk_pause",
+                    "fees": "0.09",
+                    "fill_count": 1,
+                    "final_base_inventory": "1",
+                    "final_equity": "9989.91",
+                    "final_price": "80",
+                    "final_quote_inventory": "9909.91",
+                    "max_drawdown": "10.09",
+                    "max_drawdown_percent": "0.1009",
+                    "net_pnl": "-10.09",
+                    "realized_pnl": "-0.09",
+                    "return_percent": "-0.1009",
+                    "sell_count": 0,
+                    "unrealized_pnl": "-10"
                 }
             }
         },
@@ -992,38 +981,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "stop_loss",
-                    "final_equity": "9989.91",
-                    "net_pnl": "-10.09",
-                    "realized_pnl": "-0.09",
-                    "unrealized_pnl": "-10",
-                    "fees": "0.09",
-                    "return_percent": "-0.1009",
-                    "max_drawdown": "10.09",
-                    "max_drawdown_percent": "0.1009",
-                    "final_base_inventory": "1",
-                    "final_quote_inventory": "9909.91",
-                    "final_price": "80",
-                    "fill_count": 1,
-                    "buy_count": 1,
-                    "sell_count": 0,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [
-                    {
-                        "sequence": 1,
-                        "side": "buy",
-                        "price": "90",
-                        "quantity": "1",
-                        "fee": "0.09",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:30:00+00:00",
-                        "client_order_id": "backtest-2",
-                        "grid_level_sequence": 2
-                    }
-                ],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -1038,25 +995,57 @@
                         "equity": "9989.91"
                     }
                 ],
+                "fills": [
+                    {
+                        "client_order_id": "backtest-1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "grid_level_sequence": 2,
+                        "price": "90",
+                        "quantity": "1",
+                        "sequence": 1,
+                        "side": "buy"
+                    }
+                ],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
-                        "last_fill_side": "buy",
-                        "fill_count": 1,
-                        "last_fill_price": "90",
                         "disarmed_levels": {
                             "90": {
-                                "side": "buy",
-                                "pair": "110"
+                                "pair": "110",
+                                "side": "buy"
                             }
                         },
-                        "last_canceled_client_order_id": "backtest-3"
-                    }
+                        "fill_count": 1,
+                        "initialized": true,
+                        "last_canceled_client_order_id": "backtest-3",
+                        "last_fill_price": "90",
+                        "last_fill_side": "buy",
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 1,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "stop_loss",
+                    "fees": "0.09",
+                    "fill_count": 1,
+                    "final_base_inventory": "1",
+                    "final_equity": "9989.91",
+                    "final_price": "80",
+                    "final_quote_inventory": "9909.91",
+                    "max_drawdown": "10.09",
+                    "max_drawdown_percent": "0.1009",
+                    "net_pnl": "-10.09",
+                    "realized_pnl": "-0.09",
+                    "return_percent": "-0.1009",
+                    "sell_count": 0,
+                    "unrealized_pnl": "-10"
                 }
             }
         },
@@ -1126,38 +1115,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "take_profit",
-                    "final_equity": "10009.91",
-                    "net_pnl": "9.91",
-                    "realized_pnl": "-0.09",
-                    "unrealized_pnl": "10",
-                    "fees": "0.09",
-                    "return_percent": "0.0991",
-                    "max_drawdown": "0.09",
-                    "max_drawdown_percent": "0.0009",
-                    "final_base_inventory": "1",
-                    "final_quote_inventory": "9909.91",
-                    "final_price": "100",
-                    "fill_count": 1,
-                    "buy_count": 1,
-                    "sell_count": 0,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [
-                    {
-                        "sequence": 1,
-                        "side": "buy",
-                        "price": "90",
-                        "quantity": "1",
-                        "fee": "0.09",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:30:00+00:00",
-                        "client_order_id": "backtest-2",
-                        "grid_level_sequence": 2
-                    }
-                ],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -1172,25 +1129,57 @@
                         "equity": "10009.91"
                     }
                 ],
+                "fills": [
+                    {
+                        "client_order_id": "backtest-1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "grid_level_sequence": 2,
+                        "price": "90",
+                        "quantity": "1",
+                        "sequence": 1,
+                        "side": "buy"
+                    }
+                ],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
-                        "last_fill_side": "buy",
-                        "fill_count": 1,
-                        "last_fill_price": "90",
                         "disarmed_levels": {
                             "90": {
-                                "side": "buy",
-                                "pair": "110"
+                                "pair": "110",
+                                "side": "buy"
                             }
                         },
-                        "last_canceled_client_order_id": "backtest-3"
-                    }
+                        "fill_count": 1,
+                        "initialized": true,
+                        "last_canceled_client_order_id": "backtest-3",
+                        "last_fill_price": "90",
+                        "last_fill_side": "buy",
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 1,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "take_profit",
+                    "fees": "0.09",
+                    "fill_count": 1,
+                    "final_base_inventory": "1",
+                    "final_equity": "10009.91",
+                    "final_price": "100",
+                    "final_quote_inventory": "9909.91",
+                    "max_drawdown": "0.09",
+                    "max_drawdown_percent": "0.0009",
+                    "net_pnl": "9.91",
+                    "realized_pnl": "-0.09",
+                    "return_percent": "0.0991",
+                    "sell_count": 0,
+                    "unrealized_pnl": "10"
                 }
             }
         },
@@ -1252,26 +1241,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "range_exit",
-                    "final_equity": "10000",
-                    "net_pnl": "0",
-                    "realized_pnl": "0",
-                    "unrealized_pnl": "0",
-                    "fees": "0",
-                    "return_percent": "0",
-                    "max_drawdown": "0",
-                    "max_drawdown_percent": "0",
-                    "final_base_inventory": "0",
-                    "final_quote_inventory": "10000",
-                    "final_price": "90",
-                    "fill_count": 0,
-                    "buy_count": 0,
-                    "sell_count": 0,
-                    "candles_processed": 2,
-                    "duration_ms": 0
-                },
-                "fills": [],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -1282,18 +1251,38 @@
                         "equity": "10000"
                     }
                 ],
+                "fills": [],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
-                        "last_fill_side": null,
                         "fill_count": 0,
-                        "last_canceled_client_order_id": "backtest-2"
-                    }
+                        "initialized": true,
+                        "last_canceled_client_order_id": "backtest-2",
+                        "last_fill_side": null,
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 0,
+                    "candles_processed": 2,
+                    "duration_ms": 0,
+                    "end_reason": "range_exit",
+                    "fees": "0",
+                    "fill_count": 0,
+                    "final_base_inventory": "0",
+                    "final_equity": "10000",
+                    "final_price": "90",
+                    "final_quote_inventory": "10000",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "return_percent": "0",
+                    "sell_count": 0,
+                    "unrealized_pnl": "0"
                 }
             }
         },
@@ -1363,38 +1352,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "stop_loss",
-                    "final_equity": "9989.91",
-                    "net_pnl": "-10.09",
-                    "realized_pnl": "-0.09",
-                    "unrealized_pnl": "-10",
-                    "fees": "0.09",
-                    "return_percent": "-0.1009",
-                    "max_drawdown": "10.09",
-                    "max_drawdown_percent": "0.1009",
-                    "final_base_inventory": "1",
-                    "final_quote_inventory": "9909.91",
-                    "final_price": "80",
-                    "fill_count": 1,
-                    "buy_count": 1,
-                    "sell_count": 0,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [
-                    {
-                        "sequence": 1,
-                        "side": "buy",
-                        "price": "90",
-                        "quantity": "1",
-                        "fee": "0.09",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:30:00+00:00",
-                        "client_order_id": "backtest-2",
-                        "grid_level_sequence": 2
-                    }
-                ],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -1409,25 +1366,57 @@
                         "equity": "9989.91"
                     }
                 ],
+                "fills": [
+                    {
+                        "client_order_id": "backtest-1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "grid_level_sequence": 2,
+                        "price": "90",
+                        "quantity": "1",
+                        "sequence": 1,
+                        "side": "buy"
+                    }
+                ],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
-                        "last_fill_side": "buy",
-                        "fill_count": 1,
-                        "last_fill_price": "90",
                         "disarmed_levels": {
                             "90": {
-                                "side": "buy",
-                                "pair": "110"
+                                "pair": "110",
+                                "side": "buy"
                             }
                         },
-                        "last_canceled_client_order_id": "backtest-3"
-                    }
+                        "fill_count": 1,
+                        "initialized": true,
+                        "last_canceled_client_order_id": "backtest-3",
+                        "last_fill_price": "90",
+                        "last_fill_side": "buy",
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 1,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "stop_loss",
+                    "fees": "0.09",
+                    "fill_count": 1,
+                    "final_base_inventory": "1",
+                    "final_equity": "9989.91",
+                    "final_price": "80",
+                    "final_quote_inventory": "9909.91",
+                    "max_drawdown": "10.09",
+                    "max_drawdown_percent": "0.1009",
+                    "net_pnl": "-10.09",
+                    "realized_pnl": "-0.09",
+                    "return_percent": "-0.1009",
+                    "sell_count": 0,
+                    "unrealized_pnl": "-10"
                 }
             }
         },
@@ -1501,49 +1490,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "range_end",
-                    "final_equity": "10019.8",
-                    "net_pnl": "19.8",
-                    "realized_pnl": "19.8",
-                    "unrealized_pnl": "0",
-                    "fees": "0.2",
-                    "return_percent": "0.198",
-                    "max_drawdown": "0.09",
-                    "max_drawdown_percent": "0.0009",
-                    "final_base_inventory": "0",
-                    "final_quote_inventory": "10019.8",
-                    "final_price": "110",
-                    "fill_count": 2,
-                    "buy_count": 1,
-                    "sell_count": 1,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [
-                    {
-                        "sequence": 1,
-                        "side": "buy",
-                        "price": "90",
-                        "quantity": "1",
-                        "fee": "0.09",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:30:00+00:00",
-                        "client_order_id": "backtest-2",
-                        "grid_level_sequence": 2
-                    },
-                    {
-                        "sequence": 2,
-                        "side": "sell",
-                        "price": "110",
-                        "quantity": "1",
-                        "fee": "0.11",
-                        "fee_currency": "USDT",
-                        "filled_at": "2026-11-23T00:45:00+00:00",
-                        "client_order_id": "backtest-3",
-                        "grid_level_sequence": 3
-                    }
-                ],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -1558,26 +1504,69 @@
                         "equity": "10019.8"
                     }
                 ],
+                "fills": [
+                    {
+                        "client_order_id": "backtest-1",
+                        "fee": "0.09",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:30:00+00:00",
+                        "grid_level_sequence": 2,
+                        "price": "90",
+                        "quantity": "1",
+                        "sequence": 1,
+                        "side": "buy"
+                    },
+                    {
+                        "client_order_id": "backtest-3",
+                        "fee": "0.11",
+                        "fee_currency": "USDT",
+                        "filled_at": "2026-11-23T00:45:00+00:00",
+                        "grid_level_sequence": 3,
+                        "price": "110",
+                        "quantity": "1",
+                        "sequence": 2,
+                        "side": "sell"
+                    }
+                ],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
-                        "center_price": "100",
-                        "spacing_type": "arithmetic",
-                        "spacing_value": "10",
-                        "levels_per_side": 2,
-                        "current_quantity": "1",
-                        "increase_count": 0,
                         "cap_reached": false,
-                        "fill_count": 2,
-                        "last_fill_side": "sell",
+                        "center_price": "100",
+                        "current_quantity": "1",
                         "disarmed_levels": {
                             "110": {
-                                "side": "sell",
-                                "pair": "90"
+                                "pair": "90",
+                                "side": "sell"
                             }
-                        }
-                    }
+                        },
+                        "fill_count": 2,
+                        "increase_count": 0,
+                        "initialized": true,
+                        "last_fill_side": "sell",
+                        "levels_per_side": 2,
+                        "spacing_type": "arithmetic",
+                        "spacing_value": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 1,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "range_end",
+                    "fees": "0.2",
+                    "fill_count": 2,
+                    "final_base_inventory": "0",
+                    "final_equity": "10019.8",
+                    "final_price": "110",
+                    "final_quote_inventory": "10019.8",
+                    "max_drawdown": "0.09",
+                    "max_drawdown_percent": "0.0009",
+                    "net_pnl": "19.8",
+                    "realized_pnl": "19.8",
+                    "return_percent": "0.198",
+                    "sell_count": 1,
+                    "unrealized_pnl": "0"
                 }
             }
         },
@@ -1653,26 +1642,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "range_end",
-                    "final_equity": "10000",
-                    "net_pnl": "0",
-                    "realized_pnl": "0",
-                    "unrealized_pnl": "0",
-                    "fees": "0",
-                    "return_percent": "0",
-                    "max_drawdown": "0",
-                    "max_drawdown_percent": "0",
-                    "final_base_inventory": "0",
-                    "final_quote_inventory": "10000",
-                    "final_price": "102",
-                    "fill_count": 0,
-                    "buy_count": 0,
-                    "sell_count": 0,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -1687,18 +1656,38 @@
                         "equity": "10000"
                     }
                 ],
+                "fills": [],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
-                        "spacing_value": "1.98019801980198",
-                        "levels_per_side": 2,
-                        "last_recalculated_at": "2026-11-23T00:45:00+00:00",
-                        "recalculation_count": 4,
                         "fill_count": 0,
-                        "last_canceled_client_order_id": "backtest-4"
-                    }
+                        "initialized": true,
+                        "last_canceled_client_order_id": "backtest-4",
+                        "last_recalculated_at": "2026-11-23T00:45:00+00:00",
+                        "levels_per_side": 2,
+                        "recalculation_count": 4,
+                        "spacing_value": "1.98019801980198"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "range_end",
+                    "fees": "0",
+                    "fill_count": 0,
+                    "final_base_inventory": "0",
+                    "final_equity": "10000",
+                    "final_price": "102",
+                    "final_quote_inventory": "10000",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "return_percent": "0",
+                    "sell_count": 0,
+                    "unrealized_pnl": "0"
                 }
             }
         },
@@ -1769,26 +1758,6 @@
                 }
             ],
             "expected": {
-                "metrics": {
-                    "end_reason": "range_end",
-                    "final_equity": "10000",
-                    "net_pnl": "0",
-                    "realized_pnl": "0",
-                    "unrealized_pnl": "0",
-                    "fees": "0",
-                    "return_percent": "0",
-                    "max_drawdown": "0",
-                    "max_drawdown_percent": "0",
-                    "final_base_inventory": "0",
-                    "final_quote_inventory": "10000",
-                    "final_price": "100",
-                    "fill_count": 0,
-                    "buy_count": 0,
-                    "sell_count": 0,
-                    "candles_processed": 3,
-                    "duration_ms": 0
-                },
-                "fills": [],
                 "equity_curve": [
                     {
                         "at": "2026-11-23T00:15:00+00:00",
@@ -1803,21 +1772,41 @@
                         "equity": "10000"
                     }
                 ],
+                "fills": [],
                 "final_state": {
-                    "version": 1,
                     "data": {
-                        "initialized": true,
                         "center_price": "100",
+                        "fill_count": 0,
+                        "initialized": true,
+                        "last_canceled_client_order_id": "backtest-4",
+                        "last_fill_side": null,
+                        "last_recenter_price": "100",
+                        "levels_per_side": 2,
+                        "recenter_count": 2,
                         "spacing_type": "arithmetic",
                         "spacing_value": "10",
-                        "levels_per_side": 2,
-                        "trailing_distance": "10",
-                        "recenter_count": 2,
-                        "last_fill_side": null,
-                        "fill_count": 0,
-                        "last_recenter_price": "100",
-                        "last_canceled_client_order_id": "backtest-4"
-                    }
+                        "trailing_distance": "10"
+                    },
+                    "version": 1
+                },
+                "metrics": {
+                    "buy_count": 0,
+                    "candles_processed": 3,
+                    "duration_ms": 0,
+                    "end_reason": "range_end",
+                    "fees": "0",
+                    "fill_count": 0,
+                    "final_base_inventory": "0",
+                    "final_equity": "10000",
+                    "final_price": "100",
+                    "final_quote_inventory": "10000",
+                    "max_drawdown": "0",
+                    "max_drawdown_percent": "0",
+                    "net_pnl": "0",
+                    "realized_pnl": "0",
+                    "return_percent": "0",
+                    "sell_count": 0,
+                    "unrealized_pnl": "0"
                 }
             }
         }

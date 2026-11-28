@@ -39,6 +39,7 @@ const form = useForm({
     max_increases: props.configuration.max_increases ?? 3,
     min_spacing: props.configuration.min_spacing ?? '50',
     max_spacing: props.configuration.max_spacing ?? '500',
+    initial_spacing: props.configuration.initial_spacing ?? '',
     volatility_multiplier: props.configuration.volatility_multiplier ?? '1',
     recalculation_interval_seconds: props.configuration.recalculation_interval_seconds ?? 60,
     spacing_hysteresis_percent: props.configuration.spacing_hysteresis_percent ?? '20',
@@ -79,6 +80,7 @@ function previewPayload() {
         max_increases: form.max_increases,
         min_spacing: form.min_spacing,
         max_spacing: form.max_spacing,
+        initial_spacing: form.initial_spacing,
         volatility_multiplier: form.volatility_multiplier,
         recalculation_interval_seconds: form.recalculation_interval_seconds,
         spacing_hysteresis_percent: form.spacing_hysteresis_percent,
@@ -140,6 +142,7 @@ watch(
         form.max_increases,
         form.min_spacing,
         form.max_spacing,
+        form.initial_spacing,
         form.volatility_multiplier,
         form.recalculation_interval_seconds,
         form.spacing_hysteresis_percent,
@@ -296,6 +299,11 @@ const submit = () => form
                                 <InputLabel for="max_spacing" value="Maximum spacing" />
                                 <TextInput id="max_spacing" v-model="form.max_spacing" class="mt-1 block w-full" />
                                 <InputError class="mt-2" :message="form.errors.max_spacing" />
+                            </div>
+                            <div>
+                                <InputLabel for="initial_spacing" value="Initial spacing (optional)" />
+                                <TextInput id="initial_spacing" v-model="form.initial_spacing" class="mt-1 block w-full" />
+                                <InputError class="mt-2" :message="form.errors.initial_spacing" />
                             </div>
                             <div>
                                 <InputLabel for="volatility_multiplier" value="Volatility multiplier" />

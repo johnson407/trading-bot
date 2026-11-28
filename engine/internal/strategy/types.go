@@ -267,14 +267,28 @@ type OrderIntent struct {
 }
 
 // FillEvent mirrors App\Domain\Strategy\ValueObjects\FillEvent.
+//
+// Price is the execution price, which may differ from the order's limit price
+// when the market gaps through it. OrderPrice identifies the filled level and
+// is used for disarm bookkeeping; it falls back to Price when zero.
 type FillEvent struct {
 	ExchangeFillID    string
 	Side              Side
 	Price             decimal.Decimal
+	OrderPrice        decimal.Decimal
 	Quantity          decimal.Decimal
 	Fee               decimal.Decimal
 	ClientOrderID     *string
 	GridLevelSequence *int
+}
+
+// LevelPrice returns the price that identifies the filled grid level.
+func (f FillEvent) LevelPrice() decimal.Decimal {
+	if f.OrderPrice.IsPositive() {
+		return f.OrderPrice
+	}
+
+	return f.Price
 }
 
 // CancelEvent mirrors App\Domain\Strategy\ValueObjects\CancelEvent.

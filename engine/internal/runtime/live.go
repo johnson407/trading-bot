@@ -171,6 +171,9 @@ func (r *Runtime) placeLiveOrders(ctx context.Context, bot *Bot, active *gridSta
 	if active == nil || len(intents) == 0 {
 		return 0, nil
 	}
+
+	intents = strategy.SortOrderIntents(intents, placementPrice(bot))
+
 	if !r.liveTrading {
 		return 0, exchange.ErrLiveDisabled
 	}

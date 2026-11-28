@@ -9,5 +9,7 @@ it('documents dynamic-grid spacing hysteresis', function () {
         ->toContain('`20` means 20 percent, not `0.20`')
         ->toContain('`spacing_hysteresis_percent: 0`')
         ->toContain('replace the ladder')
-        ->toContain('does not retain individual orders');
+        ->toContain('prices shared with the new ladder are eligible for fresh orders')
+        ->toContain('initial_spacing')
+        ->toContain('backtest observation is one candle close');
 });

@@ -153,6 +153,7 @@ it('maps dynamic-grid settings and omits zero spacing', function () {
         'spacing_value' => '0',
         'min_spacing' => '1',
         'max_spacing' => '5',
+        'initial_spacing' => '2',
         'volatility_multiplier' => '1.5',
         'recalculation_interval_seconds' => 60,
     ]));
@@ -161,6 +162,7 @@ it('maps dynamic-grid settings and omits zero spacing', function () {
 
     expect($values['min_spacing'])->toBe('1')
         ->and($values['max_spacing'])->toBe('5')
+        ->and($values['initial_spacing'])->toBe('2')
         ->and($values['volatility_multiplier'])->toBe('1.5')
         ->and($values['recalculation_interval_seconds'])->toBe(60)
         ->and($values['spacing_value'])->toBeNull();

@@ -184,9 +184,9 @@ func TestGoldenPaperFillsCrossAndRecrossBetweenTicks(t *testing.T) {
 				t.Fatalf("%s: intra-tick print must not fill a returning market", step.Label)
 			}
 		case "tick_observes_89_and_fills_buy":
-			assertFill(t, fills[0], "buy", "90", "1", "0.09")
+			assertFill(t, fills[0], "buy", "89", "1", "0.089")
 		case "tick_observes_111_and_fills_sell":
-			assertFill(t, fills[0], "sell", "110", "1", "0.11")
+			assertFill(t, fills[0], "sell", "111", "1", "0.111")
 		}
 
 		applyFills(t, step.Label, orders, fills)

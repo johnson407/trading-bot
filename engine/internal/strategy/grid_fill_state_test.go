@@ -62,6 +62,26 @@ func TestApplyFillToLevelStateSameSideDoesNotRearm(t *testing.T) {
 	}
 }
 
+func TestApplyFillToLevelStateUsesOrderPriceWhenExecutionGaps(t *testing.T) {
+	state := NewState()
+	level90 := testGridLevel(6, "90", SideBuy)
+
+	state = ApplyFillToLevelState(state, FillEvent{
+		Side:              SideBuy,
+		Price:             decimal.MustParse("30"),
+		OrderPrice:        decimal.MustParse("90"),
+		Quantity:          decimal.MustParse("1"),
+		GridLevelSequence: intPointer(6),
+	}, levelPointer(testGridLevel(7, "110", SideSell)))
+
+	if !LevelIsArmed(state, testGridLevel(5, "30", SideBuy)) {
+		t.Fatal("the execution price must not be recorded as a filled level")
+	}
+	if LevelIsArmed(state, level90) {
+		t.Fatal("the order price should identify and disarm the filled level")
+	}
+}
+
 func TestApplyFillToLevelStateOppositeSideRearms(t *testing.T) {
 	state := NewState()
 	level80 := testGridLevel(1, "80", SideBuy)

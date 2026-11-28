@@ -105,7 +105,7 @@ func BuildLevels(
 // ApplyFillToLevelState ports GeneratesGridLevels::applyFillToLevelState.
 func ApplyFillToLevelState(state State, fill FillEvent, next *GridLevelPlan) State {
 	disarmed := disarmedLevels(state)
-	price := fill.Price.String()
+	price := fill.LevelPrice().String()
 
 	// A fill at the paired level re-arms the original level.
 	for key, entry := range disarmed {
@@ -166,6 +166,45 @@ func LevelIsArmed(state State, level GridLevelPlan) bool {
 	default:
 		return true
 	}
+}
+
+// PruneDisarmedLevels removes disarm entries whose paired price no longer
+// exists in the recalculated ladder. An entry without a recorded pair stays
+// disarmed because there is nothing safe to reconcile it against.
+func PruneDisarmedLevels(state State, levels []GridLevelPlan) State {
+	disarmed := disarmedLevels(state)
+	if len(disarmed) == 0 {
+		return state
+	}
+
+	prices := make(map[string]struct{}, len(levels))
+	for _, level := range levels {
+		prices[level.Price.String()] = struct{}{}
+	}
+
+	changed := false
+	for key, entry := range disarmed {
+		values, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		pair, ok := values["pair"].(string)
+		if !ok || pair == "" {
+			continue
+		}
+
+		if _, present := prices[pair]; !present {
+			delete(disarmed, key)
+			changed = true
+		}
+	}
+
+	if !changed {
+		return state
+	}
+
+	return state.Merge(map[string]any{"disarmed_levels": disarmed})
 }
 
 func disarmedLevels(state State) map[string]any {

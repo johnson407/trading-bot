@@ -123,9 +123,11 @@ The preview (`POST /bots/preview`) and both save requests call the same Go
 engine evaluation endpoint:
 
 - **Errors stop saving.** These are setups that cannot run: geometric spacing >= 1,
-  non-positive or duplicate level prices, and an order below the exchange minimum
-  amount or notional when market data is available. Missing market data is not an
-  error.
+  non-positive or duplicate level prices, prices or quantities that round to zero
+  at the market's precision, and an order below the exchange minimum amount or
+  notional when market data is available. Prices and quantities are truncated to
+  the market's precision before those minimum checks, matching the values a live
+  exchange would accept. Missing market data is not an error.
 - **Advisories never stop saving.** These are setups that can run but deserve a
   look: more orders than `max_open_orders`, buy notional above
   `max_position_notional`, a center price more than 50% away from the market, and
@@ -172,13 +174,14 @@ of an existing bot, so a stale invalid configuration fails before any order is p
 | **min_spacing** | decimal > 0, required | Lower clamp on computed spacing. |
 | **max_spacing** | decimal > 0, required, >= min | Upper clamp. |
 | **volatility_multiplier** | > 0, default `1` | Scales measured volatility into spacing. |
+| **initial_spacing** | decimal > 0, optional | Spacing used until at least two recent prices are available. Clamped to `min_spacing`/`max_spacing`; defaults to `min_spacing`. The form sends it only when filled. |
 | **recalculation_interval_seconds** | >= 1, default `60` | How often spacing is recomputed. |
 | **spacing_hysteresis_percent** | 0-90, default `20` | Adopt a new spacing only when it differs from the current spacing by at least this percentage. `0` adopts every candidate. |
 
 Spacing formula (`DynamicGridStrategy::calculateSpacing`):
 
 ```
-volatility = (max - min) / midpoint        over recent prices (last 30 ticks)
+volatility = (max - min) / midpoint        over recent prices (last 30 observations)
 candidate  = clamp(center * volatility * multiplier, min_spacing, max_spacing)
 ```
 
@@ -215,7 +218,9 @@ a fixed center. It always uses arithmetic spacing, so the create and edit forms 
 `spacing_type` and `spacing_value` fields for this strategy and do not require them.
 
 When the threshold is crossed, runtime replaces the entire ladder because the new prices differ.
-It does not retain individual orders that happen to fall on a matching new price.
+Every open order is canceled, but prices shared with the new ladder are eligible for fresh orders.
+A live observation is one engine tick; a backtest observation is one candle close, so the same
+30-observation window covers different wall-clock spans in each mode.
 
 To measure the effect after deployment, compare the engine's `bot tick completed` records for
 the same dynamic bots over a comparable window. `grids_replaced` and `orders_canceled` should

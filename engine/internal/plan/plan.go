@@ -185,7 +185,25 @@ func Evaluate(request Request) Response {
 		}
 	}
 
-	problems := minimumProblems(request, levels, orderQuantity)
+	levels, orderQuantity, precisionProblems := applyMarketPrecision(request.Market, levels, orderQuantity)
+
+	buyNotional = decimal.Zero()
+	sellNotional = decimal.Zero()
+	orderCount = 0
+	for _, level := range levels {
+		notional := decimal.MustParse(level.Notional)
+		if decimal.MustParse(level.Quantity).IsPositive() {
+			orderCount++
+		}
+		if level.Side == string(strategy.SideBuy) {
+			buyNotional = buyNotional.Add(notional)
+		} else {
+			sellNotional = sellNotional.Add(notional)
+		}
+	}
+
+	problems := precisionProblems
+	problems = append(problems, minimumProblems(request, levels, orderQuantity)...)
 	problems = append(problems, warningProblems(request, center, orderCount, buyNotional, sellNotional, baseInventory)...)
 
 	response := Response{
@@ -250,6 +268,91 @@ func orderQuantityOf(configuration strategy.Config, orders []strategy.OrderInten
 	}
 
 	return decimal.Zero(), nil
+}
+
+// applyMarketPrecision simulates the venue's truncation so a setup that would
+// round to zero or below a minimum fails before it can be saved. It is an
+// approximation: live still applies the authoritative tick/step filters.
+func applyMarketPrecision(market *Market, levels []Level, orderQuantity decimal.Decimal) ([]Level, decimal.Decimal, []Problem) {
+	if market == nil {
+		return levels, orderQuantity, nil
+	}
+
+	var problems []Problem
+	priceRounded := false
+	quantityRounded := false
+	pricePlaces := 0
+	if market.PricePrecision != nil {
+		pricePlaces = *market.PricePrecision
+	}
+	amountPlaces := 0
+	if market.AmountPrecision != nil {
+		amountPlaces = *market.AmountPrecision
+	}
+
+	adjusted := make([]Level, 0, len(levels))
+
+	for _, level := range levels {
+		price := decimal.MustParse(level.Price)
+		if market.PricePrecision != nil {
+			rounded, err := price.Round(*market.PricePrecision, decimal.RoundDown)
+			if err == nil {
+				price = rounded
+			}
+		}
+		if !price.IsPositive() {
+			if !priceRounded {
+				problems = append(problems, Problem{
+					Code:    "plan.precision",
+					Field:   field("spacing_value"),
+					Message: fmt.Sprintf("A level price rounds to zero at %d decimal places; increase spacing or use a larger center price.", pricePlaces),
+				})
+				priceRounded = true
+			}
+			price = decimal.Zero()
+		}
+
+		quantity := decimal.MustParse(level.Quantity)
+		if quantity.IsPositive() && market.AmountPrecision != nil {
+			rounded, err := quantity.Round(*market.AmountPrecision, decimal.RoundDown)
+			if err == nil {
+				quantity = rounded
+			}
+			if !quantity.IsPositive() && !quantityRounded {
+				problems = append(problems, Problem{
+					Code:    "plan.precision",
+					Field:   field("order_quantity"),
+					Message: fmt.Sprintf("Order quantity rounds to zero at %d decimal places; increase the order quantity.", amountPlaces),
+				})
+				quantityRounded = true
+			}
+		}
+
+		notional := price.Mul(quantity)
+		adjusted = append(adjusted, Level{
+			Sequence: level.Sequence,
+			Side:     level.Side,
+			Price:    price.String(),
+			Quantity: quantity.String(),
+			Notional: notional.String(),
+		})
+	}
+
+	if orderQuantity.IsPositive() && market.AmountPrecision != nil {
+		rounded, err := orderQuantity.Round(*market.AmountPrecision, decimal.RoundDown)
+		if err == nil {
+			orderQuantity = rounded
+		}
+		if !orderQuantity.IsPositive() && !quantityRounded {
+			problems = append(problems, Problem{
+				Code:    "plan.precision",
+				Field:   field("order_quantity"),
+				Message: fmt.Sprintf("Order quantity rounds to zero at %d decimal places; increase the order quantity.", amountPlaces),
+			})
+		}
+	}
+
+	return adjusted, orderQuantity, problems
 }
 
 func minimumProblems(request Request, levels []Level, orderQuantity decimal.Decimal) []Problem {

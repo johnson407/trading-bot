@@ -194,7 +194,7 @@ func TestReplacementPlacesEveryLevelInNewLadder(t *testing.T) {
 	if len(canceled) != 0 {
 		t.Fatalf("initial sync canceled %d orders, want 0", len(canceled))
 	}
-	engine.placeIntents(testIntents(oldLevels), book, riskGuard, portfolio, 0)
+	engine.placeIntents(testIntents(oldLevels), book, riskGuard, portfolio, 0, decimal.MustParse("100"))
 
 	// The spacing change keeps 96 and 104 while adding 98 and 102.
 	newLevels := testLevels("96", "98", "102", "104")
@@ -202,7 +202,7 @@ func TestReplacementPlacesEveryLevelInNewLadder(t *testing.T) {
 	if len(canceled) != 4 {
 		t.Fatalf("replacement canceled %d orders, want 4", len(canceled))
 	}
-	engine.placeIntents(testIntents(newLevels), book, riskGuard, portfolio, 1)
+	engine.placeIntents(testIntents(newLevels), book, riskGuard, portfolio, 1, decimal.MustParse("100"))
 
 	open := book.OpenOrders()
 	if len(open) != 4 {
@@ -216,6 +216,58 @@ func TestReplacementPlacesEveryLevelInNewLadder(t *testing.T) {
 	for _, price := range []string{"96", "98", "102", "104"} {
 		if !openPrices[price] {
 			t.Fatalf("missing order at %s after replacement: %+v", price, open)
+		}
+	}
+}
+
+func TestGapFillUsesTheBetterMarketPrice(t *testing.T) {
+	book := NewSimulatedOrderBook("USDT")
+	buy := book.Place(strategy.SideBuy, mustDecimal(t, "90"), mustDecimal(t, "1"), nil, 0)
+	sell := book.Place(strategy.SideSell, mustDecimal(t, "110"), mustDecimal(t, "1"), nil, 0)
+	at := time.Date(2026, 1, 1, 0, 15, 0, 0, time.UTC)
+
+	buyFill := book.Fill(buy, at, mustDecimal(t, "80"), mustDecimal(t, "0.001"))
+	if buyFill.Price.String() != "80" || buyFill.Fee.String() != "0.08" {
+		t.Fatalf("buy fill = %+v, want price 80 and fee 0.08", buyFill)
+	}
+
+	sellFill := book.Fill(sell, at, mustDecimal(t, "120"), mustDecimal(t, "0.001"))
+	if sellFill.Price.String() != "120" || sellFill.Fee.String() != "0.12" {
+		t.Fatalf("sell fill = %+v, want price 120 and fee 0.12", sellFill)
+	}
+}
+
+func TestPlaceIntentsPrioritizesLevelsNearestTheMarket(t *testing.T) {
+	engine := NewEngine()
+	book := NewSimulatedOrderBook("USDT")
+	portfolio := NewInMemoryPortfolio(mustDecimal(t, "10000"))
+	portfolio.Base = mustDecimal(t, "100")
+	portfolio.AverageEntry = mustDecimal(t, "100")
+	riskGuard := NewBacktestRiskGuard(RiskLimits{
+		MaxPositionNotional: mustDecimal(t, "100000"),
+		MaxOpenOrders:       2,
+		DailyLossLimit:      mustDecimal(t, "1000"),
+	}, mustDecimal(t, "0"))
+
+	engine.placeIntents(testIntents(testLevels("80", "90", "110", "120")), book, riskGuard, portfolio, 0, mustDecimal(t, "100"))
+
+	open := book.OpenOrders()
+	if len(open) != 2 {
+		t.Fatalf("open orders = %d, want the nearest two: %+v", len(open), open)
+	}
+
+	prices := make(map[string]bool, len(open))
+	for _, order := range open {
+		prices[order.Price.String()] = true
+	}
+	for _, want := range []string{"90", "110"} {
+		if !prices[want] {
+			t.Fatalf("missing nearest order at %s: %+v", want, open)
+		}
+	}
+	for _, unwanted := range []string{"80", "120"} {
+		if prices[unwanted] {
+			t.Fatalf("placed a farther order at %s before a nearer one: %+v", unwanted, open)
 		}
 	}
 }

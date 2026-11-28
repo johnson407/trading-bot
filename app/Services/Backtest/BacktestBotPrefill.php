@@ -146,6 +146,7 @@ class BacktestBotPrefill
             'max_increases' => null,
             'min_spacing' => null,
             'max_spacing' => null,
+            'initial_spacing' => null,
             'volatility_multiplier' => null,
             'recalculation_interval_seconds' => null,
             'stop_loss_percent' => null,
@@ -173,6 +174,9 @@ class BacktestBotPrefill
         if ($strategyKey === 'dynamic-grid') {
             $data['min_spacing'] = Decimal::of($configuration['min_spacing'])->toString();
             $data['max_spacing'] = Decimal::of($configuration['max_spacing'])->toString();
+            if (($configuration['initial_spacing'] ?? null) !== null) {
+                $data['initial_spacing'] = Decimal::of($configuration['initial_spacing'])->toString();
+            }
             $data['volatility_multiplier'] = Decimal::of($configuration['volatility_multiplier'])->toString();
             $data['recalculation_interval_seconds'] = $this->integer($configuration['recalculation_interval_seconds'], 1);
         }
@@ -208,6 +212,12 @@ class BacktestBotPrefill
         }
 
         if (Decimal::of($configuration['max_spacing'])->lessThan($configuration['min_spacing'])) {
+            return false;
+        }
+
+        if (array_key_exists('initial_spacing', $configuration)
+            && $configuration['initial_spacing'] !== null
+            && ! $this->isPositive($configuration['initial_spacing'])) {
             return false;
         }
 

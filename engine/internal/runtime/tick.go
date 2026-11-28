@@ -384,7 +384,8 @@ func (r *Runtime) tickBot(ctx context.Context, botID int64) (retErr error) {
 		}
 		fillDecision, err := impl.OnFill(input.WithBot(refreshed.snapshot(orders)).WithState(decision.State), strategy.FillEvent{
 			ExchangeFillID: fill.ExchangeFillID, Side: strategy.Side(fill.Side), Price: fill.Price,
-			Quantity: fill.Quantity, Fee: fill.Fee, ClientOrderID: &fill.ClientOrderID, GridLevelSequence: fill.Sequence,
+			OrderPrice: fill.OrderPrice, Quantity: fill.Quantity, Fee: fill.Fee,
+			ClientOrderID: &fill.ClientOrderID, GridLevelSequence: fill.Sequence,
 		})
 		if err != nil {
 			return r.tickFailure(ctx, refreshed, err)
@@ -879,6 +880,7 @@ type liveFill struct {
 	ClientOrderID  string
 	Side           string
 	Price          decimal.Decimal
+	OrderPrice     decimal.Decimal
 	Quantity       decimal.Decimal
 	Fee            decimal.Decimal
 	Sequence       *int
@@ -890,7 +892,7 @@ type liveFill struct {
 func (r *Runtime) unappliedLiveFills(ctx context.Context, botID int64) ([]liveFill, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT f.id, f.exchange_fill_id, COALESCE(o.client_order_id, ''), f.side,
-		        f.price::text, f.quantity::text, COALESCE(f.fee::text, '0'), gl.sequence
+		        f.price::text, o.price::text, f.quantity::text, COALESCE(f.fee::text, '0'), gl.sequence
 		 FROM fills f
 		 JOIN orders o ON o.id = f.order_id
 		 LEFT JOIN grid_levels gl ON gl.id = o.grid_level_id
@@ -906,11 +908,12 @@ func (r *Runtime) unappliedLiveFills(ctx context.Context, botID int64) ([]liveFi
 	var fills []liveFill
 	for rows.Next() {
 		var fill liveFill
-		var price, quantity, fee string
-		if err := rows.Scan(&fill.ID, &fill.ExchangeFillID, &fill.ClientOrderID, &fill.Side, &price, &quantity, &fee, &fill.Sequence); err != nil {
+		var price, orderPrice, quantity, fee string
+		if err := rows.Scan(&fill.ID, &fill.ExchangeFillID, &fill.ClientOrderID, &fill.Side, &price, &orderPrice, &quantity, &fee, &fill.Sequence); err != nil {
 			return nil, err
 		}
 		fill.Price = mustDecimal(price)
+		fill.OrderPrice = mustDecimal(orderPrice)
 		fill.Quantity = mustDecimal(quantity)
 		fill.Fee = mustDecimal(fee)
 		fills = append(fills, fill)
@@ -948,6 +951,7 @@ func (r *Runtime) applyLiveFills(ctx context.Context, bot *Bot, impl strategy.St
 				ExchangeFillID:    fill.ExchangeFillID,
 				Side:              strategy.Side(fill.Side),
 				Price:             fill.Price,
+				OrderPrice:        fill.OrderPrice,
 				Quantity:          fill.Quantity,
 				Fee:               fill.Fee,
 				ClientOrderID:     &clientID,
@@ -1202,10 +1206,23 @@ func (r *Runtime) strategyInput(ctx context.Context, bot *Bot, state strategy.St
 	}
 }
 
+// placementPrice is the current mark price used to order intents by distance.
+// A missing price leaves the strategy's order untouched.
+func placementPrice(bot *Bot) decimal.Decimal {
+	raw, ok := bot.Settings["mark_price"].(string)
+	if !ok {
+		return decimal.Zero()
+	}
+
+	return mustDecimal(raw)
+}
+
 func (r *Runtime) placeOrders(ctx context.Context, bot *Bot, active *gridState, intents []strategy.OrderIntent) (int, error) {
 	if active == nil {
 		return 0, nil
 	}
+
+	intents = strategy.SortOrderIntents(intents, placementPrice(bot))
 
 	if bot.live() {
 		return r.placeLiveOrders(ctx, bot, active, intents)
@@ -1366,6 +1383,7 @@ type appliedFill struct {
 	ExchangeFillID string
 	Side           string
 	Price          decimal.Decimal
+	OrderPrice     decimal.Decimal
 	Quantity       decimal.Decimal
 	Fee            decimal.Decimal
 	Sequence       *int
@@ -1498,7 +1516,7 @@ func (r *Runtime) processPaperFills(ctx context.Context, bot *Bot, active *gridS
 		})
 		applied = append(applied, appliedFill{
 			ClientOrderID: fill.ClientOrderID, ExchangeFillID: fill.ClientOrderID, Side: string(fill.Side),
-			Price: fill.Price, Quantity: fill.Quantity, Fee: fill.Fee, Sequence: order.Sequence,
+			Price: fill.Price, OrderPrice: order.Price, Quantity: fill.Quantity, Fee: fill.Fee, Sequence: order.Sequence,
 		})
 	}
 

@@ -117,6 +117,37 @@ it('returns a dynamic grid plan when hysteresis is valid', function () {
         ->assertJsonPath('values.spacing_hysteresis_percent', '12.5');
 });
 
+it('returns an explicit dynamic grid initial spacing in the plan', function () {
+    $user = User::factory()->create();
+    fakeMarket();
+
+    $this->actingAs($user)
+        ->postJson(route('bots.preview'), previewPayload([
+            'strategy_key' => 'dynamic-grid',
+            'min_spacing' => '50',
+            'max_spacing' => '500',
+            'initial_spacing' => '75.5',
+        ]))
+        ->assertOk()
+        ->assertJsonPath('plan.errors', [])
+        ->assertJsonPath('values.initial_spacing', '75.5');
+});
+
+it('rejects malformed dynamic grid initial spacing before preview', function (string $value) {
+    $user = User::factory()->create();
+    fakeMarket();
+
+    $this->actingAs($user)
+        ->postJson(route('bots.preview'), previewPayload([
+            'strategy_key' => 'dynamic-grid',
+            'min_spacing' => '50',
+            'max_spacing' => '500',
+            'initial_spacing' => $value,
+        ]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('initial_spacing');
+})->with(['0', '.5', '20.', '1e1']);
+
 it('rejects malformed dynamic grid spacing hysteresis before preview', function (string $value) {
     $user = User::factory()->create();
     fakeMarket();

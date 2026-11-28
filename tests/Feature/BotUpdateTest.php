@@ -531,6 +531,37 @@ it('stores dynamic grid spacing hysteresis on update', function () {
         ->toMatchArray(['spacing_hysteresis_percent' => '12.5']);
 });
 
+it('stores dynamic grid initial spacing on update', function () {
+    $user = User::factory()->create();
+    $bot = Bot::factory()->for($user)->create([
+        'status' => 'idle',
+        'strategy_key' => 'dynamic-grid',
+    ]);
+
+    StrategyConfig::factory()->for($bot)->create([
+        'strategy_key' => 'dynamic-grid',
+        'configuration' => [
+            'center_price' => '100',
+            'levels_per_side' => 2,
+            'min_spacing' => '1',
+            'max_spacing' => '10',
+            'order_quantity' => '1',
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload([
+            'min_spacing' => '1',
+            'max_spacing' => '10',
+            'initial_spacing' => '5.5',
+        ]))
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHasNoErrors();
+
+    expect(StrategyConfig::query()->where('bot_id', $bot->id)->firstOrFail()->configuration)
+        ->toMatchArray(['initial_spacing' => '5.5']);
+});
+
 it('rejects dynamic grid spacing hysteresis outside 0 to 90 on update', function () {
     $user = User::factory()->create();
     $bot = Bot::factory()->for($user)->create([

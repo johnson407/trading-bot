@@ -61,6 +61,29 @@ func TestDynamicGridIgnoresDynamicSpacingType(t *testing.T) {
 	}
 }
 
+func TestDynamicRecalculationPrunesStaleDisarms(t *testing.T) {
+	input := dynamicTickTestInput(NewState())
+	input.Config.Values["recalculation_interval_seconds"] = 0
+	input.Config.Values["min_spacing"] = "10"
+	input.Config.Values["max_spacing"] = "20"
+	input.Market.RecentPrices = []decimal.Decimal{decimal.MustParse("80"), decimal.MustParse("120")}
+	state := dynamicTickTestState().Merge(map[string]any{
+		"disarmed_levels": map[string]any{
+			"70": map[string]any{"side": "buy", "pair": "75"},
+		},
+	})
+	input.State = state
+
+	decision, err := NewDynamicGrid().OnTick(input)
+	if err != nil {
+		t.Fatalf("OnTick returned error: %v", err)
+	}
+
+	if _, present := disarmedLevels(decision.State)["70"]; present {
+		t.Fatal("expected the stale disarm to be pruned on recalculation")
+	}
+}
+
 func TestDynamicGridNonDueTickReplenishesOrders(t *testing.T) {
 	tests := []struct {
 		name     string

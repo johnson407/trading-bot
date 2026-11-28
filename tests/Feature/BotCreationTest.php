@@ -116,6 +116,44 @@ it('accepts a dynamic grid without the shared spacing fields', function () {
         ]);
 });
 
+it('stores an explicit dynamic grid initial spacing', function () {
+    $user = User::factory()->create();
+    $payload = botPayload([
+        'strategy_key' => 'dynamic-grid',
+        'min_spacing' => '50',
+        'max_spacing' => '500',
+        'initial_spacing' => '75.5',
+    ]);
+
+    unset($payload['spacing_type'], $payload['spacing_value']);
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), $payload)
+        ->assertRedirect(route('bots.index'))
+        ->assertSessionHasNoErrors();
+
+    $bot = Bot::where('user_id', $user->id)->firstOrFail();
+
+    expect(StrategyConfig::where('bot_id', $bot->id)->firstOrFail()->configuration)
+        ->toMatchArray(['initial_spacing' => '75.5']);
+});
+
+it('rejects malformed dynamic grid initial spacing', function (string $value) {
+    $user = User::factory()->create();
+    $payload = botPayload([
+        'strategy_key' => 'dynamic-grid',
+        'min_spacing' => '50',
+        'max_spacing' => '500',
+        'initial_spacing' => $value,
+    ]);
+
+    unset($payload['spacing_type'], $payload['spacing_value']);
+
+    $this->actingAs($user)
+        ->post(route('bots.store'), $payload)
+        ->assertSessionHasErrors('initial_spacing');
+})->with(['0', '.5', '20.', '1e1']);
+
 it('stores an explicit dynamic grid spacing hysteresis', function () {
     $user = User::factory()->create();
     $payload = botPayload([
@@ -365,6 +403,28 @@ it('rejects an order below the exchange minimum when market data is cached', fun
 })->with([
     'minimum amount' => [MarketData::make('BTC/USDT', '50000', minAmount: '0.01')],
     'minimum notional' => [MarketData::make('BTC/USDT', '50000', minNotional: '1000')],
+]);
+
+it('rejects a level price or quantity that rounds to zero at market precision', function (array $overrides, string $field) {
+    $user = User::factory()->create();
+
+    try {
+        app(MarketDataResolver::class)->prime(
+            'binance',
+            MarketData::make('BTC/USDT', '100', pricePrecision: 0, amountPrecision: 0),
+        );
+
+        $this->actingAs($user)
+            ->post(route('bots.store'), botPayload($overrides))
+            ->assertSessionHasErrors($field);
+
+        expect(Bot::count())->toBe(0);
+    } finally {
+        Cache::flush();
+    }
+})->with([
+    'price' => [['center_price' => '0.03', 'spacing_value' => '0.01', 'level_count' => 2], 'spacing_value'],
+    'quantity' => [['order_quantity' => '0.4'], 'order_quantity'],
 ]);
 
 it('creates a bot when the plan only produces advisories', function () {
