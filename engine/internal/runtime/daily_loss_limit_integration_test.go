@@ -234,6 +234,140 @@ func TestDailyLossFailsClosedWhenRiskLimitsCannotBeRead(t *testing.T) {
 	assertCount(t, pool, `SELECT COUNT(*) FROM orders WHERE bot_id = $1`, 0, botID)
 }
 
+func TestRolloverFailureDoesNotPersistZeroBaseline(t *testing.T) {
+	pool := dailyLossTestPool(t)
+	ctx := context.Background()
+	userID, botID := dailyLossTestBot(t, pool, "0")
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO risk_limits (scope, user_id, daily_loss_limit, day_start, day_start_realized_pnl, created_at, updated_at)
+		 VALUES ('user', $1, '1000', now() - interval '1 day', '42', now(), now())`, userID); err != nil {
+		t.Fatalf("insert account risk limit: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_block_risk_limit_rollover() RETURNS trigger AS $$
+		BEGIN
+			IF NEW.day_start IS DISTINCT FROM OLD.day_start
+			   OR NEW.day_start_realized_pnl IS DISTINCT FROM OLD.day_start_realized_pnl THEN
+				RAISE EXCEPTION 'injected account baseline persist failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER test_block_risk_limit_rollover_trigger
+			BEFORE UPDATE ON risk_limits
+			FOR EACH ROW EXECUTE FUNCTION test_block_risk_limit_rollover();
+	`); err != nil {
+		t.Fatalf("install rollover failure trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS test_block_risk_limit_rollover_trigger ON risk_limits`)
+		_, _ = pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS test_block_risk_limit_rollover()`)
+	})
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+	if err := trading.TickBot(ctx, botID); err != nil {
+		t.Fatalf("tick: %v", err)
+	}
+
+	assertBotState(t, pool, botID, "running", "running")
+	assertLastError(t, pool, botID, "account daily loss baseline")
+	assertConsecutiveFailures(t, pool, botID, 1)
+	assertCount(t, pool, `SELECT COUNT(*) FROM orders WHERE bot_id = $1`, 0, botID)
+
+	var baseline string
+	var dayStart time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT day_start_realized_pnl::text, day_start FROM risk_limits WHERE user_id=$1 AND scope='user' AND bot_id IS NULL`,
+		userID,
+	).Scan(&baseline, &dayStart); err != nil {
+		t.Fatalf("read account baseline: %v", err)
+	}
+	if baseline != "42.0000000000000000" {
+		t.Fatalf("account baseline = %q, want the previous value 42", baseline)
+	}
+	if dayStart.After(time.Now().UTC().Add(-time.Hour)) {
+		t.Fatalf("day_start = %v, want the previous (pre-rollover) day", dayStart)
+	}
+}
+
+func TestAccountBaselineRolloverIncludesArchivedRealizedPNL(t *testing.T) {
+	pool := dailyLossTestPool(t)
+	ctx := context.Background()
+	userID, botID := dailyLossTestBot(t, pool, "0")
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO risk_limits (scope, user_id, daily_loss_limit, day_start, day_start_realized_pnl, created_at, updated_at)
+		 VALUES ('user', $1, '1000', now() - interval '1 day', '0', now(), now())`, userID); err != nil {
+		t.Fatalf("insert account risk limit: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
+		 capital_allocation, quote_inventory, realized_pnl, tick_interval_seconds, settings, deleted_at, created_at, updated_at)
+		 VALUES ($1, 'Archived rollover bot', 'binance', 'BTC/USDT', 'simple-grid', 'paper', 'stopped', 'stopped',
+		 '1000', '1000', '-25', 1, '{}'::jsonb, now(), now(), now())`, userID); err != nil {
+		t.Fatalf("insert archived bot: %v", err)
+	}
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+	if err := trading.TickBot(ctx, botID); err != nil {
+		t.Fatalf("tick: %v", err)
+	}
+
+	var baseline string
+	if err := pool.QueryRow(ctx,
+		`SELECT day_start_realized_pnl::text FROM risk_limits WHERE user_id=$1 AND scope='user' AND bot_id IS NULL`,
+		userID,
+	).Scan(&baseline); err != nil {
+		t.Fatalf("read account baseline: %v", err)
+	}
+	if baseline != "-25.0000000000000000" {
+		t.Fatalf("account baseline = %q, want the archived bot P&L -25", baseline)
+	}
+}
+
+func TestDailyLossFailsClosedWhenBaselineCannotBePersisted(t *testing.T) {
+	pool := dailyLossTestPool(t)
+	ctx := context.Background()
+	_, botID := dailyLossTestBot(t, pool, "0")
+
+	yesterday := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+	if _, err := pool.Exec(ctx,
+		`UPDATE bots SET settings = jsonb_build_object('daily_loss_baseline', jsonb_build_object('day', $2::text, 'realized', '0')) WHERE id = $1`,
+		botID, yesterday); err != nil {
+		t.Fatalf("seed yesterday baseline: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_block_daily_loss_baseline() RETURNS trigger AS $$
+		BEGIN
+			IF (NEW.settings->'daily_loss_baseline')::jsonb IS DISTINCT FROM (OLD.settings->'daily_loss_baseline')::jsonb THEN
+				RAISE EXCEPTION 'injected per-bot baseline persist failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER test_block_daily_loss_baseline_trigger
+			BEFORE UPDATE ON bots
+			FOR EACH ROW EXECUTE FUNCTION test_block_daily_loss_baseline();
+	`); err != nil {
+		t.Fatalf("install baseline failure trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS test_block_daily_loss_baseline_trigger ON bots`)
+		_, _ = pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS test_block_daily_loss_baseline()`)
+	})
+
+	trading := runtime.New(pool, &fixedMarket{price: "100"}, nil)
+	if err := trading.TickBot(ctx, botID); err != nil {
+		t.Fatalf("tick: %v", err)
+	}
+
+	assertBotState(t, pool, botID, "running", "running")
+	assertLastError(t, pool, botID, "daily loss baseline")
+	assertConsecutiveFailures(t, pool, botID, 1)
+	assertCount(t, pool, `SELECT COUNT(*) FROM orders WHERE bot_id = $1`, 0, botID)
+}
+
 func TestDailyLossFailsClosedWhenAccountBaselineCannotBeRead(t *testing.T) {
 	pool := dailyLossTestPool(t)
 	ctx := context.Background()

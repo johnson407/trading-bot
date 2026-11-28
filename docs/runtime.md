@@ -117,11 +117,13 @@ reconciled by the next tick after a restart.
 A risk, protective-exit, daily-loss, kill-switch, reconciliation, live-gate,
 strategy-stop, tick-failure, unsupported-exchange, or user pause never resumes
 automatically; an operator must start it again. The one exception is startup recovery: once per
-engine process, before the stale check, a non-archived paper Binance bot whose
-recorded pause cause is `stale_tick` is resumed with a fresh first-tick grace.
-Live bots, every safety pause, and legacy rows with no recorded cause stay
-paused. After deploying this change, any bot paused before it has no cause and
-needs one explicit operator start.
+engine process, after pending cancellation/reconcile/strategy-reset cleanup and
+before the stale check, a non-archived paper Binance bot whose recorded pause
+cause is `stale_tick` is resumed with a fresh first-tick grace. A bot with a
+pending cleanup flag does not resume until that cleanup succeeds. Live bots,
+every safety pause, and legacy rows with no recorded cause stay paused. After
+deploying this change, any bot paused before it has no cause and needs one
+explicit operator start.
 
 ## Backtests
 

@@ -540,7 +540,8 @@ func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal)
 		return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("load daily loss limit: %w", err)
 	}
 
-	today := r.now().Format("2006-01-02")
+	now := r.now().UTC()
+	today := now.Format("2006-01-02")
 	baseline := decimal.Zero()
 	stored, _ := bot.Settings["daily_loss_baseline"].(map[string]any)
 	if stored != nil && fmt.Sprint(stored["day"]) == today {
@@ -548,7 +549,9 @@ func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal)
 	} else {
 		baseline = bot.Realized
 		bot.Settings["daily_loss_baseline"] = map[string]any{"day": today, "realized": bot.Realized.String()}
-		r.persistSettings(ctx, bot)
+		if err := r.persistSettings(ctx, bot); err != nil {
+			return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("persist daily loss baseline: %w", err)
+		}
 	}
 
 	loss := dailyLossValue(bot, baseline, mark)
@@ -559,64 +562,66 @@ func (r *Runtime) dailyLoss(ctx context.Context, bot *Bot, mark decimal.Decimal)
 	// account's exposure even though their own risk rules no longer run.
 	var userLimitRaw, userBaselineRaw = defaultDailyLoss, "0"
 	var dayStart *time.Time
+	accountRow := true
 	err = r.pool.QueryRow(ctx,
 		`SELECT COALESCE(daily_loss_limit::text, $2), day_start, COALESCE(day_start_realized_pnl::text, '0')
 		 FROM risk_limits WHERE user_id = $1 AND scope = 'user' AND bot_id IS NULL
 		 ORDER BY id DESC LIMIT 1`,
 		bot.UserID, defaultDailyLoss,
 	).Scan(&userLimitRaw, &dayStart, &userBaselineRaw)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		accountRow = false
+	} else if err != nil {
 		return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("load account daily loss limit and baseline: %w", err)
 	}
 
-	if dayStart == nil || dayStart.UTC().Format("2006-01-02") != today {
-		var realized = decimal.Zero()
-		rows, err := r.pool.Query(ctx, `SELECT realized_pnl::text FROM bots WHERE user_id = $1`, bot.UserID)
-		if err == nil {
-			for rows.Next() {
-				var raw string
-				if rows.Scan(&raw) == nil {
-					realized = realized.Add(mustDecimal(raw))
-				}
-			}
-			rows.Close()
+	if accountRow && (dayStart == nil || dayStart.UTC().Format("2006-01-02") != today) {
+		realized, err := r.accountRealizedPNL(ctx, bot.UserID)
+		if err != nil {
+			return decimal.Zero(), decimal.Zero(), false, err
 		}
 		userBaselineRaw = realized.String()
 		if _, err := r.pool.Exec(ctx,
-			`UPDATE risk_limits SET day_start = now(), day_start_realized_pnl = $2, updated_at = now()
-			 WHERE user_id = $1 AND scope = 'user' AND bot_id IS NULL`,
-			bot.UserID, userBaselineRaw,
+			`UPDATE risk_limits SET day_start = $3, day_start_realized_pnl = $2, updated_at = now()
+			 WHERE user_id = $1 AND scope = 'user' AND bot_id IS NULL
+			   AND (day_start IS NULL OR (day_start AT TIME ZONE 'UTC')::date <> $4::date)`,
+			bot.UserID, userBaselineRaw, now, today,
 		); err != nil {
-			r.logger.Error("persist account daily loss baseline failed", "user_id", bot.UserID, "error_type", fmt.Sprintf("%T", err))
+			return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("persist account daily loss baseline: %w", err)
 		}
 	}
 
-	userLoss := decimal.Zero()
 	rows, err := r.pool.Query(ctx,
 		`SELECT realized_pnl::text, base_inventory::text, average_entry_price::text, settings
 		 FROM bots WHERE user_id = $1`, bot.UserID,
 	)
-	if err == nil {
-		userBaseline := mustDecimal(userBaselineRaw)
-		total := decimal.Zero()
-		for rows.Next() {
-			var realizedRaw, baseRaw, averageRaw string
-			var settings []byte
-			if rows.Scan(&realizedRaw, &baseRaw, &averageRaw, &settings) != nil {
-				continue
-			}
-			total = total.Add(mustDecimal(realizedRaw))
-			var values map[string]any
-			_ = json.Unmarshal(settings, &values)
-			if parsed := recentMark(values); parsed != nil {
-				total = total.Add(unrealized(mustDecimal(baseRaw), mustDecimal(averageRaw), *parsed))
-			}
+	if err != nil {
+		return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("load account daily loss exposure: %w", err)
+	}
+	defer rows.Close()
+
+	userLoss := decimal.Zero()
+	userBaseline := mustDecimal(userBaselineRaw)
+	total := decimal.Zero()
+	for rows.Next() {
+		var realizedRaw, baseRaw, averageRaw string
+		var settings []byte
+		if err := rows.Scan(&realizedRaw, &baseRaw, &averageRaw, &settings); err != nil {
+			return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("scan account daily loss exposure: %w", err)
 		}
-		rows.Close()
-		total = total.Sub(userBaseline)
-		if total.IsNegative() {
-			userLoss = total.Abs()
+		total = total.Add(mustDecimal(realizedRaw))
+		var values map[string]any
+		_ = json.Unmarshal(settings, &values)
+		if parsed := recentMark(values); parsed != nil {
+			total = total.Add(unrealized(mustDecimal(baseRaw), mustDecimal(averageRaw), *parsed))
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return decimal.Zero(), decimal.Zero(), false, fmt.Errorf("read account daily loss exposure: %w", err)
+	}
+	total = total.Sub(userBaseline)
+	if total.IsNegative() {
+		userLoss = total.Abs()
 	}
 
 	userLimit := mustDecimal(userLimitRaw)
@@ -654,12 +659,41 @@ func recentMark(settings map[string]any) *decimal.Decimal {
 	return &value
 }
 
-func (r *Runtime) persistSettings(ctx context.Context, bot *Bot) {
+// accountRealizedPNL sums realized P&L for every user bot. Archived bots are
+// intentionally included: their realized P&L remains part of the account's
+// exposure even though their own risk rules no longer run.
+func (r *Runtime) accountRealizedPNL(ctx context.Context, userID int64) (decimal.Decimal, error) {
+	rows, err := r.pool.Query(ctx, `SELECT realized_pnl::text FROM bots WHERE user_id = $1`, userID)
+	if err != nil {
+		return decimal.Zero(), fmt.Errorf("load account realized pnl: %w", err)
+	}
+	defer rows.Close()
+
+	total := decimal.Zero()
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return decimal.Zero(), fmt.Errorf("scan account realized pnl: %w", err)
+		}
+		total = total.Add(mustDecimal(raw))
+	}
+	if err := rows.Err(); err != nil {
+		return decimal.Zero(), fmt.Errorf("read account realized pnl: %w", err)
+	}
+
+	return total, nil
+}
+
+func (r *Runtime) persistSettings(ctx context.Context, bot *Bot) error {
 	encoded, err := json.Marshal(bot.Settings)
 	if err != nil {
-		return
+		return fmt.Errorf("encode bot settings: %w", err)
 	}
-	_, _ = r.pool.Exec(ctx, `UPDATE bots SET settings = $2::jsonb, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, string(encoded))
+	if _, err := r.pool.Exec(ctx, `UPDATE bots SET settings = $2::jsonb, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, string(encoded)); err != nil {
+		return fmt.Errorf("persist bot settings: %w", err)
+	}
+
+	return nil
 }
 
 func (r *Runtime) pauseOtherBots(ctx context.Context, userID, currentBotID int64, message string) {
@@ -706,7 +740,12 @@ func (r *Runtime) pause(ctx context.Context, bot *Bot, cause pauseCause, message
 	}
 	tickStatsFrom(ctx).markPaused()
 	if _, err := r.cancelOpenOrders(ctx, bot.UserID, bot.ID, activityType); err != nil {
-		_, _ = r.pool.Exec(ctx, `UPDATE bots SET cancel_retry_requested = true, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
+		_, _ = r.pool.Exec(ctx, `UPDATE bots
+			SET cancel_retry_requested = true,
+			    pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL
+			                                    THEN now() ELSE pause_reason_recorded_at END,
+			    updated_at = now()
+			WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
 		r.logger.Error("pause could not cancel orders", "bot_id", bot.ID, "error_type", fmt.Sprintf("%T", err))
 	}
 	if activityType != "" {
@@ -1212,12 +1251,14 @@ func (r *Runtime) placeOrders(ctx context.Context, bot *Bot, active *gridState, 
 	placed := 0
 	positionLimitSkips := 0
 	projectedNotional := ""
+	skips := &orderSkips{}
 	defer func() {
 		r.recordPositionLimitSkips(ctx, bot, positionLimitSkips, projectedNotional)
+		r.recordInvalidOrderSkips(ctx, bot, skips)
 	}()
 	for index, intent := range intents {
 		if !intent.Price.IsPositive() || !intent.Quantity.IsPositive() {
-			r.riskEvent(ctx, bot.UserID, bot.ID, "risk.invalid_order", "critical", "Order skipped: price and quantity must be positive.", nil)
+			skips.add("non_positive")
 			continue
 		}
 		if atPrice[intent.Price.String()] {

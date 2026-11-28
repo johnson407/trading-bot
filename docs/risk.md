@@ -40,6 +40,10 @@ realized P&L, plus optional unrealized P&L at the current mark.
 - A paused bot is never resumed by the day's loss monitor. The startup-only
   stale-tick recovery does not apply to a daily-loss, risk, protective-exit, or
   kill-switch pause.
+- Baseline reads fail closed. If the account realized P&L, the rollover baseline,
+  or a per-bot baseline cannot be read or persisted, the tick records an error
+  and places no orders instead of treating the loss as zero. A failed rollover
+  keeps the previous baseline and retries on the next tick; it never stores zero.
 
 ## Protective exits
 
@@ -91,7 +95,9 @@ Paper mode is the default and never sends private exchange orders. There is no s
 
 ## Risk events
 
-Risk events are queryable per bot and per user, newest first. Important types include `risk.position_limit`, `risk.open_order_limit`, `risk.daily_loss_limit`, `risk.kill_switch_cancel_failed`, `exchange.failure_threshold`, `risk.stop_loss_triggered`, `risk.take_profit_triggered`, `risk.range_exit_triggered`, `risk.cancel_failed`, `risk.live_trading_disabled`, `risk.live_start_refused`, and `risk.live_order_rejected`. Each event stores severity, message, and JSON context.
+Risk events are queryable per bot and per user, newest first. Important types include `risk.position_limit`, `risk.invalid_order`, `risk.open_order_limit`, `risk.daily_loss_limit`, `risk.kill_switch_cancel_failed`, `exchange.failure_threshold`, `risk.stop_loss_triggered`, `risk.take_profit_triggered`, `risk.range_exit_triggered`, `risk.cancel_failed`, `risk.live_trading_disabled`, `risk.live_start_refused`, and `risk.live_order_rejected`. Each event stores severity, message, and JSON context.
+
+Invalid orders are aggregated per placement attempt: one `risk.invalid_order` event records `orders_skipped` and a `reasons` breakdown instead of one event per skipped order. Repeats for the same bot and event type are suppressed for five minutes, like position-limit blocks.
 
 ## Fees
 

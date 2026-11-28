@@ -205,12 +205,14 @@ func (r *Runtime) placeLiveOrders(ctx context.Context, bot *Bot, active *gridSta
 	placed := 0
 	positionLimitSkips := 0
 	projectedNotional := ""
+	skips := &orderSkips{}
 	defer func() {
 		r.recordPositionLimitSkips(ctx, bot, positionLimitSkips, projectedNotional)
+		r.recordInvalidOrderSkips(ctx, bot, skips)
 	}()
 	for _, intent := range intents {
 		if !intent.Price.IsPositive() || !intent.Quantity.IsPositive() {
-			r.riskEvent(ctx, bot.UserID, bot.ID, "risk.invalid_order", "critical", "Order skipped: price and quantity must be positive.", nil)
+			skips.add("non_positive")
 			continue
 		}
 
@@ -220,16 +222,16 @@ func (r *Runtime) placeLiveOrders(ctx context.Context, bot *Bot, active *gridSta
 		// same intent and the same rounded order.
 		price, ok := roundOrderValue(intent.Price, rules.PriceStep, rules.PricePrecision)
 		if !ok {
-			r.riskEvent(ctx, bot.UserID, bot.ID, "risk.invalid_order", "critical", "Order skipped: price could not be rounded to the exchange precision.", nil)
+			skips.add("price_precision")
 			continue
 		}
 		quantity, ok := roundOrderValue(intent.Quantity, rules.AmountStep, rules.AmountPrecision)
 		if !ok {
-			r.riskEvent(ctx, bot.UserID, bot.ID, "risk.invalid_order", "critical", "Order skipped: quantity could not be rounded to the exchange precision.", nil)
+			skips.add("quantity_precision")
 			continue
 		}
 		if !price.IsPositive() || !quantity.IsPositive() {
-			r.riskEvent(ctx, bot.UserID, bot.ID, "risk.invalid_order", "critical", "Order skipped: rounding produced a zero price or quantity.", nil)
+			skips.add("rounded_to_zero")
 			continue
 		}
 
@@ -246,11 +248,11 @@ func (r *Runtime) placeLiveOrders(ctx context.Context, bot *Bot, active *gridSta
 			break
 		}
 		if rules.MinAmount.IsPositive() && intent.Quantity.LessThan(rules.MinAmount) {
-			r.riskEvent(ctx, bot.UserID, bot.ID, "risk.invalid_order", "critical", "Order skipped: quantity is below the exchange minimum.", nil)
+			skips.add("below_min_amount")
 			continue
 		}
 		if rules.MinNotional.IsPositive() && intent.Price.Mul(intent.Quantity).LessThan(rules.MinNotional) {
-			r.riskEvent(ctx, bot.UserID, bot.ID, "risk.invalid_order", "critical", "Order skipped: notional is below the exchange minimum.", nil)
+			skips.add("below_min_notional")
 			continue
 		}
 
