@@ -29,6 +29,8 @@
 
 ## Verification record
 
+Verified on `d37ca13`, including `TestAutoResumeDoesNotResumeBotsPausedAfterStartup`. The commands below were run against that commit; the final commit is documentation-only.
+
 - `docker run --rm --network trading-bot_default -v "$PWD:/src" -w /src/engine -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod -e RUNTIME_TEST_DSN='postgres://postgres:secret@trading-bot-postgres-1:5432/trading_bot_test?sslmode=disable' golang:1.24-alpine go test ./... -count=1` — all packages pass.
 - `docker run --rm -v "$PWD:/src" -w /src/engine -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod golang:1.24-alpine sh -c 'gofmt -w internal/runtime/*.go && go vet ./...'` — pass.
 - `docker run --rm --network trading-bot_default -u www-data -v /home/johnson/Repos/trading-bot:/var/www/html -v "$PWD/docs:/var/www/html/docs:ro" -w /var/www/html -e APP_ENV=testing -e DB_DATABASE=trading_bot_test -e DB_HOST=trading-bot-postgres-1 -e DB_USERNAME=postgres -e DB_PASSWORD=secret -e CACHE_STORE=array -e QUEUE_CONNECTION=sync -e SESSION_DRIVER=array -e CONCURRENCY_DRIVER=sync --entrypoint php trading-bot-app:latest artisan test --filter=RiskDocsTest` — 1 passed, 9 assertions.
