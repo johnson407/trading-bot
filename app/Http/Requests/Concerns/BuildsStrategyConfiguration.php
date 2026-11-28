@@ -22,6 +22,15 @@ trait BuildsStrategyConfiguration
             $validator->errors()->add('max_order_quantity', 'The maximum order quantity is required for martingale grids.');
         }
 
+        if ($strategy === 'martingale-grid'
+            && $this->filled('max_order_quantity')
+            && $this->filled('order_quantity')
+            && preg_match('/^\d+(\.\d+)?$/', (string) $this->input('max_order_quantity'))
+            && preg_match('/^\d+(\.\d+)?$/', (string) $this->input('order_quantity'))
+            && Decimal::of((string) $this->input('max_order_quantity'))->lessThan((string) $this->input('order_quantity'))) {
+            $validator->errors()->add('max_order_quantity', 'The maximum order quantity must be at least the order quantity.');
+        }
+
         if ($strategy === 'dynamic-grid') {
             if (! $this->filled('min_spacing')) {
                 $validator->errors()->add('min_spacing', 'The minimum spacing is required for dynamic grids.');

@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/johnson407/trading-bot/engine/internal/decimal"
@@ -21,6 +22,16 @@ func testTrailingInput() Input {
 			},
 		},
 		State: NewState(),
+	}
+}
+
+func TestTrailingInitializeRejectsDynamicSpacing(t *testing.T) {
+	input := testTrailingInput()
+	input.Config.Values["spacing_type"] = "dynamic"
+
+	_, err := NewTrailingGrid().Initialize(input)
+	if err == nil || !strings.Contains(err.Error(), "spacing_type") {
+		t.Fatalf("expected spacing_type configuration error, got %v", err)
 	}
 }
 
