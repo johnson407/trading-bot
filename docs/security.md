@@ -81,7 +81,21 @@ Evidence: `tests/Feature/RateLimitTest.php`.
 
 ## Live-trading safeguards
 
-- [x] Live mode is disabled by default: `TRADING_LIVE_ENABLED=false`.
+- [x] Live mode is disabled by default. `TRADING_LIVE_ENABLED=false` in the NAS
+  `.env` is the single gate: Laravel reads `config('trading.live_enabled')`, the
+  engine reads the same value and reports it in the heartbeat as `live_trading`,
+  and production Compose passes `${TRADING_LIVE_ENABLED:-false}`. There is no
+  second switch and no per-service override.
+- [x] The disable rule is always available: set `TRADING_LIVE_ENABLED=false` in
+  `.env`, recreate `app`, `engine`, `horizon`, and `scheduler`, then verify the
+  application config and the engine heartbeat both report false. A failing final
+  default `live:preflight` requires this immediately.
+- [x] Exchange API keys are trade-only: spot trading enabled, withdrawals
+  disabled, and an exchange-side IP allowlist for the NAS egress address. Never
+  use a key with withdrawal or transfer permission for the bot.
+- [x] Live go-live, testnet evidence, canary limits, kill switch, manual flatten,
+  restart reconciliation, rollback, and the named escalation owner are documented
+  in the [live-trading runbook](live-trading.md).
 - [x] Creating or starting a live bot requires `<bot name> on <exchange>` as
   confirmation, and starting also requires a free quote balance at least equal to
   the capital allocation.
@@ -107,32 +121,45 @@ Evidence: `tests/Feature/RateLimitTest.php`.
 
 ## Transport and deployment
 
-- [ ] HTTPS termination is a deployment responsibility. Nginx must redirect
-  HTTP to HTTPS and set HSTS in production.
+- [ ] TLS and HSTS termination are required before live trading. Terminate TLS
+  at the QNAP reverse proxy (or a dedicated proxy) in front of the published
+  Nginx port, redirect HTTP to HTTPS, and send
+  `Strict-Transport-Security: max-age=31536000; includeSubDomains`. Set
+  `APP_URL` to the public `https://` URL. The live preflight blocks a non-HTTPS
+  URL outside local/testing.
+- [ ] Mail uses a non-log transport with a monitored from address before live
+  trading: set `MAIL_MAILER` to `smtp` (or another real transport) and
+  `MAIL_FROM_ADDRESS`. The live preflight blocks the `log` and `array` mailers.
 - [x] `docker/nginx/default.conf` proxies only the application and exposes the
   health endpoints. `GET /health/engine` reports the Go engine heartbeat as
   informational JSON (503 when stale); it never pauses bots or cancels orders.
 - [x] Secrets are supplied through environment variables, not committed files;
   `.env` is ignored and `.env.example` contains placeholders.
-- [ ] `.env` permissions follow a split policy. Non-Docker setups should keep
-  mode `600` so other local users cannot read database and exchange settings.
-  Under the Docker Compose bind-mount, keep mode `644`: PHP-FPM, Horizon, and the
-  scheduler run as Alpine `www-data`, not the host user, and must be able to read
-  the file. A `600` file owned by the host user is unreadable inside the
-  container, so Laravel falls back for keys Compose does not inject.
+- [x] `.env` permissions follow a split policy. On the NAS keep the file at mode
+  `600` (`chmod 600 /share/Docker/trading-bot/.env`) so only the deployment
+  account can read database, mail, and exchange settings. Use mode `644` only
+  for the local Docker Compose bind mount: PHP-FPM, Horizon, and the scheduler
+  run as Alpine `www-data` there, and a host-owned `600` file is unreadable
+  inside the container, so Laravel falls back for keys Compose does not inject.
+  The `644` exception never applies to the NAS.
 
 ## Residual risks
 
 - No two-factor authentication in the MVP.
-- API-key permissions are enforced at the exchange; operators must create
-  read + spot-trade keys with withdrawals disabled and an IP allowlist.
+- Exchange permissions are enforced at the exchange. The trade-only,
+  withdrawals-disabled, and IP-allowlist rules are operator controls; a
+  misconfigured key is not caught by the application.
+- TLS/HSTS termination and the non-log mailer are deployment controls, not
+  application code. Both are required before the live gate is enabled.
 - Coverage measurement currently requires a PHP build with Xdebug/PCOV; the
   static PHP build used in this environment has neither. Static analysis and the
   full test suite remain the enforced gates.
 - Rate limiting is per application instance and uses the configured cache store;
   use Redis in production so all web workers share counters.
-- Phase 8 is released on the `hybrid-engine` branch/tag until `add-qnap-ci-deploy`
-  adds the engine to production Compose, GHCR, QNAP rollback, and CI `go test`.
+- The Go engine is part of the production stack: `docker-compose.prod.yml`
+  includes the `engine` service, GHCR publishes
+  `ghcr.io/johnson407/trading-bot-engine`, QNAP health and rollback cover it, and
+  CI runs `go test ./...` with a PostgreSQL service.
 
 ## Review commands
 

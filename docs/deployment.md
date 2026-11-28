@@ -126,6 +126,103 @@ UPDATE bots
  WHERE reconcile_pending = true;
 ```
 
+## Live-trading preflight
+
+Live trading is disabled by default. The production gate, the pre-deploy rule,
+the read-only preflight, and the separate post-deploy enablement procedure are
+below. The complete go-live, canary, kill-switch, manual-flatten,
+restart-with-resting-orders, rollback, and escalation procedure is the
+[live-trading runbook](live-trading.md); complete it before enabling real money.
+
+### One live-gate source
+
+`TRADING_LIVE_ENABLED` in the NAS `.env` is the only gate. The application reads
+it as `config('trading.live_enabled')`, and the engine reads the same value and
+reports it in the heartbeat as `live_trading`. `docker-compose.prod.yml` passes
+`${TRADING_LIVE_ENABLED:-false}` to the engine, and the app, engine, Horizon, and
+scheduler share the same `.env`, so no service can see a different value. Never
+hardcode the gate in Compose and never add a second engine-only variable.
+
+### Pre-deploy rule
+
+Production must be false during every deployment:
+
+1. Before pulling or activating an image, confirm
+   `grep '^TRADING_LIVE_ENABLED=' .env` reports `TRADING_LIVE_ENABLED=false` (or
+   the key is absent, which also defaults to false). Record the value.
+2. Deploy with the gate false, including parity, credential-policy, preflight,
+   and runbook changes.
+3. After the stack is healthy, confirm the application config and the engine
+   heartbeat both report false:
+   `php artisan tinker --execute="echo config('trading.live_enabled') ? 'true' : 'false';"`
+   and `GET /health/engine` (`"live_trading":false`).
+
+Enabling live trading is a separate action, never part of a deployment.
+
+### Pre-enablement mode
+
+After deployment and before any gate change, run:
+
+```sh
+docker compose -f docker-compose.prod.yml exec app \
+    php artisan live:preflight --pre-enable
+```
+
+`--pre-enable` expects the closed gate. It treats a false application gate and a
+matching false engine heartbeat as expected and still blocks on every other
+check. It exits non-zero and names the failing check and remediation. Resolve
+every non-gate blocker, then complete the testnet evidence in the runbook.
+
+### Default mode and post-deploy enablement
+
+When the testnet evidence is recorded, the named operator enables the gate by
+setting `TRADING_LIVE_ENABLED=true` once in `.env`, recreating `app`, `engine`,
+`horizon`, and `scheduler`, and then running the final check:
+
+```sh
+docker compose -f docker-compose.prod.yml exec app php artisan live:preflight
+```
+
+Default mode requires both the application gate and the engine heartbeat to be
+enabled and equal; it exits non-zero on a closed or mismatched gate or any other
+blocker. If this final preflight fails, set `TRADING_LIVE_ENABLED=false`
+immediately and stop. Only after it passes may the operator start the canary.
+
+Both modes are read-only. They never change a bot, order, credential, or
+kill-switch row. Their output links to [docs/live-trading.md](live-trading.md).
+
+### Required checks
+
+| Check | Both modes |
+| --- | --- |
+| Application live gate | False for `--pre-enable`; true for default mode |
+| Engine heartbeat freshness | Present and no older than the 10-second TTL |
+| Engine live flag | Matches the mode's expected value |
+| App/engine gate match | Heartbeat `live_trading` equals `config('trading.live_enabled')` |
+| Mailer and from address | Not `log` or `array`; `MAIL_FROM_ADDRESS` set |
+| HTTPS application URL | `APP_URL` starts with `https://` outside local/testing |
+| Horizon | `horizon:status` reports running |
+| Scheduler heartbeat | Present and no older than the three-minute grace |
+| Conflicting live credentials | No credential has more than one active live bot |
+
+### Production controls before live
+
+These deployment controls are required by the preflight and the
+[live-trading runbook](live-trading.md); their evidence is recorded with the
+go-live decision.
+
+- Terminate TLS in front of the published Nginx port, redirect HTTP to HTTPS, and
+  send HSTS (`Strict-Transport-Security: max-age=31536000; includeSubDomains`).
+  Set `APP_URL` to the public `https://` URL.
+- Use a non-log mailer with a monitored `MAIL_FROM_ADDRESS`.
+- Create exchange keys for spot trading only, with withdrawals disabled.
+- Add an exchange-side IP allowlist for the NAS egress address.
+- Keep the NAS `.env` at mode `600`; mode `644` is only for the local Docker
+  Compose bind mount, never the NAS.
+
+The [security checklist](security.md#transport-and-deployment) records the same
+controls.
+
 ## NAS layout
 
 Keep configuration, state, and logs together in a persistent directory. The
@@ -191,7 +288,7 @@ Nginx so public uploads work.
    CACHE_STORE=redis
    SESSION_DRIVER=database
 
-   TRADING_LIVE_ENABLED=false
+   TRADING_LIVE_ENABLED=false   # keep false until the named go-live decision
 
    ENGINE_INTERNAL_TOKEN=<openssl rand -hex 32>
    ```
@@ -289,6 +386,11 @@ Nginx so public uploads work.
    docker compose -f docker-compose.prod.yml exec app \
        tail -n 50 storage/logs/laravel.log
    ```
+
+   The `log` mailer is acceptable only while live trading is disabled; the
+   verification link stays in the container log. Before the gate is enabled,
+   configure a non-log mailer and a monitored `MAIL_FROM_ADDRESS`; the live
+   preflight blocks `log` and `array` mailers.
 
    Alternatively, create a verified account explicitly:
 
@@ -443,5 +545,10 @@ exchange credentials in the compose file or an image.
 - [ ] The first account can log in.
 - [ ] `crontab -l` shows the five-minute poll and survives a reboot.
 - [ ] A green `main` push deploys within one polling interval.
-- [ ] `TRADING_LIVE_ENABLED=false` unless live trading has been explicitly approved.
+- [ ] `TRADING_LIVE_ENABLED=false` is confirmed before deploy, and the app config
+      and engine heartbeat are both false after deploy.
+- [ ] `php artisan live:preflight --pre-enable` exits zero before enablement.
+- [ ] The [live-trading runbook](live-trading.md) sequence is complete before the
+      gate is enabled; a failing final `live:preflight` sets the gate false and
+      stops the rollout.
 - [ ] A failed deploy holds its image and does not flap on the next poll.

@@ -231,15 +231,7 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 				return r.pause(ctx, bot, pauseCauseLiveGate, message, "bot.live_trading_disabled", "risk.live_trading_disabled", "critical")
 			}
 
-			_, err := r.pool.Exec(ctx,
-				`UPDATE bots
-				    SET status = 'paused', last_error = $2, pause_reason = $3,
-				        pause_reason_recorded_at = now(), updated_at = now()
-				  WHERE id = $1 AND deleted_at IS NULL`,
-				bot.ID, message, pauseCauseUnsupportedExchange.String(),
-			)
-
-			return err
+			return r.markPaused(ctx, bot, pauseCauseUnsupportedExchange, message)
 		}
 		if bot.live() {
 			if err := r.liveBalanceAllowsStart(ctx, bot); err != nil {
@@ -1027,16 +1019,11 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 	return nil
 }
 
+// markPaused records a safety pause that has no dedicated activity or risk
+// event type. It still cancels resting orders: every safety pause must leave no
+// working order behind and must never liquidate inventory.
 func (r *Runtime) markPaused(ctx context.Context, bot *Bot, cause pauseCause, message string) error {
-	cause = requirePauseCause(cause)
-	_, err := r.pool.Exec(ctx,
-		`UPDATE bots
-		    SET status = 'paused', last_error = $2, pause_reason = $3,
-		        pause_reason_recorded_at = now(), updated_at = now()
-		  WHERE id = $1 AND deleted_at IS NULL`,
-		bot.ID, message, cause.String(),
-	)
-	return err
+	return r.pause(ctx, bot, cause, message, "", "", "")
 }
 
 func (r *Runtime) dueBotIDs(ctx context.Context) ([]int64, error) {

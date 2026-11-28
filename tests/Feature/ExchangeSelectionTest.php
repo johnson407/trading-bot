@@ -4,6 +4,7 @@ use App\Actions\StartBot;
 use App\Domain\Bot\Enums\BotStatus;
 use App\Domain\Risk\ValueObjects\LiveStartConfirmation;
 use App\Models\Bot;
+use App\Models\ExchangeCredential;
 use App\Models\User;
 use App\Services\Exchange\ExchangeClientFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,9 +23,11 @@ it('checks the live start balance against the bot exchange, not the default', fu
     ]));
 
     $user = User::factory()->create();
+    $credential = ExchangeCredential::factory()->for($user)->create(['exchange' => 'kraken']);
     $bot = Bot::factory()->for($user)->live()->create([
         'name' => 'Kraken grid',
         'exchange' => 'kraken',
+        'exchange_credential_id' => $credential->id,
         'status' => BotStatus::Idle,
         'capital_allocation' => '1000',
     ]);

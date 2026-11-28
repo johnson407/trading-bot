@@ -23,3 +23,8 @@ Schedule::command('alerts:check-engine-heartbeat')
     ->everyMinute()
     ->withoutOverlapping(5)
     ->onOneServer();
+
+Schedule::command('scheduler:heartbeat')
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->onOneServer();

@@ -20,6 +20,7 @@ use App\Domain\Order\Enums\OrderStatus;
 use App\Domain\Portfolio\InventoryLedger;
 use App\Domain\Portfolio\MarkPrice;
 use App\Domain\Risk\Exceptions\LiveConfirmationRequiredException;
+use App\Domain\Risk\Exceptions\LiveCredentialConflictException;
 use App\Domain\Risk\RiskLimitService;
 use App\Domain\Risk\ValueObjects\LiveStartConfirmation;
 use App\Domain\Strategy\StrategyRegistry;
@@ -235,12 +236,18 @@ class BotController extends Controller
             ]);
         }
 
-        $bot = $createBot->handle($request->user(), [
-            ...$data,
-            'mode' => $data['mode'] ?? 'paper',
-            'exchange' => (string) ($data['exchange'] ?? config('trading.default_exchange', 'binance')),
-            'configuration' => $request->strategyConfiguration(),
-        ]);
+        try {
+            $bot = $createBot->handle($request->user(), [
+                ...$data,
+                'mode' => $data['mode'] ?? 'paper',
+                'exchange' => (string) ($data['exchange'] ?? config('trading.default_exchange', 'binance')),
+                'configuration' => $request->strategyConfiguration(),
+            ]);
+        } catch (LiveCredentialConflictException $exception) {
+            throw ValidationException::withMessages([
+                'mode' => $exception->getMessage(),
+            ]);
+        }
 
         return redirect()->route('bots.index')->with('status', "Bot {$bot->name} created.");
     }
@@ -639,6 +646,8 @@ class BotController extends Controller
             return back()->with('status', 'Bot started.');
         } catch (LiveConfirmationRequiredException $exception) {
             return back()->withErrors(['confirmation' => $exception->getMessage()]);
+        } catch (LiveCredentialConflictException $exception) {
+            return back()->withErrors(['action' => $exception->getMessage()]);
         } catch (ModelNotFoundException) {
             abort(404);
         } catch (Throwable $exception) {

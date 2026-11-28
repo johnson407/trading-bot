@@ -420,7 +420,8 @@ cancel, stop, restart, and kill switch.
 
 The default `make test` gate has no PostgreSQL service, so the DB runner,
 stale-run, candle-backfill, and runtime paths are covered by those opt-in tests.
-CI still needs a database service before those tests can become a merge gate.
+CI supplies a PostgreSQL service through `RUNTIME_TEST_DSN` and runs
+`go test ./...`, so those paths are part of the merge gate there.
 
 ### Opt-in Binance testnet proof
 
@@ -469,8 +470,14 @@ depends on healthy Postgres and Redis, and sets the same `APP_KEY` / `DB_*` /
 `REDIS_*` / `TRADING_LIVE_ENABLED` (default `false`) environment as `app`. It
 does not publish a host port.
 
-This change deliberately does **not** edit `docker-compose.prod.yml` or
-`.github/`. Adding the engine to GHCR, the QNAP Compose service/health/rollback
-flow, and a CI `go test` step is deferred to the follow-up change after
-`add-qnap-ci-deploy`. Until that follow-up ships, `make test` here is the
-required local gate for Go changes.
+Production uses the same image. `docker-compose.prod.yml` includes the `engine`
+service with a healthcheck and `stop_grace_period`, and the QNAP deploy flow
+covers it in health checks and image rollback. GHCR publishes
+`ghcr.io/johnson407/trading-bot-engine`, and CI builds the image and runs
+`go test ./...` with a PostgreSQL service. `make test` remains the local gate for
+Go changes.
+
+`TRADING_LIVE_ENABLED` in the shared `.env` is the single live gate. Production
+Compose passes `${TRADING_LIVE_ENABLED:-false}` to the engine, and the heartbeat
+reports the parsed value. Enabling real-money trading follows the
+[live-trading runbook](../docs/live-trading.md), not a Compose edit.
