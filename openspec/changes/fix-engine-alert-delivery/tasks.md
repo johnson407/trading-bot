@@ -18,10 +18,10 @@
 
 - Full PHP suite (Go plan server on `trading-bot-plan-test:18080`):
   `docker run --rm --network trading-bot_default -v "$PWD:/var/www/html" -v /home/johnson/Repos/trading-bot/vendor:/var/www/html/vendor -v /home/johnson/Repos/trading-bot/.env:/var/www/html/.env:ro -w /var/www/html -e APP_ENV=testing -e DB_DATABASE=trading_bot_test -e DB_HOST=trading-bot-postgres-1 -e DB_USERNAME=postgres -e DB_PASSWORD=secret -e CACHE_STORE=array -e QUEUE_CONNECTION=sync -e SESSION_DRIVER=array -e CONCURRENCY_DRIVER=sync -e ENGINE_PLAN_URL=http://trading-bot-plan-test:18080 --entrypoint php trading-bot-app:latest artisan test`
-  Result: **1 skipped, 746 passed (5333 assertions)**.
+  Result: **1 skipped, 747 passed (5338 assertions)**, including the migration idempotency test.
 - Full engine suite:
   `docker run --rm --network trading-bot_default -v "$PWD:/src" -w /src/engine -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod -e RUNTIME_TEST_DSN='postgres://postgres:secret@trading-bot-postgres-1:5432/trading_bot_test?sslmode=disable' golang:1.24-alpine sh -c 'gofmt -w internal/runtime/*.go && go vet ./... && go test ./... -count=1'`
-  Result: every package `ok`; runtime 7.645s; gofmt and vet clean.
+  Result: every package `ok`; runtime 7.682s; gofmt and vet clean.
 - PHPStan: `vendor/bin/phpstan analyse --memory-limit=1G --no-progress` -> no errors.
 - Pint on changed files fixed two style issues; no remaining style failures.
 - `openspec validate fix-engine-alert-delivery --strict` -> valid.

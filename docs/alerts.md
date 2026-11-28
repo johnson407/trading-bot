@@ -96,7 +96,8 @@ work.
   Failed rows are never discarded. After six failed attempts the scanner creates
   one critical `alerts.ingestion_failed` alert for that source row and keeps
   retrying, so a transient database outage cannot silently lose a safety alert.
-  The command exits non-zero while failures remain.
+  The durable `alerts.ingestion_failed` alert is the operator signal; a later
+  command run may exit zero while failed rows wait for their backoff window.
 - `alerts:check-source-duplicates` is a read-only pre-deployment check. The
   migration aborts if duplicate alert sources exist. Resolve them by keeping the
   oldest alert for each source, preserving its message, context, source, and

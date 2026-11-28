@@ -14,6 +14,91 @@ return new class extends Migration
 
     public function up(): void
     {
+        $this->assertNoDuplicateSources();
+
+        DB::statement("SET lock_timeout = '5s'");
+
+        try {
+            // Adding a column with a stable default is metadata-only on PostgreSQL
+            // 11+, then dropping the default leaves new rows unprocessed. IF NOT
+            // EXISTS makes an entrypoint retry safe when a prior attempt committed
+            // one ALTER before the lock timeout.
+            DB::transaction(function (): void {
+                DB::statement(
+                    'ALTER TABLE risk_events '
+                    .'ADD COLUMN IF NOT EXISTS alert_processed_at timestamp(0) without time zone DEFAULT now(), '
+                    .'ADD COLUMN IF NOT EXISTS alert_ingest_attempts smallint NOT NULL DEFAULT 0, '
+                    .'ADD COLUMN IF NOT EXISTS alert_next_attempt_at timestamp(0) without time zone NULL'
+                );
+                DB::statement('ALTER TABLE risk_events ALTER COLUMN alert_processed_at DROP DEFAULT');
+
+                DB::statement(
+                    'ALTER TABLE activity_logs '
+                    .'ADD COLUMN IF NOT EXISTS alert_processed_at timestamp(0) without time zone DEFAULT now(), '
+                    .'ADD COLUMN IF NOT EXISTS alert_ingest_attempts smallint NOT NULL DEFAULT 0, '
+                    .'ADD COLUMN IF NOT EXISTS alert_next_attempt_at timestamp(0) without time zone NULL'
+                );
+                DB::statement('ALTER TABLE activity_logs ALTER COLUMN alert_processed_at DROP DEFAULT');
+            });
+
+            $this->ensureIndex(
+                'risk_events_unprocessed_idx',
+                'CREATE INDEX CONCURRENTLY risk_events_unprocessed_idx ON risk_events (id) WHERE alert_processed_at IS NULL'
+            );
+            $this->ensureIndex(
+                'activity_logs_unprocessed_idx',
+                'CREATE INDEX CONCURRENTLY activity_logs_unprocessed_idx ON activity_logs (id) WHERE alert_processed_at IS NULL'
+            );
+            $this->ensureIndex(
+                'alerts_source_type_source_id_unique',
+                'CREATE UNIQUE INDEX CONCURRENTLY alerts_source_type_source_id_unique ON alerts (source_type, source_id)'
+            );
+
+            if ($this->indexExists('alerts_source_type_source_id_index')) {
+                DB::statement('DROP INDEX CONCURRENTLY IF EXISTS alerts_source_type_source_id_index');
+            }
+        } finally {
+            DB::statement('SET lock_timeout = 0');
+        }
+    }
+
+    public function down(): void
+    {
+        DB::statement("SET lock_timeout = '5s'");
+
+        try {
+            if ($this->indexExists('alerts_source_type_source_id_unique')) {
+                DB::statement('DROP INDEX CONCURRENTLY IF EXISTS alerts_source_type_source_id_unique');
+            }
+            $this->ensureIndex(
+                'alerts_source_type_source_id_index',
+                'CREATE INDEX CONCURRENTLY alerts_source_type_source_id_index ON alerts (source_type, source_id)'
+            );
+
+            DB::statement('DROP INDEX CONCURRENTLY IF EXISTS risk_events_unprocessed_idx');
+            DB::statement('DROP INDEX CONCURRENTLY IF EXISTS activity_logs_unprocessed_idx');
+
+            DB::transaction(function (): void {
+                DB::statement(
+                    'ALTER TABLE risk_events '
+                    .'DROP COLUMN IF EXISTS alert_processed_at, '
+                    .'DROP COLUMN IF EXISTS alert_ingest_attempts, '
+                    .'DROP COLUMN IF EXISTS alert_next_attempt_at'
+                );
+                DB::statement(
+                    'ALTER TABLE activity_logs '
+                    .'DROP COLUMN IF EXISTS alert_processed_at, '
+                    .'DROP COLUMN IF EXISTS alert_ingest_attempts, '
+                    .'DROP COLUMN IF EXISTS alert_next_attempt_at'
+                );
+            });
+        } finally {
+            DB::statement('SET lock_timeout = 0');
+        }
+    }
+
+    private function assertNoDuplicateSources(): void
+    {
         $duplicates = DB::table('alerts')
             ->selectRaw('source_type, source_id, count(*) as aggregate')
             ->whereNotNull('source_type')
@@ -30,59 +115,36 @@ return new class extends Migration
                 .'Run `php artisan alerts:check-source-duplicates` and resolve them first.'
             );
         }
-
-        DB::statement("SET lock_timeout = '5s'");
-
-        // Adding a column with a stable default is metadata-only on PostgreSQL
-        // 11+, then dropping the default leaves new rows unprocessed.
-        DB::statement(
-            'ALTER TABLE risk_events '
-            .'ADD COLUMN alert_processed_at timestamp(0) without time zone DEFAULT now(), '
-            .'ADD COLUMN alert_ingest_attempts smallint NOT NULL DEFAULT 0, '
-            .'ADD COLUMN alert_next_attempt_at timestamp(0) without time zone NULL'
-        );
-        DB::statement('ALTER TABLE risk_events ALTER COLUMN alert_processed_at DROP DEFAULT');
-
-        DB::statement(
-            'ALTER TABLE activity_logs '
-            .'ADD COLUMN alert_processed_at timestamp(0) without time zone DEFAULT now(), '
-            .'ADD COLUMN alert_ingest_attempts smallint NOT NULL DEFAULT 0, '
-            .'ADD COLUMN alert_next_attempt_at timestamp(0) without time zone NULL'
-        );
-        DB::statement('ALTER TABLE activity_logs ALTER COLUMN alert_processed_at DROP DEFAULT');
-
-        DB::statement('CREATE INDEX CONCURRENTLY IF NOT EXISTS risk_events_unprocessed_idx ON risk_events (id) WHERE alert_processed_at IS NULL');
-        DB::statement('CREATE INDEX CONCURRENTLY IF NOT EXISTS activity_logs_unprocessed_idx ON activity_logs (id) WHERE alert_processed_at IS NULL');
-
-        DB::statement('CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS alerts_source_type_source_id_unique ON alerts (source_type, source_id)');
-        DB::statement('DROP INDEX CONCURRENTLY IF EXISTS alerts_source_type_source_id_index');
-
-        DB::statement('SET lock_timeout = 0');
     }
 
-    public function down(): void
+    private function ensureIndex(string $name, string $createSql): void
     {
-        DB::statement("SET lock_timeout = '5s'");
+        if ($this->indexIsValid($name)) {
+            return;
+        }
 
-        DB::statement('DROP INDEX CONCURRENTLY IF EXISTS alerts_source_type_source_id_unique');
-        DB::statement('CREATE INDEX CONCURRENTLY IF NOT EXISTS alerts_source_type_source_id_index ON alerts (source_type, source_id)');
+        DB::statement("DROP INDEX CONCURRENTLY IF EXISTS {$name}");
+        DB::statement($createSql);
 
-        DB::statement('DROP INDEX CONCURRENTLY IF EXISTS risk_events_unprocessed_idx');
-        DB::statement('DROP INDEX CONCURRENTLY IF EXISTS activity_logs_unprocessed_idx');
+        if (! $this->indexIsValid($name)) {
+            throw new RuntimeException("Index {$name} is invalid after creation; retry the migration to rebuild it.");
+        }
+    }
 
-        DB::statement(
-            'ALTER TABLE risk_events '
-            .'DROP COLUMN alert_processed_at, '
-            .'DROP COLUMN alert_ingest_attempts, '
-            .'DROP COLUMN alert_next_attempt_at'
+    private function indexExists(string $name): bool
+    {
+        $index = DB::selectOne('SELECT to_regclass(?) AS index', [$name]);
+
+        return $index !== null && $index->index !== null;
+    }
+
+    private function indexIsValid(string $name): bool
+    {
+        $index = DB::selectOne(
+            'SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass(?)',
+            [$name]
         );
-        DB::statement(
-            'ALTER TABLE activity_logs '
-            .'DROP COLUMN alert_processed_at, '
-            .'DROP COLUMN alert_ingest_attempts, '
-            .'DROP COLUMN alert_next_attempt_at'
-        );
 
-        DB::statement('SET lock_timeout = 0');
+        return $index !== null && (bool) $index->indisvalid;
     }
 };
