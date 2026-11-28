@@ -24,9 +24,9 @@
                     {
                         "client_order_id": "buy-100",
                         "side": "buy",
-                        "price": "100",
+                        "price": "95",
                         "quantity": "1",
-                        "fee": "0.1",
+                        "fee": "0.095",
                         "fee_currency": "USDT"
                     }
                 ]
@@ -65,9 +65,9 @@
                     {
                         "client_order_id": "sell-100",
                         "side": "sell",
-                        "price": "100",
+                        "price": "105",
                         "quantity": "1",
-                        "fee": "0.1",
+                        "fee": "0.105",
                         "fee_currency": "USDT"
                     }
                 ]
@@ -114,17 +114,17 @@
                     {
                         "client_order_id": "buy-80",
                         "side": "buy",
-                        "price": "80",
+                        "price": "75",
                         "quantity": "1",
-                        "fee": "0.08",
+                        "fee": "0.075",
                         "fee_currency": "USDT"
                     },
                     {
                         "client_order_id": "buy-90",
                         "side": "buy",
-                        "price": "90",
+                        "price": "75",
                         "quantity": "1",
-                        "fee": "0.09",
+                        "fee": "0.075",
                         "fee_currency": "USDT"
                     }
                 ]
@@ -155,17 +155,17 @@
                     {
                         "client_order_id": "sell-95",
                         "side": "sell",
-                        "price": "95",
+                        "price": "100",
                         "quantity": "1",
-                        "fee": "0.095",
+                        "fee": "0.1",
                         "fee_currency": "USDT"
                     },
                     {
                         "client_order_id": "buy-105",
                         "side": "buy",
-                        "price": "105",
+                        "price": "100",
                         "quantity": "1",
-                        "fee": "0.105",
+                        "fee": "0.1",
                         "fee_currency": "USDT"
                     }
                 ]
@@ -188,9 +188,9 @@
                     {
                         "client_order_id": "buy-100-partial",
                         "side": "buy",
-                        "price": "100",
+                        "price": "90",
                         "quantity": "1.5",
-                        "fee": "0.15",
+                        "fee": "0.135",
                         "fee_currency": "USDT"
                     }
                 ]
@@ -229,9 +229,9 @@
                     {
                         "client_order_id": "open",
                         "side": "buy",
-                        "price": "100",
+                        "price": "90",
                         "quantity": "1",
-                        "fee": "0.1",
+                        "fee": "0.09",
                         "fee_currency": "USDT"
                     }
                 ]
@@ -270,9 +270,9 @@
                     {
                         "client_order_id": "buy-90",
                         "side": "buy",
-                        "price": "90",
+                        "price": "89",
                         "quantity": "1",
-                        "fee": "0.09",
+                        "fee": "0.089",
                         "fee_currency": "USDT"
                     }
                 ]

@@ -64,24 +64,19 @@ func TestSequentialBuyCandlesPlaceSixOppositeSells(t *testing.T) {
 		t.Fatalf("Run returned error: %v", err)
 	}
 
-	sells := map[string]bool{}
+	sells := 0
 	for _, fill := range result.Fills {
 		if fill.Side == strategy.SideSell {
-			sells[fill.Price.String()] = true
+			sells++
+			if fill.Price.String() != "110" {
+				t.Fatalf("sell fill price = %s, want the gapped market price 110", fill.Price)
+			}
 		}
 	}
 
-	expected := []string{"50", "60", "70", "80", "90", "110"}
-	if len(sells) != len(expected) {
-		t.Fatalf("expected six sell fills, got %v", sells)
-	}
-	for _, price := range expected {
-		if !sells[price] {
-			t.Fatalf("expected a sell fill at %s, got %v", price, sells)
-		}
-	}
-	if result.Metrics.BuyCount != 6 || result.Metrics.SellCount != 6 {
-		t.Fatalf("expected 6 buys and 6 sells, got %d buys and %d sells", result.Metrics.BuyCount, result.Metrics.SellCount)
+	if result.Metrics.BuyCount != 6 || result.Metrics.SellCount != 6 || sells != 6 {
+		t.Fatalf("expected 6 buys and 6 sells, got %d buys, %d metric sells, %d fills",
+			result.Metrics.BuyCount, result.Metrics.SellCount, sells)
 	}
 }
 

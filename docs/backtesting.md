@@ -86,10 +86,20 @@ and calls the strategy lifecycle:
   ladder is eligible for a fresh order, including prices shared with the old
   ladder.
 - Cancellations are applied and reported through `onCancel()`.
-- Orders are placed through the backtest risk guard.
+- Orders are placed through the backtest risk guard, nearest to the candle close
+  first, with the lower price breaking ties. When capital or `max_open_orders`
+  runs short, the levels closest to the market are placed instead of the lowest
+  prices.
 - Fill processing is sequential: portfolio update → `onFill()` → grid sync →
   new orders → next fill. This preserves martingale sizing, disarmed levels, and
   trailing/dynamic state.
+
+Dynamic-grid measures volatility over the last 30 observations. In a replay an
+observation is one candle close; in live and paper trading it is one engine tick
+at the bot's tick interval. The window therefore covers different wall-clock
+spans, and the same configuration can produce different spacing in a backtest and
+in a live bot. Keep that in mind when comparing a source-linked paper bot with
+its backtest.
 
 The replay never writes bot, order, fill, risk, activity, or inventory records.
 Only the run's own metrics, equity curve, and simulated fills are persisted.
@@ -100,19 +110,24 @@ The fill model is deliberately simple and optimistic:
 
 - A buy limit fills when the candle close is at or below the limit.
 - A sell limit fills when the candle close is at or above the limit.
-- The fill price is the **limit price**, not the close.
+- The fill price is the **better of the limit and the candle close**: a buy pays
+  `min(limit, close)` and a sell receives `max(limit, close)`. When the candle
+  gaps through the limit, the simulated fill uses the close instead of pretending
+  the limit was available.
 - The full remaining quantity fills; there are no partial fills.
 - There is no slippage, fee discount, or order-book impact.
 - Crossed orders fill closest to the close first, then by price.
 - Orders placed during a candle are not eligible until the next candle, matching
   the live paper path's same-tick exclusion.
 
-Each fill pays `limit × quantity × bot fee rate` in the quote currency. Fees are
-deducted from quote inventory and included in realized P&L and reported fees.
+Each fill pays `fill price × quantity × bot fee rate` in the quote currency. Fees
+are deducted from quote inventory and included in realized P&L and reported fees.
+Paper trading uses the same better-of-limit-and-market fill price.
 
 Exchange precision rounding and minimum amount/notional checks are **not**
-re-applied in this version. Orders are simulated with the values the strategy
-produced. A live exchange could round or reject some of those orders.
+re-applied to each simulated order in this version. The create and edit setup
+plan does preflight prices and quantities against market precision and minimums,
+but a live exchange could still round or reject an individual order.
 
 ## Capital and risk
 

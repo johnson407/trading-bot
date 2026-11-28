@@ -57,12 +57,14 @@ type Fill struct {
 
 // QualifyingFills returns paper fills for the open or partially filled orders
 // crossed by marketLast. A buy fills when marketLast <= limit and a sell fills
-// when marketLast >= limit. Orders closest to the market fill first; an equal
-// distance is broken by the lower price, and an exact tie keeps the caller's
-// order (PHP 8 usort is stable).
+// when marketLast >= limit. The fill price is the better of the limit and the
+// market, so a tick that gaps through a limit does not fill at a stale price.
+// Orders closest to the market fill first; an equal distance is broken by the
+// lower price, and an exact tie keeps the caller's order (PHP 8 usort is
+// stable).
 //
 // feeRate accepts the same values as PHP's Decimal::of: a decimal string or an
-// integer/decimal value. Floats are rejected. The fee is price * remaining
+// integer/decimal value. Floats are rejected. The fee is fill price * remaining
 // quantity * feeRate, and the currency is always USDT.
 func QualifyingFills(marketLast decimal.Decimal, orders []Order, feeRate any) ([]Fill, error) {
 	rate, err := decimal.Of(feeRate)
@@ -107,12 +109,20 @@ func QualifyingFills(marketLast decimal.Decimal, orders []Order, feeRate any) ([
 
 	for _, order := range qualifying {
 		quantity := order.Quantity.Sub(order.FilledQuantity)
-		fee := order.Price.Mul(quantity).Mul(rate)
+		fillPrice := order.Price
+		if order.Side == SideBuy && marketLast.LessThan(fillPrice) {
+			fillPrice = marketLast
+		}
+		if order.Side == SideSell && marketLast.GreaterThan(fillPrice) {
+			fillPrice = marketLast
+		}
+
+		fee := fillPrice.Mul(quantity).Mul(rate)
 
 		fills = append(fills, Fill{
 			ClientOrderID: order.ClientOrderID,
 			Side:          order.Side,
-			Price:         order.Price,
+			Price:         fillPrice,
 			Quantity:      quantity,
 			Fee:           fee,
 			FeeCurrency:   "USDT",

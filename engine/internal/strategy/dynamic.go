@@ -171,7 +171,7 @@ func (d *DynamicGrid) OnTick(input Input) (Decision, error) {
 		}
 	}
 
-	state := input.State.Merge(map[string]any{
+	state := PruneDisarmedLevels(input.State, levels).Merge(map[string]any{
 		"spacing_value":        spacing.String(),
 		"last_recalculated_at": formatDateTimeAtom(timestampOf(input.Market)),
 		"recalculation_count":  asInt(input.State.Get("recalculation_count", 0)) + 1,
@@ -310,7 +310,12 @@ func (d *DynamicGrid) calculateSpacing(input Input, center decimal.Decimal) (dec
 	prices = append(prices, input.Market.Price)
 
 	if len(prices) < 2 {
-		return d.initialSpacing(input)
+		initial, err := d.initialSpacing(input)
+		if err != nil {
+			return decimal.Decimal{}, err
+		}
+
+		return d.clamp(initial, input)
 	}
 
 	minimum := prices[0]

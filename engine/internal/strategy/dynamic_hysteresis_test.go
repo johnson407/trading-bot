@@ -169,6 +169,33 @@ func TestDynamicGridHysteresisClampsCandidateBeforeComparing(t *testing.T) {
 	}
 }
 
+func TestDynamicGridClampsInitialSpacing(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "above the maximum", value: "30", want: "20"},
+		{name: "below the minimum", value: "2", want: "5"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := testDynamicInput()
+			input.Config.Values["initial_spacing"] = test.value
+
+			decision, err := NewDynamicGrid().Initialize(input)
+			if err != nil {
+				t.Fatalf("Initialize returned error: %v", err)
+			}
+
+			if got := decision.State.Get("spacing_value", nil); got != test.want {
+				t.Fatalf("spacing_value = %v, want %s", got, test.want)
+			}
+		})
+	}
+}
+
 func TestDynamicGridHysteresisRejectsInvalidConfiguration(t *testing.T) {
 	for _, value := range []string{"-1", "91", "not-a-number"} {
 		t.Run(value, func(t *testing.T) {

@@ -95,7 +95,20 @@ tick that is not due for a recalculation, it retains the persisted spacing and
 emits an order for every armed level that has no open order. This restores
 orders after cancellation, rejection, a position-limit skip, a pause/resume, or
 a grid replacement instead of waiting for the next recalculation. Prices shared
-by the old and new ladders also receive orders after the replacement.
+by the old and new ladders also receive orders after the replacement. Stale
+disarmed-level entries are pruned when a recalculated or recentered ladder no
+longer contains their paired price.
+
+Canceling a paired take-profit order does not re-arm the entry level that
+produced it. The inventory stays in the portfolio and can still exit through a
+native sell level as price rises. A pause/resume or ladder replacement can
+therefore leave fewer take-profit orders than open inventory lots; the strategy
+does not track inventory lots or synthesize replacement sells, and the next
+opposite fill or ladder replacement re-arms levels normally.
+
+Dynamic-grid accepts an optional `initial_spacing` value. It is used only until
+two recent prices are available, is clamped to `min_spacing` and `max_spacing`
+like every other candidate, and falls back to `min_spacing` when unset.
 
 ## Adding a strategy
 

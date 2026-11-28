@@ -70,7 +70,8 @@ class PaperExchangeClient implements ExchangeClient
 
     /**
      * Return paper fills for open limit orders crossed by the market price.
-     * Orders closest to the market are filled first.
+     * Orders closest to the market are filled first, and a market that gaps
+     * through the limit fills at the better market price.
      *
      * @param  iterable<Order>  $orders
      * @return list<PaperFill>
@@ -104,9 +105,19 @@ class PaperExchangeClient implements ExchangeClient
             return $distanceA->compare($distanceB) ?: Decimal::of($a->price)->compare($b->price);
         });
 
-        return array_map(function (Order $order) use ($feeRate) {
+        return array_map(function (Order $order) use ($feeRate, $market) {
             $quantity = Decimal::of($order->quantity)->sub($order->filled_quantity);
-            $price = Decimal::of($order->price);
+            $limit = Decimal::of($order->price);
+            $price = $limit;
+
+            if ($order->side === OrderSide::Buy && $market->last->lessThan($limit)) {
+                $price = $market->last;
+            }
+
+            if ($order->side === OrderSide::Sell && $market->last->greaterThan($limit)) {
+                $price = $market->last;
+            }
+
             $fee = $price->mul($quantity)->mul($feeRate);
 
             return new PaperFill(

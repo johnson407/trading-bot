@@ -1202,10 +1202,23 @@ func (r *Runtime) strategyInput(ctx context.Context, bot *Bot, state strategy.St
 	}
 }
 
+// placementPrice is the current mark price used to order intents by distance.
+// A missing price leaves the strategy's order untouched.
+func placementPrice(bot *Bot) decimal.Decimal {
+	raw, ok := bot.Settings["mark_price"].(string)
+	if !ok {
+		return decimal.Zero()
+	}
+
+	return mustDecimal(raw)
+}
+
 func (r *Runtime) placeOrders(ctx context.Context, bot *Bot, active *gridState, intents []strategy.OrderIntent) (int, error) {
 	if active == nil {
 		return 0, nil
 	}
+
+	intents = strategy.SortOrderIntents(intents, placementPrice(bot))
 
 	if bot.live() {
 		return r.placeLiveOrders(ctx, bot, active, intents)

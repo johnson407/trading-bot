@@ -35,6 +35,62 @@ func TestTrailingInitializeRejectsDynamicSpacing(t *testing.T) {
 	}
 }
 
+func TestPruneDisarmedLevelsDropsPairsOutsideTheLadder(t *testing.T) {
+	state := NewState().Merge(map[string]any{
+		"disarmed_levels": map[string]any{
+			"80": map[string]any{"side": "buy", "pair": "90"},
+			"70": map[string]any{"side": "buy", "pair": "75"},
+			"60": map[string]any{"side": "sell"},
+		},
+	})
+	levels := []GridLevelPlan{
+		{Price: decimal.MustParse("90")},
+		{Price: decimal.MustParse("110")},
+	}
+
+	pruned := PruneDisarmedLevels(state, levels)
+	got := disarmedLevels(pruned)
+
+	if _, present := got["80"]; !present {
+		t.Fatal("expected the 80->90 pair to stay disarmed")
+	}
+	if _, present := got["70"]; present {
+		t.Fatal("expected the 70->75 pair to be pruned")
+	}
+	if _, present := got["60"]; !present {
+		t.Fatal("expected a pairless entry to stay disarmed")
+	}
+}
+
+func TestTrailingRecenterPrunesStaleDisarms(t *testing.T) {
+	trailing := NewTrailingGrid()
+	input := testTrailingInput()
+	state := NewState().Merge(map[string]any{
+		"center_price":    "100",
+		"spacing_type":    "arithmetic",
+		"spacing_value":   "10",
+		"levels_per_side": 2,
+		"recenter_count":  0,
+		"fill_count":      0,
+		"disarmed_levels": map[string]any{
+			"70": map[string]any{"side": "buy", "pair": "75"},
+		},
+	})
+	input.Market = MarketSnapshot{Price: decimal.MustParse("120")}
+
+	decision, err := trailing.OnTick(input.WithState(state))
+	if err != nil {
+		t.Fatalf("OnTick returned error: %v", err)
+	}
+
+	if _, present := disarmedLevels(decision.State)["70"]; present {
+		t.Fatal("expected the stale disarm to be pruned on recenter")
+	}
+	if asInt(decision.State.Get("recenter_count", 0)) != 1 {
+		t.Fatalf("recenter count = %v, want 1", decision.State.Get("recenter_count", nil))
+	}
+}
+
 func TestTrailingGridOuterLevelBuyPlacesSell(t *testing.T) {
 	trailing := NewTrailingGrid()
 	input := testTrailingInput()

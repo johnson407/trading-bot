@@ -129,17 +129,27 @@ func (b *SimulatedOrderBook) QualifyingOrders(close decimal.Decimal, candleIndex
 	return qualifying
 }
 
-// Fill fills the order's remaining quantity and returns the fill.
-func (b *SimulatedOrderBook) Fill(order *SimulatedOrder, filledAt time.Time, feeRate decimal.Decimal) Fill {
+// Fill fills the order's remaining quantity and returns the fill. The fill
+// price is the better of the order's limit and the candle close, so a market
+// that gaps through a limit does not fill at a stale price.
+func (b *SimulatedOrderBook) Fill(order *SimulatedOrder, filledAt time.Time, market, feeRate decimal.Decimal) Fill {
 	quantity := order.Remaining()
-	fee := order.Price.Mul(quantity).Mul(feeRate)
+	fillPrice := order.Price
+	if order.Side == strategy.SideBuy && market.LessThan(fillPrice) {
+		fillPrice = market
+	}
+	if order.Side == strategy.SideSell && market.GreaterThan(fillPrice) {
+		fillPrice = market
+	}
+
+	fee := fillPrice.Mul(quantity).Mul(feeRate)
 	order.FilledQuantity = order.Quantity
 	order.Status = OrderFilled
 
 	fill := Fill{
 		Sequence:          b.nextFillSequence,
 		Side:              order.Side,
-		Price:             order.Price,
+		Price:             fillPrice,
 		Quantity:          quantity,
 		Fee:               fee,
 		FeeCurrency:       b.quoteCurrency,

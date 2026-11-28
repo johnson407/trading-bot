@@ -6,6 +6,7 @@ use App\Domain\Exchange\ValueObjects\MarketData;
 use App\Domain\Order\Enums\OrderSide;
 use App\Domain\Order\Enums\OrderStatus;
 use App\Domain\Order\Enums\OrderType;
+use App\Domain\Support\Decimal;
 use App\Models\Bot;
 use App\Models\Order;
 use App\Services\Exchange\PaperExchangeClient;
@@ -40,7 +41,24 @@ it('fills buy and sell orders when the market crosses their limit', function () 
 
     expect($fills)->toHaveCount(1)
         ->and($fills[0]->side)->toBe(OrderSide::Buy)
-        ->and($fills[0]->price->toString())->toBe('100');
+        ->and($fills[0]->price->toString())->toBe('95');
+});
+
+it('fills a gapped sell at the better market price', function () {
+    $paper = new PaperExchangeClient(new FakeExchangeClient(price: '115'));
+    $market = MarketData::make('BTC/USDT', '115');
+    $order = Order::factory()->make([
+        'side' => OrderSide::Sell,
+        'type' => OrderType::Limit,
+        'price' => '110',
+        'quantity' => '1',
+        'filled_quantity' => '0',
+        'status' => OrderStatus::Open,
+    ]);
+
+    $fill = $paper->qualifyingFills($market, [$order])[0];
+
+    expect($fill->price->toString())->toBe('115');
 });
 
 it('returns multiple qualifying levels in market-distance order', function () {
@@ -70,7 +88,7 @@ it('returns multiple qualifying levels in market-distance order', function () {
         ->and($fills[1]->clientOrderId)->toBe($near->client_order_id);
 });
 
-it('calculates configurable paper fees at the limit price', function () {
+it('calculates configurable paper fees at the fill price', function () {
     $paper = new PaperExchangeClient(new FakeExchangeClient);
     $market = MarketData::make('BTC/USDT', '90');
     $order = Order::factory()->make([
@@ -83,7 +101,8 @@ it('calculates configurable paper fees at the limit price', function () {
 
     $fill = $paper->qualifyingFills($market, [$order], '0.001')[0];
 
-    expect($fill->fee->toString())->toBe('0.2')
+    expect($fill->price->toString())->toBe('90')
+        ->and($fill->fee->toString())->toBe('0.18')
         ->and($fill->feeCurrency)->toBe('USDT');
 });
 
@@ -93,7 +112,7 @@ it('rejects private and order-placing calls in paper mode', function (string $me
 
     $call = match ($method) {
         'balances' => fn () => $paper->balances($bot),
-        'place' => fn () => $paper->placeLimitOrder($bot, 'BTC/USDT', OrderSide::Buy, \App\Domain\Support\Decimal::of('100'), \App\Domain\Support\Decimal::of('1'), 'x'),
+        'place' => fn () => $paper->placeLimitOrder($bot, 'BTC/USDT', OrderSide::Buy, Decimal::of('100'), Decimal::of('1'), 'x'),
         'cancel' => fn () => $paper->cancelOrder($bot, 'BTC/USDT', 'x'),
         'order' => fn () => $paper->order($bot, 'BTC/USDT', 'x'),
         'open' => fn () => $paper->openOrders($bot, 'BTC/USDT'),

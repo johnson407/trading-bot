@@ -51,6 +51,7 @@ export function previewPayload({ setupMode, form, presetKey }) {
         max_increases: form.max_increases,
         min_spacing: form.min_spacing,
         max_spacing: form.max_spacing,
+        initial_spacing: form.initial_spacing,
         volatility_multiplier: form.volatility_multiplier,
         recalculation_interval_seconds: form.recalculation_interval_seconds,
         spacing_hysteresis_percent: form.spacing_hysteresis_percent,

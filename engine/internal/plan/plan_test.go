@@ -195,6 +195,71 @@ func TestEvaluateReportsExchangeMinimumsAndAdvisories(t *testing.T) {
 	}
 }
 
+func TestEvaluateRejectsPriceThatRoundsToZero(t *testing.T) {
+	request := simpleGridRequest()
+	request.Configuration["center_price"] = "0.03"
+	request.Configuration["spacing_value"] = "0.01"
+	request.Configuration["levels_per_side"] = 1
+	request.Configuration["order_quantity"] = "1"
+	pricePrecision := 0
+	request.Market = &plan.Market{PricePrecision: &pricePrecision}
+
+	response := plan.Evaluate(request)
+
+	if len(response.Errors) != 1 || response.Errors[0].Code != "plan.precision" {
+		t.Fatalf("errors = %+v, want one precision error", response.Errors)
+	}
+	if response.Errors[0].Field == nil || *response.Errors[0].Field != "spacing_value" {
+		t.Errorf("field = %v, want spacing_value", response.Errors[0].Field)
+	}
+}
+
+func TestEvaluateRejectsQuantityThatRoundsToZero(t *testing.T) {
+	request := simpleGridRequest()
+	request.Configuration["order_quantity"] = "0.001"
+	amountPrecision := 2
+	request.Market = &plan.Market{AmountPrecision: &amountPrecision}
+
+	response := plan.Evaluate(request)
+
+	if len(response.Errors) != 1 || response.Errors[0].Code != "plan.precision" {
+		t.Fatalf("errors = %+v, want one precision error", response.Errors)
+	}
+	if response.Errors[0].Field == nil || *response.Errors[0].Field != "order_quantity" {
+		t.Errorf("field = %v, want order_quantity", response.Errors[0].Field)
+	}
+}
+
+func TestEvaluateTruncatesPricesAndQuantitiesBeforeMinimums(t *testing.T) {
+	request := simpleGridRequest()
+	request.Configuration["center_price"] = "100"
+	request.Configuration["spacing_value"] = "10"
+	request.Configuration["levels_per_side"] = 1
+	request.Configuration["order_quantity"] = "1.239"
+	pricePrecision := 1
+	amountPrecision := 2
+	request.Market = &plan.Market{
+		PricePrecision:  &pricePrecision,
+		AmountPrecision: &amountPrecision,
+		MinNotional:     "110.8",
+	}
+
+	response := plan.Evaluate(request)
+
+	if len(response.Errors) != 1 || response.Errors[0].Code != "plan.minimum_notional" {
+		t.Fatalf("errors = %+v, want one minimum notional error", response.Errors)
+	}
+	if response.Levels[0].Price != "90" || response.Levels[1].Price != "110" {
+		t.Errorf("levels = %+v, want truncated 90/110", response.Levels)
+	}
+	if response.Levels[0].Quantity != "1.23" || response.Levels[0].Notional != "110.7" {
+		t.Errorf("level = %+v, want quantity 1.23 notional 110.7", response.Levels[0])
+	}
+	if response.OrderQuantity != "1.23" {
+		t.Errorf("order quantity = %s, want 1.23", response.OrderQuantity)
+	}
+}
+
 func TestEvaluateCapsTheLadderAtFiftyLevels(t *testing.T) {
 	response := plan.Evaluate(plan.Request{
 		StrategyKey: "simple-grid",
