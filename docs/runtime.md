@@ -5,7 +5,8 @@
 > bot runtime status, due-check ticks, grids, paper and live orders/fills, risk
 > and exit guards, backtest execution, and heartbeat. Live execution is gated by
 > `TRADING_LIVE_ENABLED` (default false); testnet is the first rollout target,
-> and production real-money live use needs an explicit operator yes.
+> and production real-money live use needs the explicit, evidence-backed
+> procedure in [live-trading.md](live-trading.md).
 
 ## Components
 
@@ -214,11 +215,19 @@ php artisan horizon:terminate
 ```
 
 Restart Horizon, the scheduler, and the engine after every deploy. Confirm
-`TRADING_LIVE_ENABLED=false` unless live trading has been explicitly approved.
+`TRADING_LIVE_ENABLED=false` on every deploy; enabling live trading is a separate
+named decision in the [live-trading runbook](live-trading.md).
 
-## Release gate
+## Production status
 
-Phase 8 lands on the `hybrid-engine` branch/tag. Do **not** merge to the
-QNAP-deployable `origin/main` until the follow-up `add-qnap-ci-deploy` change adds
-the engine to `docker-compose.prod.yml`, GHCR publishing, QNAP health/rollback,
-and CI `go test`. The current production stack does not include the engine.
+The Go engine is part of the production runtime. `docker-compose.prod.yml`
+includes the `engine` service with health and rollback coverage, GHCR publishes
+`ghcr.io/johnson407/trading-bot-engine`, and CI builds and pushes the engine
+image and runs `go test ./...` with a PostgreSQL service. There is no remaining
+follow-up that blocks the engine from `main`; the cutover is direct.
+
+Live trading stays off by default. Production deploys with
+`TRADING_LIVE_ENABLED=false`, and enabling it is a separate named operator action
+with testnet evidence, a pre-enablement preflight, a passing default preflight,
+and a numeric canary. See [live-trading.md](live-trading.md) for the full gate,
+canary, kill-switch, manual-flatten, restart, rollback, and escalation procedure.

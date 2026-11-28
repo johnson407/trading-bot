@@ -2,6 +2,7 @@
 
 use App\Actions\PauseBot;
 use App\Models\Bot;
+use App\Models\ExchangeCredential;
 use App\Models\User;
 use App\Services\Exchange\ExchangeClientFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -56,7 +57,9 @@ it('rejects a name-only confirmation when starting a live bot', function () {
     config(['trading.live_enabled' => true]);
 
     $user = User::factory()->create();
+    $credential = ExchangeCredential::factory()->for($user)->create(['exchange' => 'binance']);
     $bot = Bot::factory()->for($user)->live()->create([
+        'exchange_credential_id' => $credential->id,
         'name' => 'Live BTC grid',
         'status' => 'idle',
         'capital_allocation' => '1000',

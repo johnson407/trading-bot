@@ -17,12 +17,13 @@ it('only keeps alerts and analytics on the Laravel scheduler', function () {
         expect($commands->contains(fn (string $command) => str_contains($command, $removed)))->toBeFalse();
     }
 
-    expect($commands)->toHaveCount(5)
+    expect($commands)->toHaveCount(6)
         ->and($commands->contains(fn (string $command) => str_contains($command, 'analytics:capture-equity')))->toBeTrue()
         ->and($commands->contains(fn (string $command) => str_contains($command, 'alerts:prune')))->toBeTrue()
         ->and($commands->contains(fn (string $command) => str_contains($command, 'analytics:prune-equity')))->toBeTrue()
         ->and($commands->contains(fn (string $command) => str_contains($command, 'alerts:ingest-engine-events')))->toBeTrue()
-        ->and($commands->contains(fn (string $command) => str_contains($command, 'alerts:check-engine-heartbeat')))->toBeTrue();
+        ->and($commands->contains(fn (string $command) => str_contains($command, 'alerts:check-engine-heartbeat')))->toBeTrue()
+        ->and($commands->contains(fn (string $command) => str_contains($command, 'scheduler:heartbeat')))->toBeTrue();
 });
 
 it('runs the engine alert bridge every ten seconds and the heartbeat check every minute', function () {
@@ -39,6 +40,16 @@ it('runs the engine alert bridge every ten seconds and the heartbeat check every
         ->and($heartbeat)->not->toBeNull()
         ->and($heartbeat->expression)->toBe('* * * * *')
         ->and($heartbeat->repeatSeconds)->toBeNull()
+        ->and($heartbeat->withoutOverlapping)->toBeTrue()
+        ->and($heartbeat->onOneServer)->toBeTrue();
+});
+
+it('records the scheduler heartbeat every minute', function () {
+    $heartbeat = collect(app(Schedule::class)->events())
+        ->first(fn ($event) => str_contains((string) $event->command, 'scheduler:heartbeat'));
+
+    expect($heartbeat)->not->toBeNull()
+        ->and($heartbeat->expression)->toBe('* * * * *')
         ->and($heartbeat->withoutOverlapping)->toBeTrue()
         ->and($heartbeat->onOneServer)->toBeTrue();
 });

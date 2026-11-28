@@ -7,6 +7,8 @@ use App\Domain\Risk\Exceptions\LiveConfirmationRequiredException;
 use App\Domain\Risk\Exceptions\LiveTradingDisabledException;
 use App\Domain\Risk\ValueObjects\LiveStartConfirmation;
 use App\Models\Bot;
+use App\Models\ExchangeCredential;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Fixtures\FakeExchangeClient;
 
@@ -43,7 +45,12 @@ it('requires confirmation text matching the bot name', function () {
 
 it('starts a live bot when confirmed and the balance is sufficient', function () {
     config()->set('trading.live_enabled', true);
-    $bot = Bot::factory()->live()->create(['capital_allocation' => '1000']);
+    $user = User::factory()->create();
+    $credential = ExchangeCredential::factory()->for($user)->create(['exchange' => 'binance']);
+    $bot = Bot::factory()->for($user)->live()->create([
+        'exchange_credential_id' => $credential->id,
+        'capital_allocation' => '1000',
+    ]);
 
     app(StartBot::class)->handle(
         $bot,

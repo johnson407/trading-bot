@@ -3,8 +3,10 @@
 namespace App\Actions;
 
 use App\Domain\Activity\ActivityRecorder;
+use App\Domain\Risk\LiveCredentialPolicy;
 use App\Domain\Risk\RiskLimitService;
 use App\Models\Bot;
+use App\Models\ExchangeCredential;
 use App\Models\StrategyConfig;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +17,7 @@ class CreateBot
     public function __construct(
         private readonly ActivityRecorder $activity,
         private readonly RiskLimitService $riskLimits,
+        private readonly LiveCredentialPolicy $liveCredentials,
     ) {}
 
     /**
@@ -34,6 +37,15 @@ class CreateBot
             $mode = (string) ($data['mode'] ?? 'paper');
             $exchange = (string) ($data['exchange'] ?? config('trading.default_exchange', 'binance'));
             $credential = $user->exchangeCredentials()->where('exchange', $exchange)->first();
+
+            if ($mode === 'live' && $credential instanceof ExchangeCredential) {
+                ExchangeCredential::query()
+                    ->whereKey($credential->getKey())
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            $this->liveCredentials->assertCanCreate($user, $credential, $mode);
 
             $bot = Bot::create([
                 'user_id' => $user->id,

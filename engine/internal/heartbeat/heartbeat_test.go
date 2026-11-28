@@ -93,6 +93,26 @@ func TestWriteUsesDesignKeyAndTTL(t *testing.T) {
 	}
 }
 
+func TestWriteReportsLiveTradingGate(t *testing.T) {
+	t.Parallel()
+
+	setter := &recordedSet{}
+	stub := heartbeat.NewWriter(setter)
+
+	if err := stub.Write(context.Background(), heartbeat.Snapshot{LiveTrading: true}); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var payload heartbeat.Payload
+	if err := json.Unmarshal(setter.value, &payload); err != nil {
+		t.Fatalf("payload is not JSON: %v", err)
+	}
+
+	if !payload.LiveTrading {
+		t.Error("live_trading = false, want true")
+	}
+}
+
 func TestWriteIncrementsRevision(t *testing.T) {
 	t.Parallel()
 

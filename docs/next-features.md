@@ -14,12 +14,14 @@ shortlist to revisit before opening an OpenSpec change.
 
 ## Where the project stands
 
-The MVP is complete: 10 capability specs, 4 strategies, paper and live CCXT
-execution, risk guards, kill switch, restart recovery, historical backtesting,
-parameter sweeps, owner-scoped alerting, per-bot protective exits, account
-equity history, and a growing test suite. At capture time there were no active
-OpenSpec changes; backtesting, parameter sweeps, alerting, protective exits, and
-equity analytics have since shipped.
+The MVP is complete: 10 capability specs, 4 strategies, paper and gated live
+execution in the Go engine, risk guards, kill switch, restart recovery,
+historical backtesting, parameter sweeps, owner-scoped alerting, per-bot
+protective exits, account equity history, and a growing test suite. The retained
+PHP CCXT adapters serve create/edit previews and emergency cancellation; ticks,
+orders, fills, and backtests run in the Go engine. At capture time there were no
+active OpenSpec changes; backtesting, parameter sweeps, alerting, protective
+exits, and equity analytics have since shipped.
 
 Capabilities already in place: `bots`, `grids`, `grid_levels`, `orders`, `fills`,
 `inventory_ledger_entries`, `risk_events`, `activity_logs`, strategy state,
@@ -63,7 +65,7 @@ and the Inertia dashboard.
 | Alerts and notifications | Shipped | `RiskEventRecorder` and `ActivityRecorder` are natural event sources; the alert recorder maps a curated catalog into an inbox and queued email. | Small | None significant. |
 | Equity curve and analytics | Shipped | Account snapshots are captured every five minutes and charted with return, peak, and drawdown metrics; history is forward-only. | Medium | Resolved: no backfill from fills or ledger entries. |
 | Stop-loss / take-profit / range exit | Shipped | Extends the tick pipeline and risk controls, is configurable per bot in every state, and is reported through alerts. | Medium | Resolved: triggers pause and cancel orders, leaving inventory for manual exit. |
-| Multi-exchange support | Open | CCXT is abstracted behind `ExchangeClient`; `trading.exchanges` allowlist already exists. | Large | Symbol precision, min-notional, credential UI, per-exchange testnet coverage. |
+| Multi-exchange support | Open | The PHP preview adapters share `ExchangeClient`, and the Go engine has its own exchange layer; the `trading.exchanges` allowlist already exists. New venues need Go adapters, preview coverage, credentials, and testnet drills. | Large | Symbol precision, min-notional, credential UI, per-exchange testnet coverage. |
 | API / webhooks / export | Open | No auth-token layer today. | Medium | New attack surface. |
 
 ## Recommendation
@@ -74,10 +76,11 @@ with a live combination count, cap, derived progress, and a direct path to the
 existing 2–4 run comparison. That closes the "compare settings" gap, so the next
 alternative is breadth rather than more backtest machinery.
 
-Multi-exchange support is the next candidate because CCXT is already abstracted
-behind `ExchangeClient` and `trading.exchanges` is an allowlist. API/webhooks and
-export remain lower priority because they add attack surface before venue breadth
-is proven.
+Multi-exchange support is the next candidate because the PHP preview adapters
+already share `ExchangeClient` and `trading.exchanges` is an allowlist, but the
+Go runtime needs a venue adapter and testnet drills before a new exchange can
+trade. API/webhooks and export remain lower priority because they add attack
+surface before venue breadth is proven.
 
 ## Decision to resolve before starting
 

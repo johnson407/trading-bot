@@ -4,6 +4,7 @@ use App\Actions\StartBot;
 use App\Domain\Bot\Enums\BotStatus;
 use App\Domain\Order\Enums\OrderStatus;
 use App\Models\Bot;
+use App\Models\ExchangeCredential;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Engine\CommandPublisher;
@@ -45,7 +46,9 @@ it('requires the exact bot name to start a live bot', function () {
     config(['trading.live_enabled' => true]);
 
     $user = User::factory()->create();
+    $credential = ExchangeCredential::factory()->for($user)->create(['exchange' => 'binance']);
     $bot = Bot::factory()->for($user)->live()->create([
+        'exchange_credential_id' => $credential->id,
         'name' => 'Live BTC grid',
         'status' => BotStatus::Idle,
         'capital_allocation' => '1000',

@@ -64,6 +64,18 @@ A trigger pauses the bot, cancels its pending, open, and partially-filled orders
 
 A cancellation failure during the exit is recorded as `risk.cancel_failed` and does not prevent the pause. Trigger events are `risk.stop_loss_triggered` (critical), `risk.take_profit_triggered` (warning), and `risk.range_exit_triggered` (warning); the alert catalog mirrors those severities, so stop-loss reaches email while take-profit and range exits stay in the in-app inbox.
 
+## Manual liquidation on safety pauses
+
+Every automatic safety pause is cancel-only. The covered causes are daily loss, protective exit, exchange failure threshold, repeated tick failure, stale tick, a closed live-trading gate, reconciliation conflict, strategy stop, unsupported exchange, and the kill switch. For every cause the engine:
+
+- cancels pending, open, and partially filled orders;
+- submits no market, liquidation, or compensating order;
+- leaves base and quote inventory unchanged.
+
+A partial fill that races the cancel keeps its filled quantity in inventory; the unfilled remainder is canceled and retained. Inventory changes only when an exchange fill is applied, never because a bot paused.
+
+The engine has no automatic liquidation path. The operator flattens any remaining inventory manually by following [the manual flatten procedure](live-trading.md#manual-flatten): verify the exchange free balance, place limit orders only, confirm final balances and zero open orders, and record the evidence.
+
 ## Kill-switch
 
 Laravel writes `desired_status=paused` for every non-stopped active bot owned by
