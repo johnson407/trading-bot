@@ -135,7 +135,7 @@ command. Laravel no longer schedules `backtests:fail-stale`.
 
 ## Cadences and latency
 
-- Each bot evaluates at its stored `tick_interval_seconds`, default 60 seconds.
+- Each bot evaluates at its stored `tick_interval_seconds`, default 10 seconds.
 - Ticks read the cached public WebSocket last price. A missing cached price or
   one older than `max(15s, TRADING_TICK_INTERVAL / 2)` triggers one public REST
   snapshot; if that snapshot fails, the tick fails instead of using the old

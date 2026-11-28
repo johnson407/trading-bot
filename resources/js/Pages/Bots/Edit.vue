@@ -27,6 +27,7 @@ const form = useForm({
     name: props.bot.name,
     capital_allocation: displayCapitalAllocation,
     fee_rate: props.bot.fee_rate ?? '0',
+    tick_interval_seconds: props.bot.tick_interval_seconds ?? 10,
     center_price: props.configuration.center_price ?? '0',
     level_count: props.configuration.levels_per_side ?? 1,
     spacing_type: props.configuration.spacing_type ?? 'arithmetic',
@@ -65,6 +66,7 @@ function previewPayload() {
         strategy_key: props.bot.strategy_key,
         name: form.name,
         fee_rate: form.fee_rate,
+        tick_interval_seconds: form.tick_interval_seconds,
         capital_allocation: submittedMoney(form.capital_allocation, displayCapitalAllocation, rawCapitalAllocation),
         center_price: form.center_price,
         level_count: Number(form.level_count),
@@ -126,6 +128,7 @@ watch(
         form.name,
         form.capital_allocation,
         form.fee_rate,
+        form.tick_interval_seconds,
         form.center_price,
         form.level_count,
         form.spacing_type,
@@ -192,7 +195,7 @@ const submit = () => form
 
                 <div v-if="runningPaper" class="rounded-lg border border-amber-700 bg-amber-950 p-6 text-sm text-amber-200">
                     <p class="font-semibold">This bot is running.</p>
-                    <p class="mt-1">Saving changes will cancel open orders and rebuild the ladder on the next tick.</p>
+                    <p class="mt-1">Saving changes can cancel open orders and rebuild the ladder on the next tick. An interval-only change does not rebuild the ladder, but an overdue bot can still be paused by the stale-tick check.</p>
                 </div>
 
                 <div v-if="!isEditable" class="rounded-lg bg-amber-950 p-6 text-sm text-amber-200">
@@ -217,6 +220,13 @@ const submit = () => form
                             <InputLabel for="fee_rate" value="Fee rate" />
                             <TextInput id="fee_rate" v-model="form.fee_rate" class="mt-1 block w-full" />
                             <InputError class="mt-2" :message="form.errors.fee_rate" />
+                        </div>
+
+                        <div>
+                            <InputLabel for="tick_interval_seconds" value="Tick interval (seconds)" />
+                            <TextInput id="tick_interval_seconds" v-model="form.tick_interval_seconds" type="number" min="1" max="3600" class="mt-1 block w-full" required />
+                            <p class="mt-1 text-xs text-slate-400">How often the engine evaluates this bot. Applies on the next due-check.</p>
+                            <InputError class="mt-2" :message="form.errors.tick_interval_seconds" />
                         </div>
 
                         <div>
@@ -333,7 +343,7 @@ const submit = () => form
                                 type="checkbox"
                                 class="mt-1 rounded border-slate-500 bg-slate-900 text-emerald-600"
                             />
-                            <span>I understand open orders will be cancelled and the ladder rebuilt.</span>
+                            <span>I understand saving structural or capital changes will cancel open orders and rebuild the ladder.</span>
                         </label>
                         <InputError :message="form.errors.confirm_running_edit" />
                     </div>

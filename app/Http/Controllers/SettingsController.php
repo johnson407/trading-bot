@@ -9,6 +9,8 @@ class SettingsController extends Controller
 {
     public function index(): Response
     {
-        return Inertia::render('Settings/Index');
+        return Inertia::render('Settings/Index', [
+            'tickIntervalSeconds' => max(1, (int) config('trading.tick.interval_seconds')),
+        ]);
     }
 }

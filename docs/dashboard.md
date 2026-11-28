@@ -252,15 +252,18 @@ bot's current risk limits. The preview refreshes as editable fields change, and
 the page shows a field-by-field diff of the values that will change. Owners may
 edit idle or stopped bots. A **running paper** bot may also be edited after an
 explicit confirmation; running live bots and paused bots are read-only. Editable
-fields are name, capital allocation, fee rate, and strategy parameters. Symbol,
-exchange, mode, and strategy are immutable; submitted values for them are ignored.
+fields are name, capital allocation, fee rate, tick interval (1-3600 seconds),
+and strategy parameters. Symbol, exchange, mode, and strategy are immutable;
+submitted values for them are ignored.
 
 For a running paper bot, the page shows a running banner, the field diff, the
 ladder/order preview, and a confirmation checkbox. Saving without confirmation is
 rejected and nothing changes. A confirmed structural strategy change or capital
 change sets `reconcile_pending` and asks the engine to reconcile: the engine
 cancels open orders, clears strategy state, and the next tick rebuilds the ladder.
-Name-only and fee-only changes do not cancel orders or request a reconcile. If the
+Name-only, fee-only, and interval-only changes do not themselves cancel orders or
+request a reconcile; the engine applies a new interval on its next due-check. An
+overdue bot can still be paused by the stale-tick check, which cancels orders. If the
 submitted values are unchanged, the page reports `No changes.` and persists
 nothing.
 
@@ -317,8 +320,10 @@ Feature test: `tests/Feature/ActivityLogTest.php`.
 ## Settings — `GET /settings` (`settings.index`)
 
 The Settings hub groups account configuration. It links to exchange credentials
-and risk limits; each destination remains a separate, directly reachable page.
-The Settings link in both primary navigations is active across these pages.
+and risk limits; each destination remains a separate, directly reachable page. It
+also shows the effective default tick interval for new bots as a read-only
+readout, floored at one second and sourced from `TRADING_TICK_INTERVAL`. The
+Settings link in both primary navigations is active across these pages.
 
 Feature test: `tests/Feature/SettingsUiTest.php`.
 

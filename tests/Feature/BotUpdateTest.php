@@ -686,3 +686,99 @@ it('merges user settings without overwriting engine-owned keys', function () {
         'theme' => 'dark',
     ]);
 });
+
+it('updates the tick interval without reconciling a running paper bot', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill([
+        'status' => 'running',
+        'mode' => 'paper',
+        'tick_interval_seconds' => 60,
+    ])->save();
+    $publisher = app(CommandPublisher::class);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload([
+            'tick_interval_seconds' => 15,
+            'name' => 'Old name',
+            'fee_rate' => '0.002',
+            'capital_allocation' => '1000',
+            'center_price' => '50000',
+            'level_count' => 6,
+            'spacing_value' => '100',
+            'order_quantity' => '0.001',
+            'confirm_running_edit' => '1',
+        ]))
+        ->assertRedirect(route('bots.show', $bot))
+        ->assertSessionHasNoErrors();
+
+    $bot->refresh();
+
+    expect($bot->tick_interval_seconds)->toBe(15)
+        ->and($bot->reconcile_pending)->toBeFalse()
+        ->and($publisher->ofType('bot.config'))->toHaveCount(0);
+
+    $activity = ActivityLog::query()->where('bot_id', $bot->id)->where('type', 'bot.updated')->firstOrFail();
+    expect(collect($activity->context['diff'])->pluck('key')->all())->toBe(['tick_interval_seconds']);
+});
+
+it('rejects a tick interval outside the supported range', function (mixed $value) {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload(['tick_interval_seconds' => $value]))
+        ->assertSessionHasErrors('tick_interval_seconds');
+
+    expect($bot->fresh()->tick_interval_seconds)->toBe((int) config('trading.tick.interval_seconds'));
+})->with([0, -1, 3601, 'ten']);
+
+it('still requires confirmation for an interval-only running paper edit', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill(['status' => 'running', 'mode' => 'paper', 'tick_interval_seconds' => 60])->save();
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload([
+            'tick_interval_seconds' => 15,
+            'name' => 'Old name',
+            'fee_rate' => '0.002',
+            'capital_allocation' => '1000',
+            'center_price' => '50000',
+            'level_count' => 6,
+            'spacing_value' => '100',
+            'order_quantity' => '0.001',
+        ]))
+        ->assertSessionHasErrors('confirm_running_edit');
+
+    expect($bot->fresh()->tick_interval_seconds)->toBe(60);
+});
+
+it('still publishes a pending reconcile when only the interval changes', function () {
+    $user = User::factory()->create();
+    $bot = updatableBot($user);
+    $bot->forceFill([
+        'status' => 'running',
+        'mode' => 'paper',
+        'tick_interval_seconds' => 60,
+        'reconcile_pending' => true,
+    ])->save();
+    $publisher = app(CommandPublisher::class);
+
+    $this->actingAs($user)
+        ->patch(route('bots.update', $bot), updatePayload([
+            'tick_interval_seconds' => 15,
+            'name' => 'Old name',
+            'fee_rate' => '0.002',
+            'capital_allocation' => '1000',
+            'center_price' => '50000',
+            'level_count' => 6,
+            'spacing_value' => '100',
+            'order_quantity' => '0.001',
+            'confirm_running_edit' => '1',
+        ]))
+        ->assertSessionHasNoErrors();
+
+    expect($publisher->ofType('bot.config'))->toHaveCount(1)
+        ->and($publisher->ofType('bot.config')[0]['payload'])->toBe(['strategy_reset' => true, 'reconcile' => true]);
+});

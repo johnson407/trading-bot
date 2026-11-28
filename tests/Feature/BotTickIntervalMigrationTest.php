@@ -42,12 +42,12 @@ it('migrates the old default interval to 60 without changing explicit intervals'
         ->and($explicit->fresh()->tick_interval_seconds)->toBe(5);
 });
 
-it('sets the bots tick interval column default to 60', function () {
+it('sets the bots tick interval column default to 10', function () {
     $default = DB::table('information_schema.columns')
         ->where('table_schema', 'public')
         ->where('table_name', 'bots')
         ->where('column_name', 'tick_interval_seconds')
         ->value('column_default');
 
-    expect((int) $default)->toBe(60);
+    expect((int) $default)->toBe(10);
 });
