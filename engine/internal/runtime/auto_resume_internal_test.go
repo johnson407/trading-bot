@@ -24,6 +24,9 @@ type autoResumeBotOptions struct {
 	fresh         bool
 	archived      bool
 	killSwitch    bool
+	cancelRetry   bool
+	reconcileFlag bool
+	strategyReset bool
 }
 
 func autoResumeTestPool(t *testing.T) *pgxpool.Pool {
@@ -83,12 +86,14 @@ func insertAutoResumeBot(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 		`INSERT INTO bots (user_id, name, exchange, symbol, strategy_key, mode, status, desired_status,
 		    capital_allocation, quote_inventory, tick_interval_seconds, settings,
 		    last_successful_tick_at, pause_reason, pause_reason_recorded_at,
+		    cancel_retry_requested, reconcile_pending, strategy_reset_pending,
 		    deleted_at, kill_switch_requested_at, created_at, updated_at)
 		 VALUES ($1, $2, $3, 'BTC/USDT', 'simple-grid', $4, $5, $6,
 		    '1000', '1000', 1, '{}'::jsonb, now() - interval '1 hour', $7,
 		    CASE WHEN $7::text IS NULL THEN NULL
 		         WHEN $8 THEN now()
 		         ELSE now() - interval '1 second' END,
+		    $11, $12, $13,
 		    CASE WHEN $9 THEN now() ELSE NULL END,
 		    CASE WHEN $10 THEN now() ELSE NULL END,
 		    now(), now())
@@ -96,6 +101,7 @@ func insertAutoResumeBot(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 		userID, fmt.Sprintf("Auto-resume %d", time.Now().UnixNano()), opts.exchange,
 		opts.mode, opts.status, opts.desiredStatus,
 		opts.pauseReason, opts.fresh, opts.archived, opts.killSwitch,
+		opts.cancelRetry, opts.reconcileFlag, opts.strategyReset,
 	).Scan(&botID); err != nil {
 		t.Fatalf("insert bot: %v", err)
 	}
@@ -334,6 +340,61 @@ func TestPauseWritesCauseAndRecordedTime(t *testing.T) {
 	}
 }
 
+func TestPauseCancelFailureKeepsCauseEligible(t *testing.T) {
+	pool := autoResumeTestPool(t)
+	ctx := context.Background()
+	userID := autoResumeTestUser(t, ctx, pool)
+	botID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		status:        "running",
+		desiredStatus: "running",
+	})
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO orders (bot_id, client_order_id, mode, side, type, price, quantity, filled_quantity, status, requested_at, opened_at, created_at, updated_at)
+		 VALUES ($1, $2, 'paper', 'buy', 'limit', '100', '1', 0, 'open', now(), now(), now(), now())`,
+		botID, fmt.Sprintf("pause-cancel-%d", time.Now().UnixNano())); err != nil {
+		t.Fatalf("insert open order: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_block_pause_cancel() RETURNS trigger AS $$
+		BEGIN
+			IF NEW.status = 'canceled' AND OLD.status = 'open' THEN
+				RAISE EXCEPTION 'injected pause cancel failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER test_block_pause_cancel_trigger
+			BEFORE UPDATE ON orders
+			FOR EACH ROW EXECUTE FUNCTION test_block_pause_cancel();
+	`); err != nil {
+		t.Fatalf("install pause cancel failure trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS test_block_pause_cancel_trigger ON orders`)
+		_, _ = pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS test_block_pause_cancel()`)
+	})
+
+	trading := autoResumeTestRuntime(pool, nil)
+	if err := trading.pause(ctx, &Bot{ID: botID, UserID: userID}, pauseCauseStaleTick, "test pause", "", "", "warning"); err != nil {
+		t.Fatalf("pause: %v", err)
+	}
+
+	var reason string
+	var matches, cancelRetry bool
+	if err := pool.QueryRow(ctx,
+		`SELECT pause_reason, pause_reason_recorded_at = updated_at, cancel_retry_requested FROM bots WHERE id=$1`, botID,
+	).Scan(&reason, &matches, &cancelRetry); err != nil {
+		t.Fatalf("read pause provenance: %v", err)
+	}
+	if reason != pauseCauseStaleTick.String() || !matches {
+		t.Fatalf("pause reason=%q recorded_matches=%v, want %s with current provenance", reason, matches, pauseCauseStaleTick)
+	}
+	if !cancelRetry {
+		t.Fatal("cancel_retry_requested = false after a failed pause cancellation")
+	}
+}
+
 func TestWaitForPauseProvenanceFailsClosed(t *testing.T) {
 	pool := autoResumeTestPool(t)
 	ctx := context.Background()
@@ -523,6 +584,306 @@ func TestAutoResumeActivityFailureDoesNotRollBackResume(t *testing.T) {
 	if !strings.Contains(logs.String(), "record activity failed") {
 		t.Fatalf("activity failure was not logged: %s", logs.String())
 	}
+}
+
+func TestAutoResumeAfterCancelRetryCleanup(t *testing.T) {
+	pool := autoResumeTestPool(t)
+	ctx := context.Background()
+	userID := autoResumeTestUser(t, ctx, pool)
+	botID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		pauseReason: pauseCausePtr(pauseCauseStaleTick.String()),
+		fresh:       false,
+		cancelRetry: true,
+	})
+
+	trading := autoResumeTestRuntime(pool, nil)
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	assertAutoResumeState(t, ctx, pool, botID, "running", nil)
+	var cancelRetry bool
+	if err := pool.QueryRow(ctx, `SELECT cancel_retry_requested FROM bots WHERE id=$1`, botID).Scan(&cancelRetry); err != nil {
+		t.Fatalf("read cancel_retry_requested: %v", err)
+	}
+	if cancelRetry {
+		t.Fatal("cancel_retry_requested = true after cleanup")
+	}
+	assertCountQuery(t, ctx, pool, `SELECT COUNT(*) FROM activity_logs WHERE bot_id=$1 AND type='bot.auto_resumed'`, 1, botID)
+}
+
+func TestAutoResumeAfterStrategyResetCleanup(t *testing.T) {
+	pool := autoResumeTestPool(t)
+	ctx := context.Background()
+	userID := autoResumeTestUser(t, ctx, pool)
+	botID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		pauseReason:   pauseCausePtr(pauseCauseStaleTick.String()),
+		fresh:         false,
+		strategyReset: true,
+	})
+
+	trading := autoResumeTestRuntime(pool, nil)
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	assertAutoResumeState(t, ctx, pool, botID, "running", nil)
+	var strategyReset bool
+	if err := pool.QueryRow(ctx, `SELECT strategy_reset_pending FROM bots WHERE id=$1`, botID).Scan(&strategyReset); err != nil {
+		t.Fatalf("read strategy_reset_pending: %v", err)
+	}
+	if strategyReset {
+		t.Fatal("strategy_reset_pending = true after cleanup")
+	}
+	assertCountQuery(t, ctx, pool, `SELECT COUNT(*) FROM activity_logs WHERE bot_id=$1 AND type='bot.auto_resumed'`, 1, botID)
+}
+
+func TestAutoResumeAfterReconcileCleanup(t *testing.T) {
+	pool := autoResumeTestPool(t)
+	ctx := context.Background()
+	userID := autoResumeTestUser(t, ctx, pool)
+	botID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		pauseReason:   pauseCausePtr(pauseCauseStaleTick.String()),
+		fresh:         false,
+		reconcileFlag: true,
+	})
+
+	trading := autoResumeTestRuntime(pool, nil)
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	assertAutoResumeState(t, ctx, pool, botID, "running", nil)
+	var reconcilePending bool
+	if err := pool.QueryRow(ctx, `SELECT reconcile_pending FROM bots WHERE id=$1`, botID).Scan(&reconcilePending); err != nil {
+		t.Fatalf("read reconcile_pending: %v", err)
+	}
+	if reconcilePending {
+		t.Fatal("reconcile_pending = true after cleanup")
+	}
+	assertCountQuery(t, ctx, pool, `SELECT COUNT(*) FROM activity_logs WHERE bot_id=$1 AND type='bot.auto_resumed'`, 1, botID)
+}
+
+func TestAutoResumeSkipsWhileCleanupPending(t *testing.T) {
+	pool := autoResumeTestPool(t)
+	ctx := context.Background()
+	userID := autoResumeTestUser(t, ctx, pool)
+	botID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		pauseReason: pauseCausePtr(pauseCauseStaleTick.String()),
+		fresh:       true,
+		cancelRetry: true,
+	})
+
+	trading := autoResumeTestRuntime(pool, nil)
+	if err := trading.autoResumeStalePausedBots(ctx); err != nil {
+		t.Fatalf("auto-resume: %v", err)
+	}
+	assertAutoResumeState(t, ctx, pool, botID, "paused", pauseCausePtr(pauseCauseStaleTick.String()))
+}
+
+func TestAutoResumeRetriesAfterFailedCleanup(t *testing.T) {
+	pool := autoResumeTestPool(t)
+	ctx := context.Background()
+	userID := autoResumeTestUser(t, ctx, pool)
+	botID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		pauseReason: pauseCausePtr(pauseCauseStaleTick.String()),
+		fresh:       false,
+		cancelRetry: true,
+	})
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO orders (bot_id, client_order_id, mode, side, type, price, quantity, filled_quantity, status, requested_at, opened_at, created_at, updated_at)
+		 VALUES ($1, $2, 'paper', 'buy', 'limit', '100', '1', 0, 'open', now(), now(), now(), now())`,
+		botID, fmt.Sprintf("auto-resume-cleanup-%d", time.Now().UnixNano())); err != nil {
+		t.Fatalf("insert open order: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_block_cleanup_cancel() RETURNS trigger AS $$
+		BEGIN
+			IF NEW.status = 'canceled' AND OLD.status = 'open' THEN
+				RAISE EXCEPTION 'injected cleanup cancel failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER test_block_cleanup_cancel_trigger
+			BEFORE UPDATE ON orders
+			FOR EACH ROW EXECUTE FUNCTION test_block_cleanup_cancel();
+	`); err != nil {
+		t.Fatalf("install cleanup failure trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS test_block_cleanup_cancel_trigger ON orders`)
+		_, _ = pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS test_block_cleanup_cancel()`)
+	})
+
+	trading := New(pool, nil, nil)
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	assertAutoResumeState(t, ctx, pool, botID, "paused", pauseCausePtr(pauseCauseStaleTick.String()))
+	if !trading.autoResumePending {
+		t.Fatal("autoResumePending = false after a failed cleanup; auto-resume will not retry")
+	}
+
+	if _, err := pool.Exec(ctx, `DROP TRIGGER IF EXISTS test_block_cleanup_cancel_trigger ON orders`); err != nil {
+		t.Fatalf("drop cleanup failure trigger: %v", err)
+	}
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+	assertAutoResumeState(t, ctx, pool, botID, "running", nil)
+	if trading.autoResumePending {
+		t.Fatal("autoResumePending = true after a successful retry")
+	}
+}
+
+func TestAutoResumeUnaffectedByAnotherBotsFailedCleanup(t *testing.T) {
+	pool := autoResumeTestPool(t)
+	ctx := context.Background()
+	userID := autoResumeTestUser(t, ctx, pool)
+	blockedID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		pauseReason: pauseCausePtr(pauseCauseStaleTick.String()),
+		fresh:       false,
+		cancelRetry: true,
+	})
+	eligibleID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		pauseReason: pauseCausePtr(pauseCauseStaleTick.String()),
+		fresh:       true,
+	})
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO orders (bot_id, client_order_id, mode, side, type, price, quantity, filled_quantity, status, requested_at, opened_at, created_at, updated_at)
+		 VALUES ($1, $2, 'paper', 'buy', 'limit', '100', '1', 0, 'open', now(), now(), now(), now())`,
+		blockedID, fmt.Sprintf("auto-resume-blocked-%d", time.Now().UnixNano())); err != nil {
+		t.Fatalf("insert blocked bot order: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_block_cleanup_cancel() RETURNS trigger AS $$
+		BEGIN
+			IF NEW.status = 'canceled' AND OLD.status = 'open' THEN
+				RAISE EXCEPTION 'injected cleanup cancel failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER test_block_cleanup_cancel_trigger
+			BEFORE UPDATE ON orders
+			FOR EACH ROW EXECUTE FUNCTION test_block_cleanup_cancel();
+	`); err != nil {
+		t.Fatalf("install cleanup failure trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS test_block_cleanup_cancel_trigger ON orders`)
+		_, _ = pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS test_block_cleanup_cancel()`)
+	})
+
+	trading := autoResumeTestRuntime(pool, nil)
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	assertAutoResumeState(t, ctx, pool, blockedID, "paused", pauseCausePtr(pauseCauseStaleTick.String()))
+	assertAutoResumeState(t, ctx, pool, eligibleID, "running", nil)
+	if !trading.autoResumePending {
+		t.Fatal("autoResumePending = false after a failed cleanup; the blocked bot will not retry")
+	}
+
+	if _, err := pool.Exec(ctx, `DROP TRIGGER IF EXISTS test_block_cleanup_cancel_trigger ON orders`); err != nil {
+		t.Fatalf("drop cleanup failure trigger: %v", err)
+	}
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+	assertAutoResumeState(t, ctx, pool, blockedID, "running", nil)
+	if trading.autoResumePending {
+		t.Fatal("autoResumePending = true after the blocked bot resumed")
+	}
+}
+
+func TestAutoResumeDoesNotResumeBotsPausedAfterStartup(t *testing.T) {
+	pool := autoResumeTestPool(t)
+	ctx := context.Background()
+	userID := autoResumeTestUser(t, ctx, pool)
+	blockedID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		pauseReason: pauseCausePtr(pauseCauseStaleTick.String()),
+		fresh:       false,
+		cancelRetry: true,
+	})
+	laterID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		status:        "running",
+		desiredStatus: "running",
+	})
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO orders (bot_id, client_order_id, mode, side, type, price, quantity, filled_quantity, status, requested_at, opened_at, created_at, updated_at)
+		 VALUES ($1, $2, 'paper', 'buy', 'limit', '100', '1', 0, 'open', now(), now(), now(), now())`,
+		blockedID, fmt.Sprintf("auto-resume-startup-%d", time.Now().UnixNano())); err != nil {
+		t.Fatalf("insert blocked bot order: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_block_cleanup_cancel() RETURNS trigger AS $$
+		BEGIN
+			IF NEW.status = 'canceled' AND OLD.status = 'open' THEN
+				RAISE EXCEPTION 'injected cleanup cancel failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER test_block_cleanup_cancel_trigger
+			BEFORE UPDATE ON orders
+			FOR EACH ROW EXECUTE FUNCTION test_block_cleanup_cancel();
+	`); err != nil {
+		t.Fatalf("install cleanup failure trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS test_block_cleanup_cancel_trigger ON orders`)
+		_, _ = pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS test_block_cleanup_cancel()`)
+	})
+
+	now := time.Now().UTC()
+	trading := New(pool, nil, nil, WithNow(func() time.Time { return now }))
+
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("startup reconcile: %v", err)
+	}
+	now = now.Add(4 * time.Minute)
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("stale reconcile: %v", err)
+	}
+	assertAutoResumeState(t, ctx, pool, laterID, "paused", pauseCausePtr(pauseCauseStaleTick.String()))
+
+	for i := 0; i < 3; i++ {
+		if err := trading.Reconcile(ctx); err != nil {
+			t.Fatalf("reconcile %d: %v", i+2, err)
+		}
+	}
+
+	assertAutoResumeState(t, ctx, pool, laterID, "paused", pauseCausePtr(pauseCauseStaleTick.String()))
+	assertAutoResumeState(t, ctx, pool, blockedID, "paused", pauseCausePtr(pauseCauseStaleTick.String()))
+	if !trading.autoResumePending {
+		t.Fatal("autoResumePending = false while startup cleanup is still failing")
+	}
+	assertCountQuery(t, ctx, pool, `SELECT COUNT(*) FROM activity_logs WHERE bot_id=$1 AND type='bot.auto_resumed'`, 0, laterID)
+}
+
+func TestReconcileSkipsProvenanceInvalidatedByOlderEngine(t *testing.T) {
+	pool := autoResumeTestPool(t)
+	ctx := context.Background()
+	userID := autoResumeTestUser(t, ctx, pool)
+	botID := insertAutoResumeBot(t, ctx, pool, userID, autoResumeBotOptions{
+		pauseReason: pauseCausePtr(pauseCauseStaleTick.String()),
+		fresh:       true,
+	})
+
+	if _, err := pool.Exec(ctx, `UPDATE bots SET updated_at = updated_at + interval '1 second' WHERE id=$1`, botID); err != nil {
+		t.Fatalf("invalidate provenance: %v", err)
+	}
+
+	trading := autoResumeTestRuntime(pool, nil)
+	if err := trading.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	assertAutoResumeState(t, ctx, pool, botID, "paused", pauseCausePtr(pauseCauseStaleTick.String()))
 }
 
 func assertNoPauseRecordedAt(t *testing.T, ctx context.Context, pool *pgxpool.Pool, botID int64) {

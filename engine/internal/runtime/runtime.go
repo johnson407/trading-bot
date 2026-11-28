@@ -33,7 +33,7 @@ const (
 	defaultMaxNotional  = "1000"
 	defaultDailyLoss    = "100"
 
-	positionLimitEventCooldown = 5 * time.Minute
+	riskEventCooldown = 5 * time.Minute
 )
 
 // Option customises the runtime.
@@ -124,6 +124,8 @@ type Runtime struct {
 	riskEventMu        sync.Mutex
 	ticks              sync.WaitGroup
 	autoResumePending  bool
+	autoResumeCaptured bool
+	autoResumeBots     map[int64]struct{}
 	cancelOrders       OrderCanceler
 }
 
@@ -144,6 +146,7 @@ func New(pool *pgxpool.Pool, market Market, logger *slog.Logger, options ...Opti
 		firstScheduled:     map[int64]time.Time{},
 		riskEventNotBefore: map[riskEventKey]time.Time{},
 		autoResumePending:  true,
+		autoResumeBots:     map[int64]struct{}{},
 	}
 	runtime.cancelOrders = func(ctx context.Context, userID, botID int64, reason string) error {
 		_, err := runtime.cancelOpenOrders(ctx, userID, botID, reason)
@@ -246,7 +249,9 @@ func (r *Runtime) applyStatus(ctx context.Context, command protocol.Envelope, st
 		if !bot.live() && bot.ReconcilePending {
 			if err := r.reconcilePendingPaper(ctx, bot); err != nil {
 				message := "Start refused: pending reconcile failed: " + err.Error()
-				_, _ = r.pool.Exec(ctx, `UPDATE bots SET last_error = $2, desired_status = status, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
+				_, _ = r.pool.Exec(ctx, `UPDATE bots SET last_error = $2, desired_status = status,
+					pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL THEN now() ELSE pause_reason_recorded_at END,
+					updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
 
 				return fmt.Errorf("%s", message)
 			}
@@ -350,7 +355,12 @@ func (r *Runtime) resetStrategyState(ctx context.Context, command protocol.Envel
 		if err != nil {
 			return fmt.Errorf("reset strategy state: %w", err)
 		}
-		_, err = r.pool.Exec(ctx, `UPDATE bots SET strategy_reset_pending = false, updated_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`, command.BotID, command.UserID)
+		_, err = r.pool.Exec(ctx, `UPDATE bots
+			SET strategy_reset_pending = false,
+			    pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL
+			                                    THEN now() ELSE pause_reason_recorded_at END,
+			    updated_at = now()
+			WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`, command.BotID, command.UserID)
 
 		return err
 	})
@@ -362,7 +372,12 @@ func (r *Runtime) resetStrategyState(ctx context.Context, command protocol.Envel
 func (r *Runtime) reconcileRunningPaper(ctx context.Context, bot *Bot) error {
 	if bot.live() {
 		if bot.ReconcilePending {
-			if _, err := r.pool.Exec(ctx, `UPDATE bots SET reconcile_pending = false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
+			if _, err := r.pool.Exec(ctx, `UPDATE bots
+				SET reconcile_pending = false,
+				    pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL
+				                                    THEN now() ELSE pause_reason_recorded_at END,
+				    updated_at = now()
+				WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
 				return fmt.Errorf("clear live reconcile: %w", err)
 			}
 			r.logger.Warn("ignoring reconcile for live bot", "bot_id", bot.ID)
@@ -393,7 +408,12 @@ func (r *Runtime) reconcilePaperState(ctx context.Context, bot *Bot) error {
 	}
 
 	if err := r.cancelOrders(ctx, bot.UserID, bot.ID, "reconcile"); err != nil {
-		_, _ = r.pool.Exec(ctx, `UPDATE bots SET cancel_retry_requested = true, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
+		_, _ = r.pool.Exec(ctx, `UPDATE bots
+			SET cancel_retry_requested = true,
+			    pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL
+			                                    THEN now() ELSE pause_reason_recorded_at END,
+			    updated_at = now()
+			WHERE id = $1 AND deleted_at IS NULL`, bot.ID)
 
 		return fmt.Errorf("reconcile cancel open orders: %w", err)
 	}
@@ -410,7 +430,10 @@ func (r *Runtime) reconcilePaperState(ctx context.Context, bot *Bot) error {
 	if _, err := r.pool.Exec(ctx,
 		`UPDATE bots
 		    SET reconcile_pending = false, cancel_retry_requested = false,
-		        strategy_reset_pending = false, updated_at = now()
+		        strategy_reset_pending = false,
+		        pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL
+		                                        THEN now() ELSE pause_reason_recorded_at END,
+		        updated_at = now()
 		  WHERE id = $1 AND deleted_at IS NULL`,
 		bot.ID,
 	); err != nil {
@@ -590,12 +613,6 @@ func (r *Runtime) Reconcile(ctx context.Context) error {
 }
 
 func (r *Runtime) reconcile(ctx context.Context) error {
-	if r.autoResumePending {
-		if err := r.autoResumeStalePausedBots(ctx); err != nil {
-			r.logger.Error("auto-resume of stale-paused bots failed", "error_type", fmt.Sprintf("%T", err))
-		}
-	}
-
 	rows, err := r.pool.Query(ctx,
 		`SELECT id FROM bots
 		 WHERE deleted_at IS NULL
@@ -625,12 +642,29 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 		return err
 	}
 
+	cleanupFailed := false
 	for _, id := range ids {
 		botID := id
 		if err := withBotLock(ctx, botID, func(ctx context.Context) error {
 			return r.applyDesired(ctx, botID)
 		}); err != nil {
+			cleanupFailed = true
 			r.logger.Error("desired-status reconciliation failed", "bot_id", botID, "error_type", fmt.Sprintf("%T", err))
+		}
+	}
+
+	// Complete pending cancellation-retry/reconcile/strategy-reset cleanup
+	// before resuming stale-paused bots so the provenance refresh in that
+	// cleanup makes them eligible in this same pass.
+	if r.autoResumePending {
+		if err := r.autoResumeStalePausedBots(ctx); err != nil {
+			r.logger.Error("auto-resume of stale-paused bots failed", "error_type", fmt.Sprintf("%T", err))
+		}
+		if cleanupFailed {
+			// The blocked bot stays ineligible through its pending-flag
+			// predicates, but unrelated stale-paused bots can still resume.
+			// Keep the one-shot pass pending so cleanup is retried next time.
+			r.autoResumePending = true
 		}
 	}
 
@@ -743,8 +777,10 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 }
 
 // autoResumeStalePausedBots recovers paper bots that were stale-paused before
-// this process started. It runs once per process, before desired-status drift
-// and stale checks, and never resumes a live bot or a safety pause.
+// this process started. The first pass captures the startup candidates, and
+// later passes only retry that set, so a bot paused after startup is never
+// auto-resumed. Pending cleanup and provenance are enforced by the UPDATE, and
+// the pass never resumes a live bot or a safety pause.
 func (r *Runtime) autoResumeStalePausedBots(ctx context.Context) error {
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, user_id FROM bots
@@ -754,7 +790,6 @@ func (r *Runtime) autoResumeStalePausedBots(ctx context.Context) error {
 		    AND mode = 'paper'
 		    AND exchange = 'binance'
 		    AND pause_reason = $1
-		    AND pause_reason_recorded_at = updated_at
 		    AND kill_switch_requested_at IS NULL
 		  ORDER BY id`,
 		pauseCauseStaleTick.String(),
@@ -780,8 +815,26 @@ func (r *Runtime) autoResumeStalePausedBots(ctx context.Context) error {
 		return err
 	}
 
+	current := make(map[int64]struct{}, len(candidates))
+	for _, c := range candidates {
+		current[c.id] = struct{}{}
+	}
+	if !r.autoResumeCaptured {
+		r.autoResumeBots = current
+		r.autoResumeCaptured = true
+	} else {
+		for id := range r.autoResumeBots {
+			if _, ok := current[id]; !ok {
+				delete(r.autoResumeBots, id)
+			}
+		}
+	}
+
 	for _, c := range candidates {
 		candidate := c
+		if _, ok := r.autoResumeBots[candidate.id]; !ok {
+			continue
+		}
 		if err := withBotLock(ctx, candidate.id, func(ctx context.Context) error {
 			tag, err := r.pool.Exec(ctx,
 				`UPDATE bots
@@ -795,7 +848,10 @@ func (r *Runtime) autoResumeStalePausedBots(ctx context.Context) error {
 				    AND exchange = 'binance'
 				    AND pause_reason = $2
 				    AND pause_reason_recorded_at = updated_at
-				    AND kill_switch_requested_at IS NULL`,
+				    AND kill_switch_requested_at IS NULL
+				    AND cancel_retry_requested = false
+				    AND reconcile_pending = false
+				    AND strategy_reset_pending = false`,
 				candidate.id, pauseCauseStaleTick.String(),
 			)
 			if err != nil {
@@ -804,6 +860,7 @@ func (r *Runtime) autoResumeStalePausedBots(ctx context.Context) error {
 			if tag.RowsAffected() == 0 {
 				return nil
 			}
+			delete(r.autoResumeBots, candidate.id)
 
 			r.activity(ctx, candidate.userID, candidate.id, "bot.auto_resumed", "info", "Bot auto-resumed after a stale-tick pause.", map[string]any{"cause": pauseCauseStaleTick.String()})
 			r.logger.Info("bot auto-resumed", "bot_id", candidate.id, "cause", pauseCauseStaleTick.String())
@@ -868,7 +925,12 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 		if _, err := r.cancelOpenOrders(ctx, bot.UserID, bot.ID, "cancel_retry"); err != nil {
 			return err
 		}
-		if _, err := r.pool.Exec(ctx, `UPDATE bots SET cancel_retry_requested = false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx, `UPDATE bots
+			SET cancel_retry_requested = false,
+			    pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL
+			                                    THEN now() ELSE pause_reason_recorded_at END,
+			    updated_at = now()
+			WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
 			return err
 		}
 	}
@@ -882,7 +944,12 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 		); err != nil {
 			return err
 		}
-		if _, err := r.pool.Exec(ctx, `UPDATE bots SET strategy_reset_pending = false, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
+		if _, err := r.pool.Exec(ctx, `UPDATE bots
+			SET strategy_reset_pending = false,
+			    pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL
+			                                    THEN now() ELSE pause_reason_recorded_at END,
+			    updated_at = now()
+			WHERE id = $1 AND deleted_at IS NULL`, bot.ID); err != nil {
 			return err
 		}
 	}
@@ -900,7 +967,9 @@ func (r *Runtime) applyDesired(ctx context.Context, botID int64) error {
 		if !bot.live() && bot.ReconcilePending {
 			if err := r.reconcilePendingPaper(ctx, bot); err != nil {
 				message := "Start refused: pending reconcile failed: " + err.Error()
-				_, _ = r.pool.Exec(ctx, `UPDATE bots SET last_error = $2, desired_status = status, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
+				_, _ = r.pool.Exec(ctx, `UPDATE bots SET last_error = $2, desired_status = status,
+					pause_reason_recorded_at = CASE WHEN status = 'paused' AND pause_reason IS NOT NULL THEN now() ELSE pause_reason_recorded_at END,
+					updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, bot.ID, message)
 
 				return fmt.Errorf("%s", message)
 			}
@@ -1096,7 +1165,7 @@ func (r *Runtime) releaseRiskEvent(botID int64, typ string) {
 // recordPositionLimitSkips writes at most one position-limit event per bot per
 // cooldown window, with the number of orders blocked during this attempt.
 func (r *Runtime) recordPositionLimitSkips(ctx context.Context, bot *Bot, skipped int, projectedNotional string) {
-	if skipped == 0 || !r.allowRiskEvent(bot.ID, "risk.position_limit", positionLimitEventCooldown) {
+	if skipped == 0 || !r.allowRiskEvent(bot.ID, "risk.position_limit", riskEventCooldown) {
 		return
 	}
 
@@ -1105,6 +1174,35 @@ func (r *Runtime) recordPositionLimitSkips(ctx context.Context, bot *Bot, skippe
 		map[string]any{"orders_skipped": skipped, "projected_notional": projectedNotional},
 	); err != nil {
 		r.releaseRiskEvent(bot.ID, "risk.position_limit")
+	}
+}
+
+// orderSkips aggregates invalid-order reasons for one placement attempt.
+type orderSkips struct {
+	reasons map[string]int
+	total   int
+}
+
+func (s *orderSkips) add(reason string) {
+	if s.reasons == nil {
+		s.reasons = map[string]int{}
+	}
+	s.reasons[reason]++
+	s.total++
+}
+
+// recordInvalidOrderSkips writes at most one invalid-order event per bot per
+// cooldown window, with the skipped count and a per-reason breakdown.
+func (r *Runtime) recordInvalidOrderSkips(ctx context.Context, bot *Bot, skips *orderSkips) {
+	if skips == nil || skips.total == 0 || !r.allowRiskEvent(bot.ID, "risk.invalid_order", riskEventCooldown) {
+		return
+	}
+
+	if err := r.riskEvent(ctx, bot.UserID, bot.ID, "risk.invalid_order", "critical",
+		fmt.Sprintf("%d order(s) skipped: invalid order for the exchange or grid.", skips.total),
+		map[string]any{"orders_skipped": skips.total, "reasons": skips.reasons},
+	); err != nil {
+		r.releaseRiskEvent(bot.ID, "risk.invalid_order")
 	}
 }
 

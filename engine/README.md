@@ -195,10 +195,17 @@ downtime alone does not pause it. If ticks keep failing through the grace, the
 normal `bot.stale` / `risk.stale_tick` pause-and-cancel path runs. Grace entries
 are dropped once a bot is no longer running.
 
-Position-limit blocks are counted per placement attempt. The runtime writes one
-`risk.position_limit` event with `orders_skipped` and `projected_notional`
-instead of one event per blocked order, and suppresses repeats for the same bot
-and event type for five minutes.
+Position-limit and invalid-order blocks are counted per placement attempt. The
+runtime writes one `risk.position_limit` event with `orders_skipped` and
+`projected_notional`, and one `risk.invalid_order` event with `orders_skipped`
+and a `reasons` breakdown, instead of one event per blocked order. Repeats for
+the same bot and event type are suppressed for five minutes.
+
+Stale-pause recovery runs after pending cancellation/reconcile/strategy-reset
+cleanup and before the stale check. The first pass captures the startup
+candidates, and later passes only retry that set, so a bot paused after startup
+is never auto-resumed. Those cleanup writes refresh `pause_reason_recorded_at`
+when the bot is paused, and a bot with a pending cleanup flag is not resumed.
 
 On `SIGINT` or `SIGTERM` the engine cancels its root context, shuts down the
 HTTP server, and waits up to 20 seconds for the scheduler (including in-flight
