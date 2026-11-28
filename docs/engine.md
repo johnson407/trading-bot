@@ -262,18 +262,19 @@ recovers. Live bots ignore reconcile requests and log them; a `bot.config` witho
 `reconcile` keeps the reset-only behavior.
 
 At startup, after the pending-flag cleanup loop and before stale checks, the
-engine runs one recovery pass for stale-paused paper Binance bots. It resumes
-only rows with `status = paused`, `desired_status = running`,
-`pause_reason = stale_tick`, `pause_reason_recorded_at = updated_at`, no archive
-timestamp, no pending kill-switch request, and none of
+engine runs one recovery pass for stale-paused paper Binance bots. The first
+pass captures the startup candidates: rows with `status = paused`,
+`desired_status = running`, `pause_reason = stale_tick`, no archive timestamp,
+and no pending kill-switch request. Later passes only retry that captured set,
+so a bot paused after startup never auto-resumes. At resume time the row must
+also have `pause_reason_recorded_at = updated_at` and none of
 `cancel_retry_requested`, `reconcile_pending`, or `strategy_reset_pending` set.
-The pass runs once per process; live bots and every safety, user,
-reconciliation, live-gate, strategy-stop, and tick-failure pause stay paused.
-Recovery clears the pause provenance and leaves `last_successful_tick_at`
-unchanged, so the first-schedule grace covers the first tick after resume. It
-records a `bot.auto_resumed` activity and a structured `bot auto-resumed` log
-line. If pending cleanup fails in a pass, the recovery attempt stays pending and
-runs again on the next reconcile.
+Live bots and every safety, user, reconciliation, live-gate, strategy-stop, and
+tick-failure pause stay paused. Recovery clears the pause provenance and leaves
+`last_successful_tick_at` unchanged, so the first-schedule grace covers the
+first tick after resume. It records a `bot.auto_resumed` activity and a
+structured `bot auto-resumed` log line. If pending cleanup fails in a pass, the
+startup attempt stays pending and runs again on the next reconcile.
 
 Position-limit and invalid-order blocks are counted per placement attempt.
 `risk.position_limit` records `orders_skipped` and `projected_notional`;

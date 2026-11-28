@@ -28,7 +28,7 @@ When the engine updates a paused bot's `updated_at` for cancellation retry, reco
 
 ### Requirement: Auto-resume waits for pending cleanup
 
-Before auto-resuming stale-paused bots, the engine SHALL attempt pending cancellation-retry, reconcile, and strategy-reset cleanup for paused bots. A bot whose cleanup has not completed SHALL NOT auto-resume on that pass, but an eligible bot with no pending cleanup SHALL still auto-resume even when another bot's cleanup is failing.
+Before auto-resuming stale-paused bots, the engine SHALL attempt pending cancellation-retry, reconcile, and strategy-reset cleanup for paused bots. The first recovery pass SHALL capture the stale-paused paper Binance bots present when the process starts, and later passes SHALL retry only that captured set. A bot whose cleanup has not completed SHALL NOT auto-resume on that pass, but an eligible bot with no pending cleanup SHALL still auto-resume even when another bot's cleanup is failing.
 
 #### Scenario: Cleanup completes before auto-resume
 
@@ -49,3 +49,8 @@ Before auto-resuming stale-paused bots, the engine SHALL attempt pending cancell
 
 - **WHEN** one stale-paused bot has pending cleanup and another eligible stale-paused bot does not
 - **THEN** the engine auto-resumes the eligible bot without waiting for the blocked one
+
+#### Scenario: Bots paused after startup are not auto-resumed
+
+- **WHEN** a bot goes stale and is paused after the process captured its startup candidates, while another startup bot's cleanup keeps failing
+- **THEN** the later-paused bot remains paused and is not resumed by the retried startup pass

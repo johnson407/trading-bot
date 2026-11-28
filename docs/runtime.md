@@ -119,9 +119,11 @@ strategy-stop, tick-failure, unsupported-exchange, or user pause never resumes
 automatically; an operator must start it again. The one exception is startup recovery: once per
 engine process, after pending cancellation/reconcile/strategy-reset cleanup and
 before the stale check, a non-archived paper Binance bot whose recorded pause
-cause is `stale_tick` is resumed with a fresh first-tick grace. A bot with a
-pending cleanup flag does not resume until that cleanup succeeds. Live bots,
-every safety pause, and legacy rows with no recorded cause stay paused. After
+cause is `stale_tick` is resumed with a fresh first-tick grace. The first pass
+captures the startup candidates and later passes only retry that set, so a bot
+that goes stale after startup stays paused. A bot with a pending cleanup flag
+does not resume until that cleanup succeeds. Live bots, every safety pause, and
+legacy rows with no recorded cause stay paused. After
 deploying this change, any bot paused before it has no cause and needs one
 explicit operator start. A bot whose recording time was already invalidated by
 pre-fix bookkeeping and that has no pending cleanup flag also stays paused until

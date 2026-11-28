@@ -24,7 +24,7 @@ The engine SHALL NOT place orders on a tick when it cannot read account realized
 #### Scenario: A rollover already completed by another tick is not repeated
 
 - **WHEN** another tick has already rolled the account baseline to the current UTC day
-- **THEN** the zero-row rollover update is treated as success, the stored baseline is kept, and this tick still evaluates normally
+- **THEN** the zero-row rollover update is treated as success and this tick evaluates normally with the baseline it computed for this tick
 
 #### Scenario: No account-scope row keeps the default in-memory baseline
 

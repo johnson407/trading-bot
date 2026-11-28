@@ -124,6 +124,8 @@ type Runtime struct {
 	riskEventMu        sync.Mutex
 	ticks              sync.WaitGroup
 	autoResumePending  bool
+	autoResumeCaptured bool
+	autoResumeBots     map[int64]struct{}
 	cancelOrders       OrderCanceler
 }
 
@@ -144,6 +146,7 @@ func New(pool *pgxpool.Pool, market Market, logger *slog.Logger, options ...Opti
 		firstScheduled:     map[int64]time.Time{},
 		riskEventNotBefore: map[riskEventKey]time.Time{},
 		autoResumePending:  true,
+		autoResumeBots:     map[int64]struct{}{},
 	}
 	runtime.cancelOrders = func(ctx context.Context, userID, botID int64, reason string) error {
 		_, err := runtime.cancelOpenOrders(ctx, userID, botID, reason)
@@ -774,8 +777,10 @@ func (r *Runtime) reconcile(ctx context.Context) error {
 }
 
 // autoResumeStalePausedBots recovers paper bots that were stale-paused before
-// this process started. It runs once per process, after pending cleanup and
-// before stale checks, and never resumes a live bot or a safety pause.
+// this process started. The first pass captures the startup candidates, and
+// later passes only retry that set, so a bot paused after startup is never
+// auto-resumed. Pending cleanup and provenance are enforced by the UPDATE, and
+// the pass never resumes a live bot or a safety pause.
 func (r *Runtime) autoResumeStalePausedBots(ctx context.Context) error {
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, user_id FROM bots
@@ -785,11 +790,7 @@ func (r *Runtime) autoResumeStalePausedBots(ctx context.Context) error {
 		    AND mode = 'paper'
 		    AND exchange = 'binance'
 		    AND pause_reason = $1
-		    AND pause_reason_recorded_at = updated_at
 		    AND kill_switch_requested_at IS NULL
-		    AND cancel_retry_requested = false
-		    AND reconcile_pending = false
-		    AND strategy_reset_pending = false
 		  ORDER BY id`,
 		pauseCauseStaleTick.String(),
 	)
@@ -814,8 +815,26 @@ func (r *Runtime) autoResumeStalePausedBots(ctx context.Context) error {
 		return err
 	}
 
+	current := make(map[int64]struct{}, len(candidates))
+	for _, c := range candidates {
+		current[c.id] = struct{}{}
+	}
+	if !r.autoResumeCaptured {
+		r.autoResumeBots = current
+		r.autoResumeCaptured = true
+	} else {
+		for id := range r.autoResumeBots {
+			if _, ok := current[id]; !ok {
+				delete(r.autoResumeBots, id)
+			}
+		}
+	}
+
 	for _, c := range candidates {
 		candidate := c
+		if _, ok := r.autoResumeBots[candidate.id]; !ok {
+			continue
+		}
 		if err := withBotLock(ctx, candidate.id, func(ctx context.Context) error {
 			tag, err := r.pool.Exec(ctx,
 				`UPDATE bots
@@ -841,6 +860,7 @@ func (r *Runtime) autoResumeStalePausedBots(ctx context.Context) error {
 			if tag.RowsAffected() == 0 {
 				return nil
 			}
+			delete(r.autoResumeBots, candidate.id)
 
 			r.activity(ctx, candidate.userID, candidate.id, "bot.auto_resumed", "info", "Bot auto-resumed after a stale-tick pause.", map[string]any{"cause": pauseCauseStaleTick.String()})
 			r.logger.Info("bot auto-resumed", "bot_id", candidate.id, "cause", pauseCauseStaleTick.String())

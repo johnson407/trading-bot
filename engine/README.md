@@ -202,9 +202,10 @@ and a `reasons` breakdown, instead of one event per blocked order. Repeats for
 the same bot and event type are suppressed for five minutes.
 
 Stale-pause recovery runs after pending cancellation/reconcile/strategy-reset
-cleanup and before the stale check. Those cleanup writes refresh
-`pause_reason_recorded_at` when the bot is paused, and a bot with a pending cleanup
-flag is not resumed.
+cleanup and before the stale check. The first pass captures the startup
+candidates, and later passes only retry that set, so a bot paused after startup
+is never auto-resumed. Those cleanup writes refresh `pause_reason_recorded_at`
+when the bot is paused, and a bot with a pending cleanup flag is not resumed.
 
 On `SIGINT` or `SIGTERM` the engine cancels its root context, shuts down the
 HTTP server, and waits up to 20 seconds for the scheduler (including in-flight
